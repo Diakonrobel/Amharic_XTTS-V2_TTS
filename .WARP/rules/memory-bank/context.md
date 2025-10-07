@@ -15,7 +15,7 @@
 
 ## What We're Working On Now
 
-### ✅ Completed Tasks
+### ✅ Completed Tasks (Phase 1 Complete)
 1. **Memory Bank Setup**: All memory bank files created
    - ✅ brief.md - Project mission and goals
    - ✅ product.md - Product vision and user experience
@@ -37,7 +37,8 @@
    │   ├── text_normalizer.py  ✅ Character normalization & cleaning
    │   └── number_expander.py  ✅ Amharic number word expansion (tested)
    └── config/
-       └── __init__.py
+       ├── __init__.py
+       └── amharic_config.py   ✅ Complete configuration module
    ```
 
 3. **Core Integration**:
@@ -47,16 +48,36 @@
    - ✅ Added "amh" to `xtts_demo.py` language dropdowns
    - ✅ Added "amh" to `headlessXttsTrain.py` CLI choices
 
-### 🔄 Current Focus
-1. **Amharic-Specific Tokenizer**:
-   - Create `amharic_tts/tokenizer/amharic_tokenizer.py`
-   - Support Ethiopic script (Unicode U+1200–U+137F)
-   - Handle Amharic phoneme mappings
+4. **GitHub Integration**:
+   - ✅ Git LFS configured for training files
+   - ✅ Google Colab notebook with LFS persistence
+   - ✅ Helper scripts for save/load operations
+   - ✅ Comprehensive LFS workflow documentation
 
-2. **Configuration Files**:
-   - Create `amharic_tts/config/amharic_config.py`
-   - Define Amharic phoneme inventory
-   - Set character limits and special tokens
+5. **Advanced Configuration** (NEW):
+   - ✅ Created `amharic_tts/config/amharic_config.py`
+   - ✅ G2P backend ordering (Transphone → Epitran → Rule-based)
+   - ✅ Quality thresholds for G2P output validation
+   - ✅ Tokenizer modes (Raw BPE vs Hybrid G2P+BPE)
+   - ✅ Preset configurations (default, fast, quality, research)
+   - ✅ Complete Amharic phoneme inventory
+
+### 🔄 Current Focus (Phase 2: Enhanced G2P)
+1. **Enhanced G2P with Quality Heuristics**:
+   - Upgrading `amharic_g2p.py` with intelligent backend selection
+   - Adding quality validation for G2P outputs
+   - Implementing fallback logic based on quality scores
+   - Supporting vowel ratio, Ethiopic ratio, IPA ratio checks
+
+2. **Next: Enrich Rule-Based G2P** (Phase 3):
+   - Expand grapheme-to-phoneme tables for all Ethiopic orders (1-7)
+   - Add complete consonant mappings (231 total)
+   - Improve epenthesis and gemination rules
+
+3. **Next: Hybrid G2P+BPE Tokenizer** (Phase 4):
+   - Create `amharic_tts/tokenizer/hybrid_tokenizer.py`
+   - Phoneme-aware BPE training
+   - Better linguistic representation for Amharic
 
 ### Next Immediate Steps
 1. Implement Amharic tokenizer extension

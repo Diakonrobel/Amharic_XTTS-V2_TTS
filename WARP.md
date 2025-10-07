@@ -4,11 +4,16 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 ## Project Overview
 
-**XTTS Fine-Tuning WebUI** - A modified Gradio-based web interface for fine-tuning XTTS (Cross-lingual Text-to-Speech) models with comprehensive Amharic language support.
+**XTTS Fine-Tuning WebUI** - A modified Gradio-based web interface for fine-tuning XTTS (Cross-lingual Text-to-Speech) models with comprehensive Amharic language support and advanced dataset processing capabilities.
 
 ### Key Capabilities
 - Fine-tune XTTS v2 models on custom voice datasets
 - Process audio using Faster Whisper for automatic transcription
+- **Advanced Dataset Processing:**
+  - SRT subtitle files + media synchronization
+  - YouTube video download with automatic transcript extraction (yt-dlp)
+  - RMS-based intelligent audio slicing
+  - Multi-format support (SRT, VTT, JSON transcripts)
 - Support for 20+ languages including advanced Amharic (Ethiopian) TTS with G2P
 - Web UI and headless training modes
 - Model optimization and deployment-ready output
@@ -65,6 +70,12 @@ python headlessXttsTrain.py --input_audio speaker.wav --lang en --epochs 10
 # Amharic with G2P preprocessing
 python headlessXttsTrain.py --input_audio amharic_speaker.wav --lang amh --epochs 10 --use_g2p
 
+# Process SRT + media file
+python headlessXttsTrain.py --srt_file subtitles.srt --media_file video.mp4 --lang en --epochs 10
+
+# Download and process YouTube video
+python headlessXttsTrain.py --youtube_url "https://youtube.com/watch?v=VIDEO_ID" --lang en --epochs 10
+
 # View all options
 python headlessXttsTrain.py --help
 ```
@@ -88,6 +99,9 @@ python tests/test_amharic_integration.py
 
 # Run comprehensive G2P tests
 python tests/test_amharic_g2p_comprehensive.py
+
+# Test advanced features (SRT, YouTube, Audio Slicer)
+python test_advanced_features.py
 
 # Test specific Amharic modules
 python -m pytest tests/ -v
@@ -122,6 +136,27 @@ python -m pytest tests/ -v
   - Creates train/eval metadata CSV files
   - Applies multilingual text cleaning
   - Incremental dataset updates (skips processed files)
+
+- **`srt_processor.py`** - SRT subtitle processing
+  - Parse SRT files and synchronize with media (audio/video)
+  - Extract audio segments based on subtitle timestamps
+  - Support for VTT and JSON transcript formats
+  - FFmpeg-based media extraction and conversion
+  - Creates dataset-ready audio clips with aligned transcriptions
+
+- **`youtube_downloader.py`** - YouTube content acquisition
+  - Download videos using yt-dlp with format selection
+  - Extract auto-generated or manual subtitles/transcripts
+  - Support for multiple languages and fallback options
+  - Automatic transcript format detection (VTT, SRT, JSON)
+  - Cookie support for age-restricted content
+
+- **`audio_slicer.py`** - Intelligent audio segmentation
+  - RMS (Root Mean Square) based silence detection
+  - Configurable thresholds and minimum lengths
+  - Hop length and silence padding customization
+  - Export segments with metadata for dataset creation
+  - Integration with dataset preprocessing pipeline
 
 - **`gpt_train.py`** - XTTS model training orchestration
   - Downloads base XTTS models (v2.0.1, v2.0.2, main)
@@ -172,12 +207,35 @@ amharic_tts/
 ### Training Pipeline Flow
 
 ```
-1. Audio Upload → utils/formatter.py
-   ├─ FFmpeg conversion (if needed)
-   ├─ Faster Whisper transcription (with VAD)
-   ├─ Sentence segmentation
-   ├─ Text cleaning (multilingual_cleaners)
-   └─ CSV metadata (train/eval split)
+1. Audio Input (Multiple Methods)
+   
+   A) Direct Audio Upload → utils/formatter.py
+      ├─ FFmpeg conversion (if needed)
+      ├─ Faster Whisper transcription (with VAD)
+      ├─ Sentence segmentation
+      ├─ Text cleaning (multilingual_cleaners)
+      └─ CSV metadata (train/eval split)
+   
+   B) SRT + Media File → utils/srt_processor.py
+      ├─ Parse SRT timestamps and text
+      ├─ Extract audio segments using FFmpeg
+      ├─ Align transcriptions with audio clips
+      ├─ Text cleaning and normalization
+      └─ CSV metadata (train/eval split)
+   
+   C) YouTube URL → utils/youtube_downloader.py
+      ├─ Download video/audio with yt-dlp
+      ├─ Extract available transcripts/subtitles
+      ├─ Convert to SRT format if needed
+      ├─ Process via SRT pipeline (method B)
+      └─ CSV metadata (train/eval split)
+   
+   D) Audio Slicing → utils/audio_slicer.py
+      ├─ RMS-based silence detection
+      ├─ Intelligent segmentation
+      ├─ Export clips with timestamps
+      ├─ Optional: Whisper transcription
+      └─ CSV metadata (train/eval split)
 
 2. Dataset Creation → output/dataset/
    ├─ wavs/ (audio segments)
@@ -279,6 +337,28 @@ Fine-tune an already fine-tuned model:
 3. System automatically skips previously processed files
 4. New segments added to existing metadata CSVs
 
+### Process SRT Subtitles with Media Files
+1. Prepare your SRT file and corresponding audio/video file
+2. In Web UI: Upload both files in Tab 1
+3. Or headless: `python headlessXttsTrain.py --srt_file subs.srt --media_file video.mp4 --lang en`
+4. System extracts audio segments aligned with subtitle timestamps
+5. Creates dataset with text-audio pairs ready for training
+
+### Download and Process YouTube Videos
+1. Find YouTube video with good audio quality and available subtitles
+2. In Web UI: Enter YouTube URL in Tab 1
+3. Or headless: `python headlessXttsTrain.py --youtube_url "URL" --lang en`
+4. System downloads video, extracts subtitles/transcripts
+5. Processes via SRT pipeline for dataset creation
+6. Note: Respects YouTube Terms of Service - for personal use only
+
+### Use RMS Audio Slicer for Long Recordings
+1. Have long audio file without transcription
+2. Use audio slicer to intelligently segment based on silence
+3. Parameters: `threshold_db=-40`, `min_length=5.0`, `silence_window=0.3`
+4. Optionally run Whisper on segments for automatic transcription
+5. Creates dataset with evenly-sized, content-aware segments
+
 ### Change Training Parameters
 Edit in `utils/gpt_train.py`:
 - `BATCH_SIZE` (default: from UI, typically 2-4)
@@ -314,10 +394,12 @@ After training:
 - **Storage:** ~5GB for base models, ~10-50GB per training run
 
 ### Audio Requirements
-- **Formats:** WAV, MP3, FLAC (converted to WAV internally)
+- **Formats:** WAV, MP3, FLAC, MP4, MKV, AVI (converted to WAV internally via FFmpeg)
 - **Duration:** 2-60 minutes recommended (headless auto-trims to 40 min)
 - **Quality:** 22.05kHz or 44.1kHz, mono preferred
 - **Content:** Clean speech, minimal background noise
+- **SRT Processing:** Media file must match SRT duration, supports video extraction
+- **YouTube:** 1080p max recommended, automatic audio extraction
 
 ### Language Support
 Supported languages (use ISO 639-3 codes):
@@ -333,8 +415,20 @@ Supported languages (use ISO 639-3 codes):
 - **Long audio:** Auto-trimmed to prevent OOM (max_audio_length=255995 frames)
 - **Incremental training:** Cannot easily resume interrupted training runs
 - **Model mixing:** Mixing different XTTS versions may cause issues
+- **YouTube downloads:** Requires active internet connection, respects rate limits
+- **SRT sync:** Requires accurate timestamps, may need manual adjustment for poorly-synced subtitles
+- **FFmpeg:** Required for media processing, audio extraction, and format conversion
 
 ## Important Notes
+
+### Advanced Features Dependencies
+Required for advanced dataset processing:
+```bash
+pip install pysrt        # SRT file parsing
+pip install yt-dlp       # YouTube video downloading
+pip install soundfile    # Audio file I/O for slicing
+# FFmpeg must be installed and in PATH
+```
 
 ### Amharic G2P Installation
 Optional backends for better quality:
@@ -362,10 +456,13 @@ pip install epitran     # Good fallback
 
 ## Documentation References
 
+- **Implementation Plan:** `IMPLEMENTATION_PLAN.md` - Complete integration roadmap
+- **Advanced Features Tests:** `test_advanced_features.py` - Test suite and usage examples
 - **Amharic G2P backends:** `docs/G2P_BACKENDS_EXPLAINED.md`
 - **Amharic phonology:** `amharic_tts/g2p/README.md`
 - **Usage examples:** `tests/test_amharic_integration.py`
 - **Original XTTS:** https://github.com/coqui-ai/TTS
+- **Dataset-Maker Project:** https://github.com/JarodMica/dataset-maker
 
 ## Platform-Specific Notes
 

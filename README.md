@@ -16,6 +16,9 @@ If you are looking for an option for normal XTTS use look here [https://github.c
 3. If there is already a dataset in the output folder and you want to add new data, you can do so by simply adding new audio, what was there will not be processed again and the new data will be automatically added
 4. Turn on VAD filter
 5. After the dataset is created, a file is created that specifies the language of the dataset. This file is read before training so that the language always matches. It is convenient when you restart the interface
+6. **NEW: SRT + Media File Processing** - Upload subtitle files (SRT/VTT) with corresponding audio/video files for precise timestamp-based dataset creation
+7. **NEW: YouTube Video Download** - Download YouTube videos with automatic transcript extraction using yt-dlp
+8. **NEW: RMS-Based Audio Slicing** - Intelligently segment long audio files based on silence detection with configurable parameters
 
 ### Fine-tuning XTTS Encoder
 
@@ -36,6 +39,136 @@ If you are looking for an option for normal XTTS use look here [https://github.c
 2. Removed the display of logs as it was causing problems when restarted
 3. The finished result is copied to the ready folder, these are fully finished files, you can move them anywhere and use them as a standard model
 4. Added support for finetune Japanese
+
+## 🎬 Advanced Dataset Processing Features
+
+Version 2.0 introduces powerful dataset creation tools for working with various media sources!
+
+### 📝 SRT + Media File Processing
+
+Process subtitle files synchronized with audio or video for perfectly aligned training data.
+
+**Supported formats:**
+- Subtitle files: SRT, VTT, JSON transcripts
+- Media files: MP4, MKV, AVI, WAV, MP3, FLAC
+
+**Usage (Web UI):**
+1. Navigate to Tab 1 (Data Processing)
+2. Upload your SRT/VTT file
+3. Upload corresponding media file (video or audio)
+4. Select language and click Process
+5. System extracts audio segments aligned with subtitle timestamps
+
+**Usage (Headless):**
+```bash
+python headlessXttsTrain.py \
+  --srt_file "path/to/subtitles.srt" \
+  --media_file "path/to/video.mp4" \
+  --lang en \
+  --epochs 10
+```
+
+**Benefits:**
+- Perfect text-audio alignment from pre-existing subtitles
+- No need for automatic transcription (faster processing)
+- Ideal for dubbing projects, movie/TV show voice cloning
+- Supports multiple speakers if SRT includes speaker labels
+
+### 📹 YouTube Video Download with Transcripts
+
+Automatically download YouTube videos and extract available transcripts/subtitles.
+
+**Features:**
+- Auto-download video/audio using yt-dlp
+- Extract auto-generated or manual subtitles
+- Multi-language support with fallback options
+- Automatic format detection and conversion
+- Cookie support for age-restricted content
+
+**Usage (Web UI):**
+1. Navigate to Tab 1 (Data Processing)
+2. Enter YouTube URL
+3. Select language (for transcript extraction)
+4. Click Download & Process
+5. System downloads, extracts transcripts, and creates dataset
+
+**Usage (Headless):**
+```bash
+python headlessXttsTrain.py \
+  --youtube_url "https://youtube.com/watch?v=VIDEO_ID" \
+  --lang en \
+  --epochs 10
+```
+
+**Notes:**
+- Requires active internet connection
+- Respects YouTube rate limits and Terms of Service
+- For personal/educational use only
+- Works best with videos that have high-quality subtitles/transcripts
+
+### ✂️ RMS-Based Audio Slicing
+
+Intelligently segment long audio files based on silence detection without manual editing.
+
+**Features:**
+- RMS (Root Mean Square) based silence detection
+- Configurable threshold, minimum length, and padding
+- Creates content-aware segments (not just fixed-length chunks)
+- Optional automatic transcription of segments
+- Preserves audio quality during slicing
+
+**Usage (Python API):**
+```python
+from utils.audio_slicer import AudioSlicer
+
+slicer = AudioSlicer(
+    threshold_db=-40,      # Silence threshold
+    min_length=5.0,        # Minimum segment length (seconds)
+    min_interval=0.3,      # Minimum silence interval
+    hop_size=10,           # Analysis hop size (ms)
+    max_sil_kept=0.5       # Silence padding (seconds)
+)
+
+segments = slicer.slice_audio(
+    audio_path="long_recording.wav",
+    output_dir="output/segments/"
+)
+```
+
+**Parameters:**
+- `threshold_db`: Volume threshold for silence detection (default: -40 dB)
+- `min_length`: Minimum segment duration (default: 5 seconds)
+- `min_interval`: Minimum silence duration to split (default: 0.3 seconds)
+- `hop_size`: Analysis window step size (default: 10 ms)
+- `max_sil_kept`: Silence padding at segment boundaries (default: 0.5 seconds)
+
+**Use Cases:**
+- Podcast/audiobook processing
+- Long interview or lecture recordings
+- Radio show archival processing
+- Any audio where manual segmentation is impractical
+
+### 📦 Dependencies for Advanced Features
+
+```bash
+# SRT processing
+pip install pysrt
+
+# YouTube downloading
+pip install yt-dlp
+
+# Audio slicing
+pip install soundfile
+
+# FFmpeg (required for all advanced features)
+# Windows: Download from ffmpeg.org and add to PATH
+# Linux: sudo apt install ffmpeg
+# macOS: brew install ffmpeg
+```
+
+All dependencies are included in `requirements.txt` except FFmpeg, which must be installed separately.
+
+---
 
 ## 🇪🇹 Amharic TTS Support
 
@@ -170,12 +303,23 @@ For detailed information about the Amharic implementation:
 - See `amharic_tts/g2p/README.md` for phonological rules
 - See `tests/test_amharic_integration.py` for usage examples
 
+### Advanced Dataset Processing
+
+Inspired by and integrated with techniques from the [dataset-maker](https://github.com/JarodMica/dataset-maker) project:
+- SRT subtitle synchronization with media files
+- YouTube content acquisition with transcript extraction
+- RMS-based intelligent audio slicing
+- Multi-format support for transcripts (SRT, VTT, JSON)
+
 ### Credits
 
 Amharic TTS support developed with research from:
 - Transphone: [github.com/xinjli/transphone](https://github.com/xinjli/transphone)
 - Epitran: [github.com/dmort27/epitran](https://github.com/dmort27/epitran)
 - Ethiopian script phonology research and linguistic analysis
+
+Advanced dataset processing inspired by:
+- Dataset-Maker: [github.com/JarodMica/dataset-maker](https://github.com/JarodMica/dataset-maker)
 
 ## Changes in webui
 
@@ -202,9 +346,17 @@ docker run -it --gpus all --pull always -p 7860:7860 --platform=linux/amd64 atho
 ## Run Headless
 
 ```bash
-python headlessXttsTrain.py --input_audio speaker.wav --lang en --epochs 10 # Example with parameters
+# Basic audio processing
+python headlessXttsTrain.py --input_audio speaker.wav --lang en --epochs 10
 
-python headlessXttsTrain.py --help # See parameters
+# Process SRT + media file
+python headlessXttsTrain.py --srt_file subtitles.srt --media_file video.mp4 --lang en --epochs 10
+
+# Download and process YouTube video
+python headlessXttsTrain.py --youtube_url "https://youtube.com/watch?v=VIDEO_ID" --lang en --epochs 10
+
+# See all parameters
+python headlessXttsTrain.py --help
 ```
 
 ## Install

@@ -273,7 +273,8 @@ if __name__ == "__main__":
                     "zh",
                     "hu",
                     "ko",
-                    "ja"
+                    "ja",
+                    "amh"  # Amharic
                 ],
             )
             progress_data = gr.Label(
@@ -583,6 +584,7 @@ if __name__ == "__main__":
                             "hu",
                             "ko",
                             "ja",
+                            "amh",  # Amharic
                         ]
                     )
                     tts_text = gr.Textbox(

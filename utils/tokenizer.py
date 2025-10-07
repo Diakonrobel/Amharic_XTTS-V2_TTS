@@ -548,6 +548,13 @@ def _expand_number(m, lang="en"):
 def expand_numbers_multilingual(text, lang="en"):
     if lang == "zh":
         text = zh_num2words()(text)
+    elif lang == "amh":
+        # Amharic number expansion
+        try:
+            from amharic_tts.preprocessing import expand_amharic_numbers
+            text = expand_amharic_numbers(text)
+        except ImportError:
+            pass  # Fallback: keep numbers as-is
     else:
         if lang in ["en", "ru"]:
             text = re.sub(_comma_number_re, _remove_commas, text)
@@ -637,6 +644,7 @@ class VoiceBpeTokenizer:
             "ja": 71,
             "hu": 224,
             "ko": 95,
+            "amh": 200,  # Amharic
         }
 
     @cached_property
@@ -662,6 +670,14 @@ class VoiceBpeTokenizer:
                 txt = korean_transliterate(txt)
         elif lang == "ja":
             txt = japanese_cleaners(txt, self.katsu)
+        elif lang == "amh":
+            # Amharic preprocessing
+            try:
+                from amharic_tts.preprocessing import normalize_amharic_text
+                txt = normalize_amharic_text(txt)
+                txt = multilingual_cleaners(txt, lang)
+            except ImportError:
+                txt = basic_cleaners(txt)
         elif lang == "hi":
             # @manmay will implement this
             txt = basic_cleaners(txt)

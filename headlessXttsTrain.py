@@ -683,7 +683,7 @@ def main():
     parser.add_argument("--model_name", type=str, default=None, help="Name for the output folder and reference files (defaults to input audio filename without extension).")
 
     # Data Processing Arguments
-    parser.add_argument("--lang", type=str, default="en", help="Language of the dataset (ISO 639-1 code, e.g., en, es, fr).", choices=["en","es","fr","de","it","pt","pl","tr","ru","nl","cs","ar","zh","hu","ko","ja"])
+    parser.add_argument("--lang", type=str, default="en", help="Language of the dataset (ISO 639-1 code, e.g., en, es, fr).", choices=["en","es","fr","de","it","pt","pl","tr","ru","nl","cs","ar","zh","hu","ko","ja","amh"])
     parser.add_argument("--whisper_model", type=str, default="large-v3", help="Whisper model to use for transcription.", choices=["large-v3","faster-whisper-large-v3-turbo", "large-v2", "large", "medium", "small", "tiny"])
 
     # Training Arguments

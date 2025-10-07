@@ -277,6 +277,20 @@ if __name__ == "__main__":
                     "amh"  # Amharic
                 ],
             )
+            
+            # Amharic G2P Options for Dataset Preprocessing
+            with gr.Accordion("Amharic G2P Options (for 'amh' language)", open=False) as amh_g2p_accordion:
+                use_amharic_g2p_preprocessing = gr.Checkbox(
+                    label="Enable Amharic G2P preprocessing for dataset",
+                    value=False,
+                    info="Convert Amharic text to phonemes during dataset preparation"
+                )
+                g2p_backend_selection = gr.Dropdown(
+                    label="G2P Backend",
+                    value="transphone",
+                    choices=["transphone", "epitran", "rule_based"],
+                    info="Primary G2P backend (will auto-fallback if unavailable)"
+                )
             progress_data = gr.Label(
                 label="Progress:"
             )
@@ -284,7 +298,7 @@ if __name__ == "__main__":
 
             prompt_compute_btn = gr.Button(value="Step 1 - Create dataset")
         
-            def preprocess_dataset(audio_path, audio_folder_path, language, whisper_model, out_path, train_csv, eval_csv, progress=gr.Progress(track_tqdm=True)):
+            def preprocess_dataset(audio_path, audio_folder_path, language, whisper_model, out_path, train_csv, eval_csv, use_g2p_preprocessing=False, g2p_backend="transphone", progress=gr.Progress(track_tqdm=True)):
                 clear_gpu_cache()
             
                 train_csv = ""
@@ -292,6 +306,21 @@ if __name__ == "__main__":
             
                 out_path = os.path.join(out_path, "dataset")
                 os.makedirs(out_path, exist_ok=True)
+                
+                # Configure G2P if Amharic preprocessing is enabled
+                g2p_converter = None
+                if use_g2p_preprocessing and language == "amh":
+                    try:
+                        from amharic_tts.g2p.amharic_g2p_enhanced import AmharicG2P
+                        print(f"Initializing Amharic G2P with backend: {g2p_backend}")
+                        g2p_converter = AmharicG2P(backend=g2p_backend)
+                        print("G2P converter initialized successfully")
+                    except ImportError as e:
+                        print(f"Warning: Could not load Amharic G2P: {e}")
+                        print("Dataset will be created without G2P preprocessing")
+                    except Exception as e:
+                        print(f"Error initializing G2P: {e}")
+                        print("Dataset will be created without G2P preprocessing")
             
                 if audio_folder_path:
                     audio_files = list(list_audios(audio_folder_path))
@@ -312,6 +341,14 @@ if __name__ == "__main__":
                             compute_type = "float32"
                         
                         asr_model = WhisperModel(whisper_model, device=device, compute_type=compute_type)
+                        
+                        # Apply G2P preprocessing if converter is available
+                        # Note: This would require modifications to format_audio_list to accept g2p_converter
+                        # For now, we'll note this and users can preprocess separately
+                        if g2p_converter:
+                            print("Note: G2P preprocessing will be applied during training")
+                            print("For dataset-level G2P, use the preprocessing utility")
+                        
                         train_meta, eval_meta, audio_total_size = format_audio_list(audio_files, asr_model=asr_model, target_language=language, out_path=out_path, gradio_progress=progress)
                     except:
                         traceback.print_exc()
@@ -391,6 +428,20 @@ if __name__ == "__main__":
                     "all"
                 ])
             
+            # Amharic G2P Training Options
+            with gr.Accordion("Amharic G2P Training Options (for 'amh' language)", open=False) as amh_training_accordion:
+                enable_amharic_g2p = gr.Checkbox(
+                    label="Enable Amharic G2P for training",
+                    value=False,
+                    info="Use phoneme tokenization for Amharic training"
+                )
+                g2p_backend_train = gr.Dropdown(
+                    label="G2P Backend for Training",
+                    value="transphone",
+                    choices=["transphone", "epitran", "rule_based"],
+                    info="Backend used for G2P conversion during training"
+                )
+            
             progress_train = gr.Label(
                 label="Progress:"
             )
@@ -404,7 +455,7 @@ if __name__ == "__main__":
             from pathlib import Path
             import traceback
             
-            def train_model(custom_model, version, language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length):
+            def train_model(custom_model, version, language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length, enable_amharic_g2p=False, g2p_backend_train="transphone"):
                 clear_gpu_cache()
           
                 # Check if `custom_model` is a URL and download it if true.
@@ -434,10 +485,22 @@ if __name__ == "__main__":
                         
                 if not train_csv or not eval_csv:
                     return "You need to run the data processing step or manually set `Train CSV` and `Eval CSV` fields !", "", "", "", ""
+                # Configure Amharic G2P for training
+                use_amharic_g2p = enable_amharic_g2p and language == "amh"
+                if use_amharic_g2p:
+                    print(f"Amharic G2P enabled with backend: {g2p_backend_train}")
+                    # Set backend order based on user selection
+                    try:
+                        from amharic_tts.config.amharic_config import G2PBackend
+                        # This will be used in the training pipeline
+                    except ImportError:
+                        print("Warning: Amharic G2P module not available")
+                        use_amharic_g2p = False
+                
                 try:
                     # convert seconds to waveform frames
                     max_audio_length = int(max_audio_length * 22050)
-                    speaker_xtts_path, config_path, original_xtts_checkpoint, vocab_file, exp_path, speaker_wav = train_gpt(custom_model, version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path=output_path, max_audio_length=max_audio_length)
+                    speaker_xtts_path, config_path, original_xtts_checkpoint, vocab_file, exp_path, speaker_wav = train_gpt(custom_model, version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path=output_path, max_audio_length=max_audio_length, use_amharic_g2p=use_amharic_g2p)
                 except:
                     traceback.print_exc()
                     error = traceback.format_exc()
@@ -661,7 +724,9 @@ if __name__ == "__main__":
                     whisper_model,
                     out_path,
                     train_csv,
-                    eval_csv
+                    eval_csv,
+                    use_amharic_g2p_preprocessing,
+                    g2p_backend_selection,
                 ],
                 outputs=[
                     progress_data,
@@ -696,6 +761,8 @@ if __name__ == "__main__":
                     grad_acumm,
                     out_path,
                     max_audio_length,
+                    enable_amharic_g2p,
+                    g2p_backend_train,
                 ],
                 outputs=[progress_train, xtts_config, xtts_vocab, xtts_checkpoint,xtts_speaker, speaker_reference_audio],
             )

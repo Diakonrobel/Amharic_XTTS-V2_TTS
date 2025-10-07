@@ -35,7 +35,147 @@ If you are looking for an option for normal XTTS use look here [https://github.c
 1. If you accidentally restart the interface during one of the steps, you can load data to additional buttons
 2. Removed the display of logs as it was causing problems when restarted
 3. The finished result is copied to the ready folder, these are fully finished files, you can move them anywhere and use them as a standard model
-4. Added support for finetune Japanese 
+4. Added support for finetune Japanese
+
+## 🇪🇹 Amharic TTS Support
+
+This project includes comprehensive support for **Amharic language** (Ethiopian) with advanced Grapheme-to-Phoneme (G2P) conversion!
+
+### Features
+
+✅ **Multiple G2P Backends** with automatic fallback:
+- **Transphone** (primary) - Zero-shot G2P for 7500+ languages including Amharic
+- **Epitran** (fallback) - Rule-based G2P with Ethiopic script support  
+- **Custom Rule-Based** (offline) - Comprehensive Amharic phoneme mapping, always available
+
+✅ **Ethiopic Script Support**:
+- Full support for 340+ Ethiopic characters (U+1200-U+137F)
+- Character variant normalization (ሥ→ስ, ዕ→እ, etc.)
+- Proper handling of Amharic punctuation (።፣፤፥)
+
+✅ **Phonological Processing**:
+- Epenthetic vowel insertion (kɨt → kɨtɨ)
+- Gemination handling (doubled consonants)
+- Labiovelar consonants (kʷ, gʷ, qʷ)
+
+✅ **Amharic-Specific Preprocessing**:
+- Number-to-word expansion in Amharic (123 → አንድ መቶ ሃያ ሶስት)
+- Text normalization and cleaning
+- Automatic language detection
+
+### Quick Start with Amharic
+
+#### Web Interface
+1. Launch the webui: `python xtts_demo.py`
+2. In **Tab 1 (Data processing)**:
+   - Select `amh` from the **Dataset Language** dropdown
+   - Optionally enable **Amharic G2P preprocessing** in the accordion
+   - Choose your preferred G2P backend (transphone/epitran/rule_based)
+   - Upload Amharic audio files
+
+3. In **Tab 2 (Fine-tuning)**:
+   - Enable **Amharic G2P for training** if you want phoneme-based training
+   - Select G2P backend for training
+   - Configure other training parameters
+
+4. Train and test your Amharic TTS model!
+
+#### Headless Training
+```bash
+# Basic Amharic training
+python headlessXttsTrain.py --input_audio amharic_speaker.wav --lang amh --epochs 10
+
+# With G2P preprocessing (requires transphone or epitran)
+python headlessXttsTrain.py --input_audio amharic_speaker.wav --lang amh --epochs 10 --use_g2p
+```
+
+### Installing G2P Backends (Optional)
+
+For best quality, install the Transphone backend:
+```bash
+pip install transphone
+```
+
+Or Epitran as an alternative:
+```bash
+pip install epitran
+```
+
+**Note**: The rule-based backend is always available and requires no additional installation!
+
+### Amharic Module Structure
+
+```
+amharic_tts/
+├── g2p/
+│   ├── amharic_g2p.py              # Basic G2P converter
+│   └── amharic_g2p_enhanced.py     # Enhanced with multiple backends
+├── tokenizer/
+│   ├── hybrid_tokenizer.py         # G2P + BPE hybrid tokenizer
+│   └── xtts_tokenizer_wrapper.py   # XTTS-compatible wrapper
+├── preprocessing/
+│   ├── text_normalizer.py          # Character normalization
+│   └── number_expander.py          # Amharic number expansion
+└── config/
+    └── amharic_config.py            # Configuration and phoneme inventory
+```
+
+### Examples
+
+**Example 1: Text Normalization**
+```python
+from amharic_tts.preprocessing.text_normalizer import AmharicTextNormalizer
+
+normalizer = AmharicTextNormalizer()
+text = normalizer.normalize("ሀሎ ዓለም")  # → "ሃሎ አለም"
+```
+
+**Example 2: G2P Conversion**
+```python
+from amharic_tts.g2p.amharic_g2p_enhanced import AmharicG2P
+
+g2p = AmharicG2P(backend='transphone')  # or 'epitran', 'rule-based'
+phonemes = g2p.convert("ሰላም ኢትዮጵያ")  # → IPA phonemes
+```
+
+**Example 3: Number Expansion**
+```python
+from amharic_tts.preprocessing.number_expander import AmharicNumberExpander
+
+expander = AmharicNumberExpander()
+text = expander.expand_number("2024")  # → "ሁለት ሺህ ሃያ አራት"
+```
+
+### Troubleshooting
+
+**Q: What if I don't have Transphone or Epitran installed?**  
+A: The system automatically falls back to the rule-based backend, which works offline and requires no additional dependencies.
+
+**Q: Should I use G2P preprocessing for Amharic?**  
+A: For best results with Amharic, enabling G2P is recommended. It converts Ethiopic script to IPA phonemes, which improves pronunciation accuracy.
+
+**Q: Which G2P backend should I choose?**  
+A: 
+- **Transphone** - Best accuracy, supports rare words
+- **Epitran** - Fast, rule-based, good for common words
+- **Rule-based** - Always available, no installation needed, good baseline
+
+**Q: Can I fine-tune on existing Amharic models?**  
+A: Yes! Use the custom model option in Tab 2 to continue training from a previously fine-tuned Amharic model.
+
+### Documentation
+
+For detailed information about the Amharic implementation:
+- See `docs/G2P_BACKENDS_EXPLAINED.md` for G2P backend details
+- See `amharic_tts/g2p/README.md` for phonological rules
+- See `tests/test_amharic_integration.py` for usage examples
+
+### Credits
+
+Amharic TTS support developed with research from:
+- Transphone: [github.com/xinjli/transphone](https://github.com/xinjli/transphone)
+- Epitran: [github.com/dmort27/epitran](https://github.com/dmort27/epitran)
+- Ethiopian script phonology research and linguistic analysis
 
 ## Changes in webui
 

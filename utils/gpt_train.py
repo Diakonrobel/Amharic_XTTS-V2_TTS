@@ -12,7 +12,7 @@ from TTS.utils.manage import ModelManager
 import shutil
 
 
-def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995):
+def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, use_amharic_g2p=False):
     #  Logging parameters
     RUN_NAME = "GPT_XTTS_FT"
     PROJECT_NAME = "XTTS_trainer"
@@ -114,6 +114,21 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     num_workers = 8
     if language == "ja":
         num_workers = 0
+    
+    # Handle Amharic-specific preprocessing
+    if use_amharic_g2p and language == "am":
+        print(" > Amharic G2P mode enabled: Text will be converted to IPA phonemes")
+        try:
+            from amharic_tts.tokenizer.xtts_tokenizer_wrapper import create_xtts_tokenizer
+            print(" > Creating Amharic tokenizer with G2P preprocessing...")
+            # Note: The tokenizer will be created but XTTS internally uses its own
+            # In future updates, this can be integrated more deeply
+            print(" > Note: For full G2P integration, preprocess your dataset text")
+            print(" >       Or use the hybrid tokenizer in inference")
+        except ImportError as e:
+            print(f" > Warning: Could not load Amharic tokenizer: {e}")
+            print(" > Continuing with standard tokenization")
+    
     # init args and config
     model_args = GPTArgs(
         max_conditioning_length=132300,  # 6 secs

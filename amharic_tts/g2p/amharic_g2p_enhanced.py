@@ -56,17 +56,30 @@ class EnhancedAmharicG2P:
         g2p = EnhancedAmharicG2P(config=get_config('quality'))
     """
     
-    def __init__(self, config=None):
+    def __init__(self, config=None, backend='auto'):
         """
         Initialize enhanced G2P converter
         
         Args:
             config: AmharicTTSConfig instance (optional)
+            backend: Backend to use ('auto', 'transphone', 'epitran', 'rule-based')
         """
         if CONFIG_AVAILABLE and config is None:
             self.config = DEFAULT_CONFIG
         else:
             self.config = config or self._get_fallback_config()
+        
+        # Override backend order if specific backend requested
+        if backend != 'auto' and hasattr(self.config.g2p, 'backend_order'):
+            backend_map = {
+                'transphone': G2PBackend.TRANSPHONE,
+                'epitran': G2PBackend.EPITRAN,
+                'rule-based': G2PBackend.RULE_BASED,
+                'rule_based': G2PBackend.RULE_BASED,
+            }
+            if backend in backend_map:
+                # Set single backend with rule-based as fallback
+                self.config.g2p.backend_order = [backend_map[backend], G2PBackend.RULE_BASED]
         
         self._backends_initialized = False
         self.transphone_g2p = None
@@ -107,6 +120,9 @@ class EnhancedAmharicG2P:
             except ImportError:
                 logger.warning("⚠️  Transphone not available")
                 self.transphone_g2p = None
+                
+                # Offer to install Transphone (recommended)
+                self._offer_transphone_installation()
             except Exception as e:
                 logger.warning(f"⚠️  Transphone init failed: {e}")
                 self.transphone_g2p = None
@@ -125,6 +141,27 @@ class EnhancedAmharicG2P:
                 self.epitran_g2p = None
         
         self._backends_initialized = True
+    
+    def _offer_transphone_installation(self):
+        """Offer to install Transphone if not available"""
+        try:
+            from ..utils.dependency_installer import ensure_transphone_installed
+            
+            print("\n" + "=" * 70)
+            print("📦 Transphone G2P (Recommended)")
+            print("=" * 70)
+            print("\nTransphone is the state-of-the-art G2P backend for Amharic.")
+            print("It provides the best accuracy for pronunciation modeling.")
+            print("\nFalling back to rule-based G2P (still high quality).")
+            print("\nTo install Transphone for best results:")
+            print("   pip install transphone")
+            print("\nOr run the setup wizard:")
+            print("   python -m amharic_tts.utils.dependency_installer")
+            print("=" * 70 + "\n")
+            
+        except ImportError:
+            # Dependency installer not available, just show message
+            logger.info("💡 Tip: Install Transphone for best G2P quality: pip install transphone")
     
     def _validate_g2p_quality(self, input_text: str, output_text: str) -> Tuple[bool, float, str]:
         """
@@ -268,39 +305,63 @@ class EnhancedAmharicG2P:
     
     def _load_phonological_rules(self):
         """Load Amharic phonological rules"""
-        # Epenthesis: insert ɨ in consonant clusters and word-final
+        # Enhanced epenthesis: context-aware ɨ insertion
         self.epenthesis_rules = [
-            # After velars before consonants
-            (r'([kgqxKGQX])([^aeiouɨəAEIOUɨə\s።፣፤፥፧፨])', r'\1ɨ\2'),
-            # After other consonants before consonants
-            (r'([bdfhjlmnprstvwyzʃʒʔʕBDFHJLMNPRSTVWYZʃʒʔʕ])([^aeiouɨəAEIOUɨə\s።፣፤፥፧፨])', r'\1ɨ\2'),
-            # Word-final consonants
-            (r'([bdfghjklmnpqrstvwxyzʃʒʔʕBDFGHJKLMNPQRSTVWXYZʃʒʔʕ])(\s|$)', r'\1ɨ\2'),
+            # After velars (k, g, q, x) before consonants - velars strongly trigger epenthesis
+            (r'([kgqxKGQX])([bcdfghjklmnpqrstvwxyzʃʒʔʕʼBCDFGHJKLMNPQRSTVWXYZʃʒʔʕʼ])', r'\1ɨ\2'),
+            
+            # After ejectives (tʼ, pʼ, etc.) before consonants
+            (r'([tpskʃ]ʼ)([bcdfghjklmnpqrstvwxyzʃʒʔʕBCDFGHJKLMNPQRSTVWXYZʃʒʔʕ])', r'\1ɨ\2'),
+            
+            # After other consonants before consonants (less aggressive)
+            (r'([bdfhjlmnprstvwyzʃʒʔʕBDFHJLMNPRSTVWYZʃʒʔʕ])([bcdfghjklmnpqrstvwxyzʃʒʔʕBCDFGHJKLMNPQRSTVWXYZʃʒʔʕ])', r'\1ɨ\2'),
+            
+            # Word-final consonants (except sonorants which can be syllabic)
+            (r'([bdfghjkpqstvxzʃʒʔʕʼBDFGHJKPQSTVXZʃʒʔʕʼ])(\s|$|[።፣፤፥፧፨])', r'\1ɨ\2'),
         ]
         
-        # Labiovelar mappings
+        # Gemination markers: detect consonant doubling contexts
+        self.gemination_contexts = [
+            # Common geminated consonants in Amharic
+            'bb', 'dd', 'ff', 'gg', 'jj', 'kk', 'll', 'mm', 'nn', 'pp', 'qq',
+            'rr', 'ss', 'tt', 'ww', 'zz', 'ʃʃ', 'ʒʒ', 'ɲɲ',
+            # Ejective geminates
+            'tʼtʼ', 'pʼpʼ', 'sʼsʼ', 'kʼkʼ', 'tʃʼtʃʼ',
+        ]
+        
+        # Labiovelar mappings (already handled in comprehensive table, but keep for fallback)
         self.labiovelar_map = {
-            'ቋ': 'qʷa', 'ቍ': 'qʷɨ', 'ቊ': 'qʷu', 'ቌ': 'qʷe', 'ቈ': 'qʷi',
-            'ኳ': 'kʷa', 'ኵ': 'kʷɨ', 'ኲ': 'kʷu', 'ኴ': 'kʷe', 'ኰ': 'kʷi',
-            'ጓ': 'gʷa', 'ጕ': 'gʷɨ', 'ጒ': 'gʷu', 'ጔ': 'gʷe', 'ጐ': 'gʷi',
-            'ኻ': 'xʷa', 'ኽ': 'xʷɨ', 'ኺ': 'xʷu', 'ኼ': 'xʷe', 'ኸ': 'xʷi',
+            'ቋ': 'qʷa', 'ቍ': 'qʷɨ', 'ቊ': 'qʷu', 'ቌ': 'qʷe', 'ቈ': 'qʷə',
+            'ኳ': 'kʷa', 'ኵ': 'kʷɨ', 'ኲ': 'kʷu', 'ኴ': 'kʷe', 'ኰ': 'kʷə',
+            'ጓ': 'gʷa', 'ጕ': 'gʷɨ', 'ጒ': 'gʷu', 'ጔ': 'gʷe', 'ጐ': 'gʷə',
+            'ዃ': 'xʷa', 'ዅ': 'xʷɨ', 'ዂ': 'xʷu', 'ዄ': 'xʷe', 'ዀ': 'xʷə',
         }
     
     def _load_comprehensive_g2p_table(self):
         """Load comprehensive Ethiopic grapheme to phoneme mappings"""
-        # This will be expanded in Phase 3
-        self.g2p_table = {
-            # Phase 3 will add complete 231-entry table
-            # For now, basic mappings
+        # Import the complete 231-entry G2P table
+        try:
+            from .ethiopic_g2p_table import COMPLETE_G2P_TABLE
+            self.g2p_table = COMPLETE_G2P_TABLE.copy()
+            logger.info(f"✅ Loaded {len(self.g2p_table)} G2P mappings")
+        except ImportError:
+            logger.warning("⚠️  Could not import comprehensive G2P table, using basic mappings")
+            self.g2p_table = self._get_basic_g2p_table()
+    
+    def _get_basic_g2p_table(self):
+        """Fallback basic G2P mappings"""
+        return {
+            # Common words for fallback
             'ሰላም': 'səlam',
             'ኢትዮጵያ': 'ʔitʼəjopʼːəja',
             'አማርኛ': 'ʔəmarɨɲːa',
-            # ... (will expand in Phase 3)
+            # Basic vowel-only characters
+            'አ': 'ʔə', 'ኡ': 'ʔu', 'ኢ': 'ʔi', 'ኣ': 'ʔa', 'ኤ': 'ʔe', 'እ': 'ʔɨ', 'ኦ': 'ʔo',
         }
     
     def _rule_based_convert(self, text: str) -> str:
         """
-        Rule-based G2P conversion (will be expanded in Phase 3)
+        Rule-based G2P conversion using comprehensive Ethiopic table
         
         Args:
             text: Preprocessed text
@@ -308,15 +369,42 @@ class EnhancedAmharicG2P:
         Returns:
             Phoneme sequence
         """
-        # This is placeholder - Phase 3 will add full implementation
         result = []
-        for char in text:
+        i = 0
+        
+        while i < len(text):
+            char = text[i]
+            
+            # Check for multi-character sequences (word-level mappings)
+            # Look ahead for common words (up to 10 chars)
+            matched = False
+            for length in range(min(10, len(text) - i), 0, -1):
+                substr = text[i:i+length]
+                if substr in self.g2p_table:
+                    phoneme = self.g2p_table[substr]
+                    result.append(phoneme)
+                    i += length
+                    matched = True
+                    break
+            
+            if matched:
+                continue
+            
+            # Single character lookup
             if char in self.g2p_table:
                 result.append(self.g2p_table[char])
             elif char.isspace():
                 result.append(' ')
+            elif char in '።፣፤፥፧፨፡':  # Ethiopic punctuation
+                # Already handled by table, but add space for safety
+                result.append(' ')
             else:
-                result.append(char)  # Keep unknown chars
+                # Unknown character - log and keep as is
+                if ord(char) >= 0x1200 and ord(char) <= 0x137F:
+                    logger.debug(f"Unknown Ethiopic character: {char} (U+{ord(char):04X})")
+                result.append(char)
+            
+            i += 1
         
         return ''.join(result)
     
@@ -343,16 +431,65 @@ class EnhancedAmharicG2P:
         return text
     
     def _apply_epenthesis(self, phonemes: str) -> str:
-        """Apply epenthetic vowel insertion"""
+        """
+        Apply context-aware epenthetic vowel insertion
+        
+        Amharic inserts ɨ (central high vowel) in specific contexts:
+        - Between consonant clusters
+        - After word-final obstruents
+        - To break up disallowed clusters
+        """
+        result = phonemes
+        
+        # Apply rules in order of specificity (most specific first)
         for pattern, replacement in self.epenthesis_rules:
-            phonemes = re.sub(pattern, replacement, phonemes)
-        return phonemes
+            result = re.sub(pattern, replacement, result)
+        
+        # Clean up multiple consecutive ɨ insertions
+        result = re.sub(r'ɨ+', 'ɨ', result)
+        
+        # Don't insert ɨ between identical consonants (those are geminates)
+        result = re.sub(r'([bcdfghjklmnpqrstvwxyzʃʒʔʕ])ɨ\1', r'\1\1', result, flags=re.IGNORECASE)
+        
+        return result
     
     def _handle_gemination(self, phonemes: str) -> str:
-        """Handle geminated (doubled) consonants"""
-        # Simple implementation: mark with ː (length marker)
-        # Phase 3 will add more sophisticated handling
-        return phonemes
+        """
+        Handle geminated (doubled) consonants
+        
+        Amharic distinguishes between single and geminate consonants.
+        Gemination is marked with length marker ː after first consonant.
+        
+        Examples:
+        - bb → bːb (but often represented as bː)
+        - tt → tːt
+        - mm → mːm
+        """
+        result = phonemes
+        
+        # Detect and mark gemination for each known geminate context
+        for geminate in self.gemination_contexts:
+            if len(geminate) < 2:
+                continue
+            
+            # Get the base consonant (first half of geminate)
+            mid = len(geminate) // 2
+            base = geminate[:mid]
+            
+            # Replace CC with Cː (long consonant notation)
+            # Standard IPA: geminate marked with length on first C
+            result = result.replace(geminate, f'{base}ː')
+        
+        # Also handle any remaining identical adjacent consonants
+        # Match any consonant followed by itself (including IPA special chars)
+        result = re.sub(
+            r'([bcdfghjklmnpqrstvwxyzɲʃʒʔʕ])(ʼ?)\1\2',
+            r'\1\2ː',
+            result,
+            flags=re.IGNORECASE
+        )
+        
+        return result
 
 
 # Convenience function
@@ -377,6 +514,10 @@ def convert_to_ipa(text: str, use_quality_check: bool = True) -> str:
     return g2p.convert(text)
 
 
+# Create convenient alias for compatibility
+AmharicG2P = EnhancedAmharicG2P
+
+
 if __name__ == "__main__":
     # Test the enhanced G2P
     print("Testing Enhanced Amharic G2P\n")
@@ -388,7 +529,7 @@ if __name__ == "__main__":
         "መልካም ቀን",
     ]
     
-    g2p = EnhancedAmharicG2P()
+    g2p = AmharicG2P(backend='rule-based')
     
     for text in test_texts:
         phonemes = g2p.convert(text)

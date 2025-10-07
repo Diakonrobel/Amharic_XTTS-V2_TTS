@@ -1,10 +1,17 @@
 @echo off
+echo ========================================
+echo Amharic XTTS Fine-Tuning WebUI Installer
+echo ========================================
+echo.
+echo This will install to your current Python environment.
+echo No virtual environment will be created.
+echo.
+pause
 
-python -m venv venv
-call venv/scripts/activate
+REM Run smart installer
+python smart_install.py
 
-
-pip install -r .\requirements.txt
-pip install torch==2.1.1+cu118 torchaudio==2.1.1+cu118 --index-url https://download.pytorch.org/whl/cu118
-
-python xtts_demo.py
+echo.
+echo Installation complete!
+echo Run "launch.bat" or "python xtts_demo.py" to start.
+pause

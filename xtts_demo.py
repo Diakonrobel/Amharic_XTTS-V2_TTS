@@ -16,6 +16,9 @@ import torchaudio
 import traceback
 from utils.formatter import format_audio_list,find_latest_best_model, list_audios
 from utils.gpt_train import train_gpt
+from utils import srt_processor
+from utils import youtube_downloader
+from utils import audio_slicer
 
 from faster_whisper import WhisperModel
 
@@ -241,6 +244,98 @@ if __name__ == "__main__":
                 label="Path to the folder with audio files (optional):",
                 value=args.audio_folder_path,
             )
+            
+            # Advanced Dataset Processing Options
+            gr.Markdown("---")
+            gr.Markdown("### 🎬 Advanced Dataset Processing Options")
+            gr.Markdown("Process SRT subtitles, YouTube videos, or use intelligent audio slicing")
+            
+            with gr.Accordion("📝 SRT + Media File Processing", open=False) as srt_accordion:
+                gr.Markdown(
+                    "Upload subtitle files (SRT/VTT) with corresponding audio/video files for precise timestamp-based dataset creation."
+                )
+                srt_file = gr.File(
+                    file_count="single",
+                    label="SRT/VTT Subtitle File",
+                    file_types=[".srt", ".vtt"],
+                )
+                media_file = gr.File(
+                    file_count="single",
+                    label="Media File (Audio or Video)",
+                    file_types=[".mp4", ".mkv", ".avi", ".wav", ".mp3", ".flac"],
+                )
+                process_srt_btn = gr.Button(value="Process SRT + Media", variant="secondary")
+                srt_status = gr.Textbox(label="SRT Processing Status", interactive=False)
+            
+            with gr.Accordion("📹 YouTube Video Download", open=False) as youtube_accordion:
+                gr.Markdown(
+                    "Download YouTube videos and extract available transcripts/subtitles automatically."
+                )
+                youtube_url = gr.Textbox(
+                    label="YouTube URL",
+                    placeholder="https://youtube.com/watch?v=VIDEO_ID",
+                )
+                youtube_transcript_lang = gr.Dropdown(
+                    label="Preferred Transcript Language",
+                    value="en",
+                    choices=["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh", "hu", "ko", "ja", "amh"],
+                    info="Language for transcript extraction (auto-fallback if unavailable)"
+                )
+                download_youtube_btn = gr.Button(value="Download & Process YouTube", variant="secondary")
+                youtube_status = gr.Textbox(label="YouTube Processing Status", interactive=False)
+            
+            with gr.Accordion("✂️ RMS-Based Audio Slicing", open=False) as slicer_accordion:
+                gr.Markdown(
+                    "Intelligently segment long audio files based on silence detection without manual editing."
+                )
+                slicer_audio_file = gr.File(
+                    file_count="single",
+                    label="Audio File to Slice",
+                    file_types=[".wav", ".mp3", ".flac"],
+                )
+                with gr.Row():
+                    slicer_threshold_db = gr.Slider(
+                        label="Silence Threshold (dB)",
+                        minimum=-60,
+                        maximum=-10,
+                        step=1,
+                        value=-40,
+                        info="Volume threshold for silence detection"
+                    )
+                    slicer_min_length = gr.Slider(
+                        label="Min Segment Length (seconds)",
+                        minimum=1.0,
+                        maximum=20.0,
+                        step=0.5,
+                        value=5.0,
+                        info="Minimum duration of each segment"
+                    )
+                with gr.Row():
+                    slicer_min_interval = gr.Slider(
+                        label="Min Silence Interval (seconds)",
+                        minimum=0.1,
+                        maximum=2.0,
+                        step=0.1,
+                        value=0.3,
+                        info="Minimum silence duration to split"
+                    )
+                    slicer_max_sil_kept = gr.Slider(
+                        label="Silence Padding (seconds)",
+                        minimum=0.0,
+                        maximum=2.0,
+                        step=0.1,
+                        value=0.5,
+                        info="Silence kept at segment boundaries"
+                    )
+                slicer_auto_transcribe = gr.Checkbox(
+                    label="Auto-transcribe sliced segments with Whisper",
+                    value=True,
+                    info="Automatically generate transcriptions for sliced audio"
+                )
+                slice_audio_btn = gr.Button(value="Slice Audio", variant="secondary")
+                slicer_status = gr.Textbox(label="Audio Slicing Status", interactive=False)
+            
+            gr.Markdown("---")
 
             whisper_model = gr.Dropdown(
                 label="Whisper Model",
@@ -297,6 +392,169 @@ if __name__ == "__main__":
             # demo.load(read_logs, None, logs, every=1)
 
             prompt_compute_btn = gr.Button(value="Step 1 - Create dataset")
+        
+            # Advanced processing functions
+            def process_srt_media(srt_file_path, media_file_path, language, out_path, progress=gr.Progress(track_tqdm=True)):
+                """Process SRT subtitle file with corresponding media file"""
+                try:
+                    if not srt_file_path or not media_file_path:
+                        return "Please upload both SRT file and media file!"
+                    
+                    progress(0, desc="Initializing SRT processor...")
+                    output_path = os.path.join(out_path, "dataset")
+                    os.makedirs(output_path, exist_ok=True)
+                    
+                    progress(0.3, desc="Processing SRT and extracting audio segments...")
+                    train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+                        srt_path=srt_file_path,
+                        media_path=media_file_path,
+                        output_dir=output_path,
+                        language=language,
+                        gradio_progress=progress
+                    )
+                    
+                    # Count segments from train CSV
+                    import pandas as pd
+                    train_df = pd.read_csv(train_csv, sep='|')
+                    eval_df = pd.read_csv(eval_csv, sep='|')
+                    num_segments = len(train_df) + len(eval_df)
+                    
+                    progress(1.0, desc="SRT processing complete!")
+                    return f"✓ SRT Processing Complete!\nProcessed {num_segments} segments\nTotal audio: {duration:.1f}s\nDataset created at: {output_path}"
+                    
+                except Exception as e:
+                    traceback.print_exc()
+                    return f"❌ Error processing SRT: {str(e)}"
+            
+            def download_youtube_video(url, transcript_lang, language, out_path, progress=gr.Progress(track_tqdm=True)):
+                """Download YouTube video and extract transcripts"""
+                try:
+                    if not url:
+                        return "Please enter a YouTube URL!"
+                    
+                    progress(0, desc="Initializing YouTube downloader...")
+                    temp_dir = tempfile.mkdtemp()
+                    
+                    progress(0.2, desc="Downloading video and subtitles...")
+                    audio_path, srt_path, info = youtube_downloader.download_youtube_video(
+                        url=url,
+                        output_dir=temp_dir,
+                        language=transcript_lang,
+                        audio_only=True,
+                        download_subtitles=True,
+                        auto_update=True
+                    )
+                    
+                    if not audio_path:
+                        return "❌ Failed to download YouTube video. Check URL and try again."
+                    
+                    if not srt_path:
+                        return "❌ No transcripts/subtitles available for this video. Try a different video or language."
+                    
+                    progress(0.6, desc="Processing transcript and audio...")
+                    output_path = os.path.join(out_path, "dataset")
+                    os.makedirs(output_path, exist_ok=True)
+                    
+                    train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+                        srt_path=srt_path,
+                        media_path=audio_path,
+                        output_dir=output_path,
+                        language=language,
+                        gradio_progress=progress
+                    )
+                    
+                    # Count segments
+                    import pandas as pd
+                    train_df = pd.read_csv(train_csv, sep='|')
+                    eval_df = pd.read_csv(eval_csv, sep='|')
+                    num_segments = len(train_df) + len(eval_df)
+                    
+                    # Cleanup temp directory
+                    try:
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                    except:
+                        pass
+                    
+                    progress(1.0, desc="YouTube processing complete!")
+                    return f"✓ YouTube Processing Complete!\nTitle: {info.get('title', 'Unknown')}\nDuration: {info.get('duration', 0):.0f}s\nProcessed {num_segments} segments\nDataset created at: {output_path}"
+                    
+                except Exception as e:
+                    traceback.print_exc()
+                    return f"❌ Error downloading YouTube video: {str(e)}"
+            
+            def slice_audio_file(audio_file_path, threshold_db, min_length, min_interval, max_sil_kept, auto_transcribe, whisper_model, language, out_path, progress=gr.Progress(track_tqdm=True)):
+                """Slice audio file using RMS-based silence detection"""
+                try:
+                    if not audio_file_path:
+                        return "Please upload an audio file to slice!"
+                    
+                    progress(0, desc="Initializing audio slicer...")
+                    
+                    output_path = os.path.join(out_path, "dataset", "wavs")
+                    os.makedirs(output_path, exist_ok=True)
+                    
+                    # Load audio
+                    import librosa
+                    import soundfile as sf
+                    progress(0.1, desc="Loading audio...")
+                    audio, sr = librosa.load(audio_file_path, sr=22050, mono=True)
+                    
+                    # Initialize slicer
+                    progress(0.2, desc="Slicing audio...")
+                    slicer = audio_slicer.Slicer(
+                        sr=sr,
+                        threshold=threshold_db,
+                        min_length=int(min_length * 1000),  # Convert to milliseconds
+                        min_interval=int(min_interval * 1000),
+                        hop_size=10,
+                        max_sil_kept=int(max_sil_kept * 1000)
+                    )
+                    
+                    # Slice audio
+                    chunks = slicer.slice(audio)
+                    
+                    if not chunks:
+                        return "❌ No segments created. Try adjusting the slicing parameters."
+                    
+                    progress(0.4, desc=f"Saving {len(chunks)} segments...")
+                    
+                    # Save segments
+                    segment_files = []
+                    for i, chunk in enumerate(chunks):
+                        segment_filename = f"{Path(audio_file_path).stem}_segment_{str(i).zfill(4)}.wav"
+                        segment_path = os.path.join(output_path, segment_filename)
+                        sf.write(segment_path, chunk, sr)
+                        segment_files.append(segment_path)
+                    
+                    # Auto-transcribe if requested
+                    transcription_status = "Disabled"
+                    if auto_transcribe:
+                        progress(0.6, desc="Transcribing segments with Whisper...")
+                        device = "cuda" if torch.cuda.is_available() else "cpu"
+                        compute_type = "float16" if torch.cuda.is_available() else "float32"
+                        asr_model = WhisperModel(whisper_model, device=device, compute_type=compute_type)
+                        
+                        # Create metadata by transcribing segments
+                        # This processes all segments and creates train/eval CSVs
+                        try:
+                            train_meta, eval_meta, total_size = format_audio_list(
+                                segment_files,
+                                asr_model=asr_model,
+                                target_language=language,
+                                out_path=os.path.join(out_path, "dataset"),
+                                gradio_progress=progress
+                            )
+                            transcription_status = "Enabled - Metadata created"
+                        except Exception as e:
+                            print(f"Warning: Could not create metadata: {e}")
+                            transcription_status = "Enabled - Segments created, metadata pending"
+                    
+                    progress(1.0, desc="Audio slicing complete!")
+                    return f"✓ Audio Slicing Complete!\nCreated {len(chunks)} segments\nSegments saved to: {output_path}\nAuto-transcription: {transcription_status}"
+                    
+                except Exception as e:
+                    traceback.print_exc()
+                    return f"❌ Error slicing audio: {str(e)}"
         
             def preprocess_dataset(audio_path, audio_folder_path, language, whisper_model, out_path, train_csv, eval_csv, use_g2p_preprocessing=False, g2p_backend="transphone", progress=gr.Progress(track_tqdm=True)):
                 clear_gpu_cache()
@@ -733,6 +991,45 @@ if __name__ == "__main__":
                     train_csv,
                     eval_csv,
                 ],
+            )
+            
+            # Advanced features button handlers
+            process_srt_btn.click(
+                fn=process_srt_media,
+                inputs=[
+                    srt_file,
+                    media_file,
+                    lang,
+                    out_path,
+                ],
+                outputs=[srt_status],
+            )
+            
+            download_youtube_btn.click(
+                fn=download_youtube_video,
+                inputs=[
+                    youtube_url,
+                    youtube_transcript_lang,
+                    lang,
+                    out_path,
+                ],
+                outputs=[youtube_status],
+            )
+            
+            slice_audio_btn.click(
+                fn=slice_audio_file,
+                inputs=[
+                    slicer_audio_file,
+                    slicer_threshold_db,
+                    slicer_min_length,
+                    slicer_min_interval,
+                    slicer_max_sil_kept,
+                    slicer_auto_transcribe,
+                    whisper_model,
+                    lang,
+                    out_path,
+                ],
+                outputs=[slicer_status],
             )
 
 

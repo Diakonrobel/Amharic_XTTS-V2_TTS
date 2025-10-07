@@ -10,6 +10,11 @@ torch==2.1.2
 torchvision==0.16.2
 torchaudio==2.1.2
 
+# Advanced dataset processing features
+pysrt>=1.1.2
+yt-dlp>=2024.1.0
+soundfile>=0.12.1
+
 
 
 

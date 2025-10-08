@@ -58,17 +58,17 @@ def merge_short_subtitles(
     max_gap: float = 1.5
 ) -> List[Tuple[float, float, str]]:
     """
-    Intelligently merge short subtitle segments into longer, more natural segments.
+    AGGRESSIVE merging: Combines short subtitle segments into longer, natural segments.
     
-    Merging logic:
-    1. Segments shorter than min_duration are merged with adjacent segments
-    2. Merging stops if combined duration exceeds max_duration
-    3. Merging stops if gap between segments exceeds max_gap
-    4. Preserves natural speech boundaries
+    Merging strategy (in priority order):
+    1. ALWAYS merge if current < min_duration (unless max_duration exceeded)
+    2. Merge adjacent short segments even if current is OK
+    3. Tolerate larger gaps for very short segments
+    4. Preserve natural speech only when hitting limits
     
     Args:
         segments: List of (start, end, text) tuples
-        min_duration: Minimum duration for a segment (merge if shorter)
+        min_duration: Minimum target duration (merge aggressively if shorter)
         max_duration: Maximum duration for merged segments
         max_gap: Maximum gap between segments to allow merging
         
@@ -85,19 +85,33 @@ def merge_short_subtitles(
         next_start, next_end, next_text = segments[i]
         
         current_duration = current_end - current_start
+        next_duration = next_end - next_start
         gap = next_start - current_end
         combined_duration = next_end - current_start
         
-        # Decide whether to merge
+        # AGGRESSIVE merging logic
         should_merge = False
         
-        # Merge if current segment is too short and conditions allow
+        # Rule 1: ALWAYS merge if current is too short (unless would exceed max)
         if current_duration < min_duration:
+            if combined_duration <= max_duration:
+                # Allow larger gaps for very short segments
+                adjusted_max_gap = max_gap * 2 if current_duration < 1.0 else max_gap
+                if gap <= adjusted_max_gap:
+                    should_merge = True
+        
+        # Rule 2: Merge if NEXT is too short (prevent orphans)
+        elif next_duration < min_duration:
             if combined_duration <= max_duration and gap <= max_gap:
                 should_merge = True
         
-        # Also merge if next segment is very short (< 0.5s) and close (< 0.5s gap)
-        elif (next_end - next_start) < 0.5 and gap < 0.5:
+        # Rule 3: Merge very short adjacent segments regardless
+        elif current_duration < 2.0 and next_duration < 2.0:
+            if combined_duration <= max_duration and gap <= max_gap * 1.5:
+                should_merge = True
+        
+        # Rule 4: Merge if gap is tiny (continuous speech)
+        elif gap < 0.5:
             if combined_duration <= max_duration:
                 should_merge = True
         
@@ -114,7 +128,8 @@ def merge_short_subtitles(
     merged.append((current_start, current_end, current_text))
     
     print(f"Merged subtitles: {len(segments)} → {len(merged)} segments")
-    print(f"  Reduction: {len(segments) - len(merged)} segments merged")
+    print(f"  Reduction: {len(segments) - len(merged)} segments merged ({100*(len(segments)-len(merged))/len(segments):.1f}%)")
+    print(f"  Average merged duration: {sum(e-s for s,e,_ in merged) / len(merged):.2f}s")
     
     return merged
 
@@ -165,7 +180,7 @@ def extract_segments_from_audio(
     output_dir: str,
     speaker_name: str = "speaker",
     language: str = "en",
-    min_duration: float = 0.3,
+    min_duration: float = 1.0,
     max_duration: float = 20.0,
     buffer: float = 0.2,
     gradio_progress=None
@@ -313,7 +328,7 @@ def process_srt_with_media(
     output_dir: str,
     speaker_name: str = "speaker",
     language: str = "en",
-    min_duration: float = 0.3,
+    min_duration: float = 1.0,
     max_duration: float = 20.0,
     buffer: float = 0.2,
     gradio_progress=None
@@ -350,13 +365,13 @@ def process_srt_with_media(
     if not srt_segments:
         raise ValueError("No segments found in SRT file")
     
-    # Merge short subtitles
+    # Merge short subtitles with AGGRESSIVE settings for languages like Amharic
     print("Step 1b: Merging short subtitle segments...")
     srt_segments = merge_short_subtitles(
         srt_segments,
-        min_duration=1.0,  # Merge segments shorter than 1 second
+        min_duration=3.0,  # Merge segments shorter than 3 seconds (AGGRESSIVE)
         max_duration=max_duration,
-        max_gap=1.5  # Allow gaps up to 1.5s when merging
+        max_gap=3.0  # Allow gaps up to 3s when merging (AGGRESSIVE)
     )
     
     # Check if media is video or audio

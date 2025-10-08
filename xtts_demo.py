@@ -111,10 +111,22 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
     print("Model Loaded!")
     return "Model Loaded!"
 
-def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repetition_penalty,top_k,top_p,sentence_split,use_config):
+def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repetition_penalty,top_k,top_p,sentence_split,use_config,use_g2p_inference=False):
     if XTTS_MODEL is None or not speaker_audio_file:
         return "You need to run the previous step to load the model !!", None, None
 
+    # Apply G2P preprocessing if enabled for Amharic text
+    if use_g2p_inference and lang in ["am", "amh"]:
+        try:
+            from amharic_tts.tokenizer.xtts_tokenizer_wrapper import XTTSAmharicTokenizer
+            print(f" > Amharic G2P enabled for inference: converting input text to phonemes")
+            tokenizer = XTTSAmharicTokenizer(use_phonemes=True)
+            tts_text = tokenizer.preprocess_text(tts_text, lang=lang)
+            print(f" > Converted to phonemes: {tts_text[:100]}...")
+        except Exception as e:
+            print(f" > Warning: G2P preprocessing failed: {e}")
+            print(f" > Using original text")
+    
     gpt_cond_latent, speaker_embedding = XTTS_MODEL.get_conditioning_latents(audio_path=speaker_audio_file, gpt_cond_len=XTTS_MODEL.config.gpt_cond_len, max_ref_length=XTTS_MODEL.config.max_ref_len, sound_norm_refs=XTTS_MODEL.config.sound_norm_refs)
     
     # Normalize language code for XTTS (am -> amh)
@@ -1200,6 +1212,13 @@ if __name__ == "__main__":
                             value="This model sounds really good and above all, it's reasonably fast.",
                         )
                         
+                        # G2P option for Amharic
+                        use_g2p_inference = gr.Checkbox(
+                            label="🇪🇹 Enable Amharic G2P",
+                            value=True,
+                            info="Convert Amharic text to phonemes (required if model trained with G2P)"
+                        )
+                        
                         with gr.Accordion("⚙️ Advanced Settings", open=False):
                             with gr.Row():
                                 temperature = gr.Slider(label="Temperature", minimum=0, maximum=1, step=0.05, value=0.75)
@@ -1372,7 +1391,8 @@ if __name__ == "__main__":
                     top_k,
                     top_p,
                     sentence_split,
-                    use_config
+                    use_config,
+                    use_g2p_inference
                 ],
                 outputs=[progress_gen, tts_output_audio,reference_audio],
             )

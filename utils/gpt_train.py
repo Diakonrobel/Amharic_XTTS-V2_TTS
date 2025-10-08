@@ -1,6 +1,7 @@
 import logging
 import os
 import gc
+import torch
 from pathlib import Path
 
 # Apply PyTorch 2.6 compatibility patches

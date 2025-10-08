@@ -3,4 +3,4 @@
 # No venv needed - Lightning provides conda environment
 
 echo "Starting Amharic XTTS Fine-Tuning WebUI..."
-python xtts_demo.py --share
+python3 xtts_demo.py --share

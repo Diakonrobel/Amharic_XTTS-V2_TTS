@@ -68,6 +68,112 @@ def get_video_info(url: str) -> Dict:
         }
 
 
+def convert_youtube_subtitle_to_srt(subtitle_text: str, format_ext: str) -> str:
+    """
+    Convert YouTube subtitle formats (srv1, srv2, srv3, json3, xml) to SRT format.
+    
+    Args:
+        subtitle_text: Raw subtitle text from YouTube
+        format_ext: Format extension (srv1, srv2, srv3, json3, xml, etc.)
+        
+    Returns:
+        SRT formatted subtitle text
+    """
+    import re
+    import json
+    import xml.etree.ElementTree as ET
+    from html import unescape
+    
+    # If already in SRT format, return as-is
+    if '-->' in subtitle_text and re.search(r'^\d+$', subtitle_text.split('\n')[0].strip(), re.MULTILINE):
+        return subtitle_text
+    
+    # Try to detect format if not specified or unknown
+    if format_ext in ['srv1', 'srv2', 'srv3'] or subtitle_text.strip().startswith('<?xml'):
+        # YouTube XML format (timedtext)
+        try:
+            print(f"  Converting YouTube XML ({format_ext}) to SRT...")
+            root = ET.fromstring(subtitle_text)
+            
+            srt_lines = []
+            index = 1
+            
+            for text_elem in root.findall('.//text'):
+                start = float(text_elem.get('start', 0))
+                duration = float(text_elem.get('dur', 0))
+                end = start + duration
+                text = text_elem.text or ''
+                
+                # Unescape HTML entities
+                text = unescape(text).strip()
+                if not text:
+                    continue
+                
+                # Format timestamps
+                start_time = format_timestamp(start)
+                end_time = format_timestamp(end)
+                
+                srt_lines.append(f"{index}")
+                srt_lines.append(f"{start_time} --> {end_time}")
+                srt_lines.append(text)
+                srt_lines.append('')  # Empty line between subtitles
+                index += 1
+            
+            result = '\n'.join(srt_lines)
+            if result.strip():
+                print(f"  ✓ Converted {index-1} subtitle segments")
+                return result
+        except Exception as e:
+            print(f"  ⚠ XML parsing failed: {e}")
+    
+    # Try JSON3 format
+    if format_ext == 'json3' or (subtitle_text.strip().startswith('{') or subtitle_text.strip().startswith('[')):
+        try:
+            print(f"  Converting YouTube JSON3 to SRT...")
+            data = json.loads(subtitle_text)
+            
+            srt_lines = []
+            index = 1
+            
+            # JSON3 structure: events array with segments
+            events = data.get('events', [])
+            for event in events:
+                if 'segs' not in event:
+                    continue
+                
+                start = event.get('tStartMs', 0) / 1000.0
+                duration = event.get('dDurationMs', 0) / 1000.0
+                end = start + duration
+                
+                # Combine text segments
+                text = ''.join(seg.get('utf8', '') for seg in event['segs'])
+                text = unescape(text).strip()
+                
+                if not text:
+                    continue
+                
+                # Format timestamps
+                start_time = format_timestamp(start)
+                end_time = format_timestamp(end)
+                
+                srt_lines.append(f"{index}")
+                srt_lines.append(f"{start_time} --> {end_time}")
+                srt_lines.append(text)
+                srt_lines.append('')
+                index += 1
+            
+            result = '\n'.join(srt_lines)
+            if result.strip():
+                print(f"  ✓ Converted {index-1} subtitle segments")
+                return result
+        except Exception as e:
+            print(f"  ⚠ JSON parsing failed: {e}")
+    
+    # If all conversions fail, return original
+    print(f"  ⚠ Could not convert subtitle format '{format_ext}', returning original")
+    return subtitle_text
+
+
 def download_subtitles_robust(
     url: str,
     output_path: Path,
@@ -178,6 +284,10 @@ def download_subtitles_robust(
                             continue
                     else:
                         raise UnicodeDecodeError("Could not decode subtitle with any encoding")
+                
+                # Detect and convert subtitle format
+                # YouTube returns subtitles in various formats: JSON3, XML (srv1/srv2/srv3), or direct SRT
+                subtitle_text = convert_youtube_subtitle_to_srt(subtitle_text, sub_format.get('ext', 'unknown'))
                 
                 # Write decoded text
                 with open(subtitle_path, 'w', encoding='utf-8') as f:

@@ -118,9 +118,13 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     amharic_g2p_enabled = use_amharic_g2p and language in ["am", "amh", "en"]
     effective_language = language  # Will be updated if G2P preprocessing is applied
     
+    # Extended vocabulary path (will be created if G2P enabled)
+    extended_vocab_path = None
+    
     if amharic_g2p_enabled:
         print(" > Amharic G2P mode ENABLED")
         print(" > Dataset will be checked and converted if needed")
+        print(" > Vocabulary will be extended with Amharic tokens")
         
         # Check if dataset needs preprocessing
         try:
@@ -137,6 +141,27 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
                 effective_language = language  # Keep original for now, will be updated after loading
         except Exception as e:
             print(f" > Warning: Could not check dataset preprocessing status: {e}")
+        
+        # Extend vocabulary with Amharic tokens
+        print(" > Extending XTTS vocabulary with Amharic tokens...")
+        try:
+            from utils.vocab_extension import create_extended_vocab_for_training
+            
+            extended_vocab_path = create_extended_vocab_for_training(
+                base_vocab_path=TOKENIZER_FILE,
+                output_dir=READY_MODEL_PATH,
+                train_csv_path=train_csv,
+                eval_csv_path=eval_csv
+            )
+            
+            print(f" > ✅ Extended vocabulary created: {extended_vocab_path}")
+            print(f" > This vocab includes Ethiopic chars + IPA phonemes + dataset-specific tokens")
+            
+        except Exception as e:
+            print(f" > ⚠️  Warning: Could not extend vocabulary: {e}")
+            print(" > Training will continue with standard vocabulary")
+            import traceback
+            traceback.print_exc()
     
     # Create dataset config with effective language
     config_dataset = BaseDatasetConfig(
@@ -149,6 +174,13 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     )
     DATASETS_CONFIG_LIST = [config_dataset]
     
+    # Use extended vocabulary if available (Amharic G2P mode)
+    tokenizer_file_to_use = extended_vocab_path if extended_vocab_path else TOKENIZER_FILE
+    if extended_vocab_path:
+        print(f" > Using EXTENDED vocabulary for training: {tokenizer_file_to_use}")
+    else:
+        print(f" > Using standard vocabulary for training: {tokenizer_file_to_use}")
+    
     # init args and config
     model_args = GPTArgs(
         max_conditioning_length=132300,  # 6 secs
@@ -159,7 +191,7 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         mel_norm_file=MEL_NORM_FILE,
         dvae_checkpoint=DVAE_CHECKPOINT,
         xtts_checkpoint=XTTS_CHECKPOINT,  # checkpoint path of the model that you want to fine-tune
-        tokenizer_file=TOKENIZER_FILE,
+        tokenizer_file=tokenizer_file_to_use,  # Use extended vocab if available
         gpt_num_audio_tokens=1026,
         gpt_start_audio_token=1024,
         gpt_stop_audio_token=1025,

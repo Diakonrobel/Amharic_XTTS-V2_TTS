@@ -7,6 +7,13 @@ from pathlib import Path
 import shutil
 import glob
 
+# Apply PyTorch 2.6 compatibility patches BEFORE importing TTS/trainer
+try:
+    from utils.pytorch26_patch import apply_pytorch26_compatibility_patches
+    apply_pytorch26_compatibility_patches()
+except Exception as e:
+    print(f"Warning: Could not apply PyTorch 2.6 patches: {e}")
+
 import gradio as gr
 import librosa.display
 import numpy as np

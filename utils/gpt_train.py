@@ -3,6 +3,13 @@ import os
 import gc
 from pathlib import Path
 
+# Apply PyTorch 2.6 compatibility patches
+try:
+    from utils.pytorch26_patch import apply_pytorch26_compatibility_patches
+    apply_pytorch26_compatibility_patches()
+except Exception as e:
+    print(f"Warning: Could not apply PyTorch 2.6 patches: {e}")
+
 from trainer import Trainer, TrainerArgs
 
 from TTS.config.shared_configs import BaseDatasetConfig

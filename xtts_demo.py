@@ -243,8 +243,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max_audio_length",
         type=int,
-        help="Max permitted audio size in seconds. Default: 11",
-        default=11,
+        help="Max permitted audio size in seconds. Default: 20",
+        default=20,
     )
 
     args = parser.parse_args()

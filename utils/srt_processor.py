@@ -51,6 +51,74 @@ def parse_srt_file(srt_path: str) -> List[Tuple[float, float, str]]:
         return []
 
 
+def merge_short_subtitles(
+    segments: List[Tuple[float, float, str]],
+    min_duration: float = 1.0,
+    max_duration: float = 20.0,
+    max_gap: float = 1.5
+) -> List[Tuple[float, float, str]]:
+    """
+    Intelligently merge short subtitle segments into longer, more natural segments.
+    
+    Merging logic:
+    1. Segments shorter than min_duration are merged with adjacent segments
+    2. Merging stops if combined duration exceeds max_duration
+    3. Merging stops if gap between segments exceeds max_gap
+    4. Preserves natural speech boundaries
+    
+    Args:
+        segments: List of (start, end, text) tuples
+        min_duration: Minimum duration for a segment (merge if shorter)
+        max_duration: Maximum duration for merged segments
+        max_gap: Maximum gap between segments to allow merging
+        
+    Returns:
+        List of merged segments
+    """
+    if not segments:
+        return []
+    
+    merged = []
+    current_start, current_end, current_text = segments[0]
+    
+    for i in range(1, len(segments)):
+        next_start, next_end, next_text = segments[i]
+        
+        current_duration = current_end - current_start
+        gap = next_start - current_end
+        combined_duration = next_end - current_start
+        
+        # Decide whether to merge
+        should_merge = False
+        
+        # Merge if current segment is too short and conditions allow
+        if current_duration < min_duration:
+            if combined_duration <= max_duration and gap <= max_gap:
+                should_merge = True
+        
+        # Also merge if next segment is very short (< 0.5s) and close (< 0.5s gap)
+        elif (next_end - next_start) < 0.5 and gap < 0.5:
+            if combined_duration <= max_duration:
+                should_merge = True
+        
+        if should_merge:
+            # Merge: extend current segment to include next
+            current_end = next_end
+            current_text = current_text + ' ' + next_text
+        else:
+            # Don't merge: save current and start new
+            merged.append((current_start, current_end, current_text))
+            current_start, current_end, current_text = next_start, next_end, next_text
+    
+    # Add the last segment
+    merged.append((current_start, current_end, current_text))
+    
+    print(f"Merged subtitles: {len(segments)} → {len(merged)} segments")
+    print(f"  Reduction: {len(segments) - len(merged)} segments merged")
+    
+    return merged
+
+
 def extract_audio_from_video(video_path: str, output_audio_path: str) -> bool:
     """
     Extract audio from video file using FFmpeg.
@@ -253,13 +321,19 @@ def process_srt_with_media(
     """
     Complete pipeline: Process SRT file with corresponding media file.
     
+    This function:
+    1. Parses the SRT subtitle file
+    2. Intelligently merges short subtitle segments (< 1s) into longer ones
+    3. Extracts audio segments matching the (merged) subtitle timestamps
+    4. Creates train/eval split with metadata CSVs
+    
     Args:
         srt_path: Path to SRT subtitle file
         media_path: Path to audio or video file
         output_dir: Output directory
         speaker_name: Speaker identifier
         language: Language code
-        min_duration: Minimum segment duration
+        min_duration: Minimum segment duration (after merging)
         max_duration: Maximum segment duration
         gradio_progress: Optional Gradio progress tracker
         
@@ -275,6 +349,15 @@ def process_srt_with_media(
     
     if not srt_segments:
         raise ValueError("No segments found in SRT file")
+    
+    # Merge short subtitles
+    print("Step 1b: Merging short subtitle segments...")
+    srt_segments = merge_short_subtitles(
+        srt_segments,
+        min_duration=1.0,  # Merge segments shorter than 1 second
+        max_duration=max_duration,
+        max_gap=1.5  # Allow gaps up to 1.5s when merging
+    )
     
     # Check if media is video or audio
     media_ext = Path(media_path).suffix.lower()

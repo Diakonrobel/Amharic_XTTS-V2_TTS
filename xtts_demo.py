@@ -445,6 +445,21 @@ if __name__ == "__main__":
                 slice_audio_btn = gr.Button(value="Slice Audio", variant="secondary")
                 slicer_status = gr.Textbox(label="Audio Slicing Status", interactive=False)
             
+            with gr.Accordion("📊 Dataset Processing History", open=False) as history_accordion:
+                gr.Markdown(
+                    "View and manage your dataset processing history. Track all SRT files, YouTube videos, and audio files you've processed."
+                )
+                history_display = gr.Textbox(
+                    label="Processing History",
+                    lines=15,
+                    interactive=False,
+                    max_lines=20
+                )
+                
+                with gr.Row():
+                    refresh_history_btn = gr.Button("🔄 Refresh History", variant="secondary")
+                    clear_history_btn = gr.Button("🗑️ Clear History", variant="stop")
+            
             gr.Markdown("---")
 
             whisper_model = gr.Dropdown(
@@ -504,6 +519,22 @@ if __name__ == "__main__":
             prompt_compute_btn = gr.Button(value="Step 1 - Create dataset")
         
             # Advanced processing functions
+            def show_dataset_history(out_path):
+                """Display dataset processing history"""
+                try:
+                    tracker = dataset_tracker.get_tracker(os.path.join(out_path, "dataset_history.json"))
+                    return tracker.format_history_display(limit=20)
+                except Exception as e:
+                    return f"❌ Error loading history: {str(e)}"
+            
+            def clear_dataset_history(out_path):
+                """Clear all dataset history"""
+                try:
+                    tracker = dataset_tracker.get_tracker(os.path.join(out_path, "dataset_history.json"))
+                    result = tracker.clear_history()
+                    return result
+                except Exception as e:
+                    return f"❌ Error clearing history: {str(e)}"
             def process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, progress):
                 """Handle batch processing of multiple SRT+media pairs"""
                 try:
@@ -1369,6 +1400,19 @@ if __name__ == "__main__":
                     out_path,
                 ],
                 outputs=[slicer_status],
+            )
+            
+            # History viewer handlers
+            refresh_history_btn.click(
+                fn=show_dataset_history,
+                inputs=[out_path],
+                outputs=[history_display],
+            )
+            
+            clear_history_btn.click(
+                fn=clear_dataset_history,
+                inputs=[out_path],
+                outputs=[history_display],
             )
 
 

@@ -242,6 +242,65 @@ class DatasetTracker:
         
         self.history.setdefault("datasets", []).append(dataset_entry)
         self._save_history()
+    
+    def format_history_display(self, limit: int = 20) -> str:
+        """
+        Format history for display in UI.
+        
+        Args:
+            limit: Maximum number of entries to show
+            
+        Returns:
+            Formatted string for display
+        """
+        datasets = self.history.get("datasets", [])
+        
+        if not datasets:
+            return "❌ No datasets processed yet.\n\nStart by processing some SRT files, YouTube videos, or audio files!"
+        
+        # Sort by timestamp (most recent first)
+        sorted_datasets = sorted(
+            datasets, 
+            key=lambda x: x.get("timestamp", 0), 
+            reverse=True
+        )[:limit]
+        
+        lines = []
+        lines.append(f"✓ Dataset Processing History ({len(datasets)} total)")
+        lines.append("=" * 60)
+        lines.append("")
+        
+        for i, dataset in enumerate(sorted_datasets, 1):
+            dataset_type = dataset.get("type", "unknown")
+            date_str = dataset.get("processed_at", "")[:19].replace("T", " ")
+            
+            lines.append(f"{i}. {dataset_type.upper()}")
+            
+            if dataset_type == "youtube":
+                lines.append(f"   Title: {dataset.get('title', 'Unknown')[:60]}")
+                lines.append(f"   URL: {dataset.get('url', 'N/A')[:60]}...")
+            elif dataset_type in ["srt", "srt_batch"]:
+                lines.append(f"   File: {dataset.get('file_name', 'Unknown')}")
+                lines.append(f"   Media: {dataset.get('media_file', 'N/A')}")
+            elif dataset_type == "audio":
+                lines.append(f"   File: {dataset.get('file_name', 'Unknown')}")
+            
+            lines.append(f"   Language: {dataset.get('language', 'unknown')}")
+            lines.append(f"   Segments: {dataset.get('num_segments', 0)}")
+            lines.append(f"   Date: {date_str}")
+            lines.append(f"   Output: {dataset.get('output_path', 'N/A')}")
+            lines.append("")
+        
+        if len(datasets) > limit:
+            lines.append(f"... and {len(datasets) - limit} more entries")
+        
+        return "\n".join(lines)
+    
+    def clear_history(self):
+        """Clear all history."""
+        self.history = {"datasets": []}
+        self._save_history()
+        return "✓ History cleared successfully!"
         print(f"✓ Added {file_type} dataset to history: {file_name}")
     
     def get_history(self, limit: Optional[int] = None) -> List[Dict]:

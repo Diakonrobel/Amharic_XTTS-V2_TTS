@@ -113,7 +113,7 @@ def download_youtube_video(
         }] if audio_only else [],
     }
     
-    # Add subtitle options
+    # Add subtitle options - make them optional with error handling
     if download_subtitles:
         ydl_opts.update({
             'writesubtitles': True,
@@ -121,6 +121,7 @@ def download_youtube_video(
             'subtitleslangs': [language, 'en'],  # Preferred language + English fallback
             'subtitlesformat': 'srt',
             'skip_download': False,
+            'ignoreerrors': True,  # Continue even if subtitles fail
         })
     
     # Download
@@ -129,7 +130,15 @@ def download_youtube_video(
     subtitle_file = None
     
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        # First, try downloading without subtitles to ensure audio download works
+        opts_audio_only = ydl_opts.copy()
+        if download_subtitles:
+            # Remove subtitle options for first attempt
+            for key in ['writesubtitles', 'writeautomaticsub', 'subtitleslangs', 'subtitlesformat']:
+                opts_audio_only.pop(key, None)
+        
+        with yt_dlp.YoutubeDL(opts_audio_only) as ydl:
+            print("Downloading audio...")
             result = ydl.extract_info(url, download=True)
             
             # Find downloaded files
@@ -144,9 +153,26 @@ def download_youtube_video(
                     audio_file = str(audio_candidate)
                     print(f"✓ Audio downloaded: {audio_file}")
                     break
-            
-            # Look for subtitle file
-            if download_subtitles:
+        
+        # Now try to download subtitles separately (non-fatal if it fails)
+        if download_subtitles:
+            try:
+                print("\nAttempting to download subtitles...")
+                subtitle_opts = {
+                    'skip_download': True,  # Don't re-download audio
+                    'writesubtitles': True,
+                    'writeautomaticsub': True,
+                    'subtitleslangs': [language, 'en'],
+                    'subtitlesformat': 'srt',
+                    'outtmpl': str(output_path / '%(title)s.%(ext)s'),
+                    'quiet': False,
+                    'ignoreerrors': True,
+                }
+                
+                with yt_dlp.YoutubeDL(subtitle_opts) as ydl:
+                    ydl.download([url])
+                
+                # Look for subtitle file
                 subtitle_patterns = [
                     f"{sanitized_title}.{language}.srt",
                     f"{sanitized_title}.en.srt",
@@ -160,10 +186,15 @@ def download_youtube_video(
                         break
                 
                 if not subtitle_file:
-                    print("⚠ No subtitles found (video may not have subtitles available)")
+                    print("⚠ No subtitles downloaded")
+            
+            except Exception as sub_e:
+                print(f"⚠ Could not download subtitles: {sub_e}")
+                print("  This is often due to rate limiting (HTTP 429) or unavailable subtitles.")
+                print("  Continuing without subtitles - will use Whisper transcription as fallback.")
     
     except Exception as e:
-        print(f"Error downloading from YouTube: {e}")
+        print(f"❌ Error downloading audio from YouTube: {e}")
         import traceback
         traceback.print_exc()
         raise

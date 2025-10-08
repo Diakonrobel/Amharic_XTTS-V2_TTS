@@ -82,14 +82,14 @@ def get_dataset_zip(out_path):
 
 def normalize_xtts_lang(lang: str) -> str:
     """Normalize user language code to XTTS-supported code.
-    - Map 'am' -> 'amh'
+    - Map 'am'/'amh' -> 'en' (Amharic not natively supported, use English as multilingual fallback)
     - Map 'zh' -> 'zh-cn' (XTTS expectation in some paths)
     """
     if not lang:
         return lang
     lang = lang.strip().lower()
     if lang in ("am", "amh"):
-        return "amh"
+        return "en"  # Use English as fallback for Amharic - XTTS will treat as multilingual
     if lang == "zh":
         return "zh-cn"
     return lang

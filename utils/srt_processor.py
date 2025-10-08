@@ -98,6 +98,7 @@ def extract_segments_from_audio(
     speaker_name: str = "speaker",
     min_duration: float = 0.5,
     max_duration: float = 15.0,
+    buffer: float = 0.2,
     gradio_progress=None
 ) -> Tuple[str, str]:
     """
@@ -153,12 +154,43 @@ def extract_segments_from_audio(
             print(f"Skipping segment {idx+1}: duration {duration:.2f}s out of range")
             continue
         
-        # Extract segment with small padding
-        padding = 0.05  # 50ms padding
-        start_sample = max(0, int((start_time - padding) * sr))
-        end_sample = min(len(wav), int((end_time + padding) * sr))
+        # Intelligent buffering similar to format_audio_list
+        # Start buffer: use midpoint between previous segment end and current start
+        if idx > 0:
+            prev_end = srt_segments[idx - 1][1]
+            buffered_start = max(
+                start_time - buffer,  # At most buffer seconds before
+                (prev_end + start_time) / 2  # Or midpoint with previous
+            )
+        else:
+            # First segment: just subtract buffer or use 0
+            buffered_start = max(0, start_time - buffer)
+        
+        # End buffer: use midpoint between current segment end and next start
+        if idx < len(srt_segments) - 1:
+            next_start = srt_segments[idx + 1][0]
+            buffered_end = min(
+                end_time + buffer,  # At most buffer seconds after
+                (end_time + next_start) / 2  # Or midpoint with next
+            )
+        else:
+            # Last segment: just add buffer or use audio end
+            buffered_end = min(len(wav) / sr, end_time + buffer)
+        
+        # Convert to samples
+        start_sample = int(buffered_start * sr)
+        end_sample = int(buffered_end * sr)
+        
+        # Ensure valid range
+        start_sample = max(0, start_sample)
+        end_sample = min(len(wav), end_sample)
         
         segment = wav[start_sample:end_sample]
+        
+        # Verify segment is not too short (at least 1/3 second)
+        if segment.shape[0] < sr / 3:
+            print(f"Skipping segment {idx+1}: extracted audio too short ({segment.shape[0]/sr:.2f}s)")
+            continue
         
         # Save segment
         segment_filename = f"{Path(audio_path).stem}_{str(idx).zfill(6)}.wav"
@@ -215,6 +247,7 @@ def process_srt_with_media(
     language: str = "en",
     min_duration: float = 0.5,
     max_duration: float = 15.0,
+    buffer: float = 0.2,
     gradio_progress=None
 ) -> Tuple[str, str, float]:
     """
@@ -281,6 +314,7 @@ def process_srt_with_media(
         speaker_name=speaker_name,
         min_duration=min_duration,
         max_duration=max_duration,
+        buffer=buffer,
         gradio_progress=gradio_progress
     )
     

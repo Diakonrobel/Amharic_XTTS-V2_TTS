@@ -49,14 +49,22 @@ def get_video_info(url: str) -> Dict:
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
+        
+        # Get available subtitle languages
+        manual_subs = list(info.get('subtitles', {}).keys())
+        auto_captions = list(info.get('automatic_captions', {}).keys())
+        all_available_langs = sorted(set(manual_subs + auto_captions))
+        
         return {
             'title': info.get('title', 'Unknown'),
             'duration': info.get('duration', 0),
             'uploader': info.get('uploader', 'Unknown'),
             'description': info.get('description', ''),
-            'has_subtitles': bool(info.get('subtitles', {})),
-            'has_automatic_captions': bool(info.get('automatic_captions', {})),
-            'available_languages': list(info.get('subtitles', {}).keys())
+            'has_subtitles': bool(manual_subs),
+            'has_automatic_captions': bool(auto_captions),
+            'available_languages': manual_subs,
+            'available_auto_caption_languages': auto_captions,
+            'all_subtitle_languages': all_available_langs
         }
 
 
@@ -423,8 +431,21 @@ def download_youtube_video(
         info = get_video_info(url)
         print(f"  Title: {info['title']}")
         print(f"  Duration: {info['duration']}s")
-        print(f"  Has subtitles: {info['has_subtitles']}")
+        print(f"  Has manual subtitles: {info['has_subtitles']}")
         print(f"  Has auto-captions: {info['has_automatic_captions']}")
+        
+        # Display available languages
+        all_langs = info.get('all_subtitle_languages', [])
+        if all_langs:
+            print(f"  Available subtitle languages: {', '.join(all_langs[:10])}" + 
+                  (f" (+{len(all_langs)-10} more)" if len(all_langs) > 10 else ""))
+            # Check if requested language is available
+            if language in all_langs:
+                print(f"  ✓ Requested language '{language}' is available!")
+            elif language not in ['en'] and 'en' in all_langs:
+                print(f"  ⚠ Requested language '{language}' not found, will use 'en' as fallback")
+        else:
+            print(f"  ⚠ No subtitles/captions available for this video")
     except Exception as e:
         print(f"Warning: Could not fetch video info: {e}")
         info = {}

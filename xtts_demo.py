@@ -278,8 +278,39 @@ if __name__ == "__main__":
                 youtube_transcript_lang = gr.Dropdown(
                     label="Preferred Transcript Language",
                     value="en",
-                    choices=["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh", "hu", "ko", "ja", "amh"],
-                    info="Language for transcript extraction (auto-fallback if unavailable)"
+                    choices=[
+                        ("English", "en"),
+                        ("Spanish", "es"),
+                        ("French", "fr"),
+                        ("German", "de"),
+                        ("Italian", "it"),
+                        ("Portuguese", "pt"),
+                        ("Polish", "pl"),
+                        ("Turkish", "tr"),
+                        ("Russian", "ru"),
+                        ("Dutch", "nl"),
+                        ("Czech", "cs"),
+                        ("Arabic", "ar"),
+                        ("Chinese", "zh"),
+                        ("Hungarian", "hu"),
+                        ("Korean", "ko"),
+                        ("Japanese", "ja"),
+                        ("Amharic", "am"),  # Changed from 'amh' to 'am' (ISO 639-1 standard)
+                        ("Hindi", "hi"),
+                        ("Bengali", "bn"),
+                        ("Swahili", "sw"),
+                        ("Vietnamese", "vi"),
+                        ("Thai", "th"),
+                        ("Indonesian", "id"),
+                        ("Filipino", "fil"),
+                        ("Ukrainian", "uk"),
+                        ("Greek", "el"),
+                        ("Hebrew", "he"),
+                        ("Urdu", "ur"),
+                        ("Persian", "fa"),
+                    ],
+                    info="Language for transcript/subtitle extraction (auto-fallback to English if unavailable)",
+                    allow_custom_value=True
                 )
                 download_youtube_btn = gr.Button(value="Download & Process YouTube", variant="secondary")
                 youtube_status = gr.Textbox(label="YouTube Processing Status", interactive=False)

@@ -1011,6 +1011,26 @@ if __name__ == "__main__":
                 )
             
             with gr.Group():
+                gr.Markdown("### ⚡ **Training Optimizations** (Speed & Memory)")
+                gr.Markdown("_Enable optimizations for faster training with less memory_")
+                with gr.Row():
+                    enable_grad_checkpoint = gr.Checkbox(
+                        label="Gradient Checkpointing",
+                        value=False,
+                        info="20-30% memory reduction (minimal speed impact)"
+                    )
+                    enable_sdpa = gr.Checkbox(
+                        label="Fast Attention (SDPA)",
+                        value=False,
+                        info="1.3-1.5x speed + 30-40% memory reduction"
+                    )
+                    enable_mixed_precision = gr.Checkbox(
+                        label="Mixed Precision (FP16/BF16)",
+                        value=False,
+                        info="Additional speedup (Ampere+ GPUs)"
+                    )
+            
+            with gr.Group():
                 gr.Markdown("### 🇪🇹 **Amharic G2P Options** (for 'amh' language)")
                 with gr.Row():
                     enable_amharic_g2p = gr.Checkbox(
@@ -1039,7 +1059,7 @@ if __name__ == "__main__":
             from pathlib import Path
             import traceback
             
-            def train_model(custom_model, version, language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length, save_step=1000, save_n_checkpoints=1, enable_amharic_g2p=False, g2p_backend_train="transphone"):
+            def train_model(custom_model, version, language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length, save_step=1000, save_n_checkpoints=1, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False, enable_amharic_g2p=False, g2p_backend_train="transphone"):
                 clear_gpu_cache()
                 
                 # Strip whitespace from paths to prevent accidental spaces
@@ -1097,7 +1117,10 @@ if __name__ == "__main__":
                         custom_model, version, language_norm, num_epochs, batch_size, grad_acumm,
                         train_csv, eval_csv, output_path=output_path, max_audio_length=max_audio_length,
                         save_step=save_step, save_n_checkpoints=save_n_checkpoints,
-                        use_amharic_g2p=use_amharic_g2p
+                        use_amharic_g2p=use_amharic_g2p,
+                        enable_grad_checkpoint=enable_grad_checkpoint,
+                        enable_sdpa=enable_sdpa,
+                        enable_mixed_precision=enable_mixed_precision
                     )
                 except:
                     traceback.print_exc()
@@ -1369,6 +1392,9 @@ if __name__ == "__main__":
                     max_audio_length,
                     save_step,
                     save_n_checkpoints,
+                    enable_grad_checkpoint,
+                    enable_sdpa,
+                    enable_mixed_precision,
                     enable_amharic_g2p,
                     g2p_backend_train,
                 ],

@@ -19,8 +19,16 @@ from TTS.tts.layers.xtts.trainer.gpt_trainer import GPTArgs, GPTTrainer, GPTTrai
 from TTS.utils.manage import ModelManager
 import shutil
 
+# Import training optimizations
+try:
+    from utils.training_optimizations import TrainingOptimizer, UnslothStyleOptimizations
+    OPTIMIZATIONS_AVAILABLE = True
+except ImportError:
+    print(" > Warning: Training optimizations module not available")
+    OPTIMIZATIONS_AVAILABLE = False
 
-def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, save_step=1000, save_n_checkpoints=1, use_amharic_g2p=False):
+
+def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, save_step=1000, save_n_checkpoints=1, use_amharic_g2p=False, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False):
     #  Logging parameters
     RUN_NAME = "GPT_XTTS_FT"
     PROJECT_NAME = "XTTS_trainer"
@@ -245,8 +253,32 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         checkpoint_to_load = model_args.xtts_checkpoint
         model_args.xtts_checkpoint = None  # Temporarily disable auto-loading
     
+    # Apply training optimizations BEFORE model initialization
+    optimization_status = {}
+    if OPTIMIZATIONS_AVAILABLE and (enable_grad_checkpoint or enable_sdpa or enable_mixed_precision):
+        print(" > Configuring training optimizations...")
+        
+        # Enable cuDNN and other low-level optimizations
+        UnslothStyleOptimizations.enable_cudnn_optimizations()
+        
+        # Create optimizer instance
+        optimizer = TrainingOptimizer(
+            enable_gradient_checkpointing=enable_grad_checkpoint,
+            enable_sdpa=enable_sdpa,
+            enable_mixed_precision=enable_mixed_precision,
+            verbose=True
+        )
+    
     # init the model from config (without checkpoint if extended vocab)
     model = GPTTrainer.init_from_config(config)
+    
+    # Apply optimizations to model AFTER initialization
+    if OPTIMIZATIONS_AVAILABLE and (enable_grad_checkpoint or enable_sdpa or enable_mixed_precision):
+        print(" > Applying optimizations to model...")
+        optimization_status = optimizer.optimize_model(model)
+        
+        # Print initial memory stats
+        TrainingOptimizer.print_memory_stats()
     
     # If using extended vocabulary, manually load checkpoint and resize embeddings
     if extended_vocab_path and checkpoint_to_load:

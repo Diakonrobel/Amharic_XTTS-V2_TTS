@@ -945,7 +945,7 @@ if __name__ == "__main__":
                 with gr.Row():
                     grad_acumm = gr.Slider(
                         label="Grad Accumulation",
-                        minimum=2, maximum=128, step=1, value=args.grad_acumm,
+                        minimum=1, maximum=128, step=1, value=args.grad_acumm,
                         info="Gradient accumulation steps"
                     )
                     max_audio_length = gr.Slider(

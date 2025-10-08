@@ -13,6 +13,7 @@ torchaudio==2.1.2
 # Advanced dataset processing features
 pysrt>=1.1.2
 yt-dlp>=2024.1.0
+youtube-transcript-api>=0.6.0
 soundfile>=0.12.1
 
 

@@ -237,8 +237,68 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         test_sentences=[],
     )
 
-    # init the model from config
+    # Handle extended vocabulary - temporarily disable checkpoint loading, then reload manually
+    checkpoint_to_load = None
+    if extended_vocab_path:
+        print(" > Extended vocabulary detected - will handle checkpoint loading manually...")
+        checkpoint_to_load = model_args.xtts_checkpoint
+        model_args.xtts_checkpoint = None  # Temporarily disable auto-loading
+    
+    # init the model from config (without checkpoint if extended vocab)
     model = GPTTrainer.init_from_config(config)
+    
+    # If using extended vocabulary, manually load checkpoint and resize embeddings
+    if extended_vocab_path and checkpoint_to_load:
+        print(f" > Loading checkpoint manually for vocab expansion: {checkpoint_to_load}")
+        try:
+            import json
+            # Load extended vocab to get size
+            with open(tokenizer_file_to_use, 'r', encoding='utf-8') as f:
+                vocab_data = json.load(f)
+                new_vocab_size = len(vocab_data['model']['vocab'])
+            
+            # Load checkpoint
+            checkpoint = torch.load(checkpoint_to_load, map_location="cpu")
+            state_dict = checkpoint["model"]
+            
+            old_vocab_size = state_dict['gpt.text_embedding.weight'].shape[0]
+            embed_dim = state_dict['gpt.text_embedding.weight'].shape[1]
+            
+            print(f" > Checkpoint vocab size: {old_vocab_size}")
+            print(f" > Extended vocab size: {new_vocab_size}")
+            print(f" > Will add {new_vocab_size - old_vocab_size} new token embeddings")
+            
+            # Create new extended embedding layers
+            new_text_embedding = torch.nn.Embedding(new_vocab_size, embed_dim)
+            new_text_embedding.weight.data[:old_vocab_size] = state_dict['gpt.text_embedding.weight']
+            new_text_embedding.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * 0.02
+            
+            new_text_head = torch.nn.Linear(embed_dim, new_vocab_size)
+            new_text_head.weight.data[:old_vocab_size] = state_dict['gpt.text_head.weight']
+            new_text_head.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * 0.02
+            new_text_head.bias.data[:old_vocab_size] = state_dict['gpt.text_head.bias']
+            new_text_head.bias.data[old_vocab_size:] = torch.zeros(new_vocab_size - old_vocab_size)
+            
+            # Remove text embedding layers from state dict
+            filtered_state = {k: v for k, v in state_dict.items() 
+                            if 'text_embedding' not in k and 'text_head' not in k}
+            
+            # Load non-text layers
+            model.xtts.load_state_dict(filtered_state, strict=False)
+            
+            # Replace text embedding layers with extended versions
+            model.xtts.gpt.text_embedding = new_text_embedding
+            model.xtts.gpt.text_head = new_text_head
+            
+            print(f" > ✅ Checkpoint loaded and embeddings resized!")
+            print(f" > Copied {old_vocab_size} existing embeddings")
+            print(f" > Initialized {new_vocab_size - old_vocab_size} new embeddings (random, will be learned)")
+            
+        except Exception as e:
+            print(f" > ⚠️  Error in extended vocab checkpoint loading: {e}")
+            print(" > Training may fail - consider using standard vocabulary")
+            import traceback
+            traceback.print_exc()
 
     # load training samples
     train_samples, eval_samples = load_tts_samples(

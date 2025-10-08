@@ -133,6 +133,7 @@ def download_subtitles_robust(
         # Download subtitle file directly with custom headers
         if subtitle_url:
             import urllib.request
+            import gzip
             subtitle_path = output_path / f"{sanitized_title}.{selected_lang}.srt"
             
             print(f"  Downloading from: {subtitle_url[:80]}...")
@@ -156,8 +157,31 @@ def download_subtitles_robust(
             
             with urllib.request.urlopen(req, timeout=30) as response:
                 subtitle_content = response.read()
-                with open(subtitle_path, 'wb') as f:
-                    f.write(subtitle_content)
+                
+                # Check if content is gzip-compressed (YouTube often sends compressed data)
+                if subtitle_content[:2] == b'\x1f\x8b':  # gzip magic number
+                    print(f"  Decompressing gzip-encoded subtitle...")
+                    subtitle_content = gzip.decompress(subtitle_content)
+                
+                # Decode and write as text
+                try:
+                    # Try UTF-8 first
+                    subtitle_text = subtitle_content.decode('utf-8')
+                except UnicodeDecodeError:
+                    # Fallback to other encodings
+                    for encoding in ['utf-8-sig', 'latin-1', 'cp1252']:
+                        try:
+                            subtitle_text = subtitle_content.decode(encoding)
+                            print(f"  Decoded with {encoding} encoding")
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                    else:
+                        raise UnicodeDecodeError("Could not decode subtitle with any encoding")
+                
+                # Write decoded text
+                with open(subtitle_path, 'w', encoding='utf-8') as f:
+                    f.write(subtitle_text)
             
             # Convert VTT to SRT if needed
             if subtitle_path.suffix == '.vtt':

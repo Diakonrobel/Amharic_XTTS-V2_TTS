@@ -17,7 +17,7 @@ import traceback
 from utils.formatter import format_audio_list,find_latest_best_model, list_audios
 from utils.gpt_train import train_gpt
 from utils import srt_processor
-from utils import youtube_downloader, srt_processor, audio_slicer, dataset_tracker
+from utils import youtube_downloader, srt_processor, audio_slicer, dataset_tracker, batch_processor
 from utils import audio_slicer
 
 from faster_whisper import WhisperModel
@@ -272,8 +272,10 @@ if __name__ == "__main__":
                     "Download YouTube videos and extract available transcripts/subtitles automatically."
                 )
                 youtube_url = gr.Textbox(
-                    label="YouTube URL",
-                    placeholder="https://youtube.com/watch?v=VIDEO_ID",
+                    label="YouTube URL(s)",
+                    placeholder="Single URL or multiple URLs (comma/newline separated)\nExample: https://youtube.com/watch?v=VIDEO1, https://youtube.com/watch?v=VIDEO2",
+                    lines=3,  # Multi-line support
+                    max_lines=10
                 )
                 youtube_transcript_lang = gr.Dropdown(
                     label="Preferred Transcript Language",
@@ -330,8 +332,15 @@ if __name__ == "__main__":
                     info="Language for transcript/subtitle extraction (auto-fallback to English if unavailable)",
                     allow_custom_value=True
                 )
+                
+                youtube_batch_mode = gr.Checkbox(
+                    label="🎬 Batch Mode (Process multiple URLs as single dataset)",
+                    value=False,
+                    info="Enable to process multiple URLs. Videos will be merged into one unified dataset."
+                )
+                
                 download_youtube_btn = gr.Button(value="Download & Process YouTube", variant="secondary")
-                youtube_status = gr.Textbox(label="YouTube Processing Status", interactive=False)
+                youtube_status = gr.Textbox(label="YouTube Processing Status", interactive=False, lines=10)
             
             with gr.Accordion("✂️ RMS-Based Audio Slicing", open=False) as slicer_accordion:
                 gr.Markdown(
@@ -498,11 +507,74 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error processing SRT: {str(e)}"
             
-            def download_youtube_video(url, transcript_lang, language, out_path, progress=gr.Progress(track_tqdm=True)):
-                """Download YouTube video and extract transcripts"""
+            def process_youtube_batch_urls(urls, transcript_lang, out_path, progress):
+                """Process multiple YouTube URLs in batch mode"""
+                try:
+                    progress(0, desc=f"Initializing batch processing for {len(urls)} videos...")
+                    
+                    # Process all videos
+                    train_csv, eval_csv, video_infos = batch_processor.process_youtube_batch(
+                        urls=urls,
+                        transcript_lang=transcript_lang,
+                        out_path=out_path,
+                        youtube_downloader=youtube_downloader,
+                        srt_processor=srt_processor,
+                        progress_callback=lambda p, desc: progress(p, desc=desc)
+                    )
+                    
+                    # Count total segments
+                    import pandas as pd
+                    train_df = pd.read_csv(train_csv, sep='|')
+                    eval_df = pd.read_csv(eval_csv, sep='|')
+                    total_segments = len(train_df) + len(eval_df)
+                    
+                    # Track batch as single entry
+                    tracker = dataset_tracker.get_tracker(os.path.join(out_path, "dataset_history.json"))
+                    
+                    # Add batch entry (using first video info as representative)
+                    if video_infos:
+                        first_video = video_infos[0]
+                        video_id = tracker._extract_youtube_id(first_video['url'])
+                        if video_id:
+                            tracker.add_youtube_dataset(
+                                url=f"BATCH: {len(video_infos)} videos",
+                                video_id=f"batch_{video_id}",
+                                title=f"Batch: {', '.join([v['title'][:30] for v in video_infos[:3]])}{'...' if len(video_infos) > 3 else ''}",
+                                language=transcript_lang,
+                                duration=sum(v['duration'] for v in video_infos),
+                                num_segments=total_segments,
+                                output_path=os.path.join(out_path, "dataset")
+                            )
+                    
+                    # Format summary
+                    summary = batch_processor.format_batch_summary(video_infos, total_segments)
+                    summary += "\n\nℹ This batch dataset has been saved to history."
+                    
+                    progress(1.0, desc="Batch processing complete!")
+                    return summary
+                    
+                except Exception as e:
+                    traceback.print_exc()
+                    return f"❌ Error in batch processing: {str(e)}"
+            
+            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, progress=gr.Progress(track_tqdm=True)):
+                """Download YouTube video(s) and extract transcripts"""
                 try:
                     if not url:
                         return "Please enter a YouTube URL!"
+                    
+                    # Parse URLs
+                    urls = batch_processor.parse_youtube_urls(url)
+                    
+                    if not urls:
+                        return "❌ No valid YouTube URLs found. Please check your input."
+                    
+                    # Check if batch mode and multiple URLs
+                    if batch_mode and len(urls) > 1:
+                        return process_youtube_batch_urls(urls, transcript_lang, out_path, progress)
+                    
+                    # Single URL processing (existing logic)
+                    url = urls[0]  # Use first URL
                     
                     # Check if already processed
                     tracker = dataset_tracker.get_tracker(os.path.join(out_path, "dataset_history.json"))
@@ -1115,6 +1187,7 @@ if __name__ == "__main__":
                     youtube_transcript_lang,
                     lang,
                     out_path,
+                    youtube_batch_mode,  # Add batch mode parameter
                 ],
                 outputs=[youtube_status],
             )

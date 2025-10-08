@@ -258,8 +258,8 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
                 vocab_data = json.load(f)
                 new_vocab_size = len(vocab_data['model']['vocab'])
             
-            # Load checkpoint
-            checkpoint = torch.load(checkpoint_to_load, map_location="cpu")
+            # Load checkpoint (PyTorch 2.6+ requires weights_only=False for legacy checkpoints)
+            checkpoint = torch.load(checkpoint_to_load, map_location="cpu", weights_only=False)
             state_dict = checkpoint["model"]
             
             old_vocab_size = state_dict['gpt.text_embedding.weight'].shape[0]

@@ -20,7 +20,7 @@ from TTS.utils.manage import ModelManager
 import shutil
 
 
-def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, use_amharic_g2p=False):
+def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, save_step=1000, save_n_checkpoints=1, use_amharic_g2p=False):
     #  Logging parameters
     RUN_NAME = "GPT_XTTS_FT"
     PROJECT_NAME = "XTTS_trainer"
@@ -222,8 +222,8 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         print_step=50,
         plot_step=100,
         log_model_step=100,
-        save_step=1000,
-        save_n_checkpoints=1,
+        save_step=save_step,
+        save_n_checkpoints=save_n_checkpoints,
         save_checkpoints=True,
         # target_loss="loss",
         print_eval=False,

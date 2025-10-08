@@ -990,6 +990,19 @@ if __name__ == "__main__":
                         minimum=2, maximum=20, step=1, value=args.max_audio_length,
                         info="Max permitted audio length"
                     )
+                
+                with gr.Row():
+                    save_step = gr.Slider(
+                        label="Checkpoint Save Frequency (steps)",
+                        minimum=100, maximum=5000, step=100, value=1000,
+                        info="Save checkpoint every N steps"
+                    )
+                    save_n_checkpoints = gr.Slider(
+                        label="Keep N Checkpoints",
+                        minimum=1, maximum=10, step=1, value=1,
+                        info="Number of checkpoints to retain"
+                    )
+                
                 clear_train_data = gr.Dropdown(
                     label="Cleanup After Training",
                     value="none",
@@ -1026,7 +1039,7 @@ if __name__ == "__main__":
             from pathlib import Path
             import traceback
             
-            def train_model(custom_model, version, language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length, enable_amharic_g2p=False, g2p_backend_train="transphone"):
+            def train_model(custom_model, version, language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length, save_step=1000, save_n_checkpoints=1, enable_amharic_g2p=False, g2p_backend_train="transphone"):
                 clear_gpu_cache()
                 
                 # Strip whitespace from paths to prevent accidental spaces
@@ -1083,6 +1096,7 @@ if __name__ == "__main__":
                     speaker_xtts_path, config_path, original_xtts_checkpoint, vocab_file, exp_path, speaker_wav = train_gpt(
                         custom_model, version, language_norm, num_epochs, batch_size, grad_acumm,
                         train_csv, eval_csv, output_path=output_path, max_audio_length=max_audio_length,
+                        save_step=save_step, save_n_checkpoints=save_n_checkpoints,
                         use_amharic_g2p=use_amharic_g2p
                     )
                 except:
@@ -1353,6 +1367,8 @@ if __name__ == "__main__":
                     grad_acumm,
                     out_path,
                     max_audio_length,
+                    save_step,
+                    save_n_checkpoints,
                     enable_amharic_g2p,
                     g2p_backend_train,
                 ],

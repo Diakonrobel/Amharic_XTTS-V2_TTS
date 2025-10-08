@@ -60,6 +60,10 @@ def merge_short_subtitles(
     """
     AGGRESSIVE merging: Combines short subtitle segments into longer, natural segments.
     
+    CRITICAL: When merging across gaps, we use the EARLIEST start time of any
+    merged subtitle to ensure we capture all audio. This handles YouTube subtitle
+    timing issues where text might be slightly ahead/behind actual speech.
+    
     Merging strategy (in priority order):
     1. ALWAYS merge if current < min_duration (unless max_duration exceeded)
     2. Merge adjacent short segments even if current is OK
@@ -73,7 +77,7 @@ def merge_short_subtitles(
         max_gap: Maximum gap between segments to allow merging
         
     Returns:
-        List of merged segments
+        List of merged segments with (earliest_start, latest_end, combined_text)
     """
     if not segments:
         return []
@@ -238,19 +242,24 @@ def extract_segments_from_audio(
             print(f"Skipping segment {idx+1}: duration {duration:.2f}s out of range")
             continue
         
-        # FIXED: Simple buffering since merging already prevents overlaps
-        # After merging, segments are properly separated, so we can safely add buffer
-        # without complex gap enforcement that was cutting off merged segments
+        # CRITICAL FIX: Don't let previous segment block current segment's start time
+        # The previous merged segment might end AFTER the current merged segment starts
+        # (due to out-of-order merging or gaps). We must respect the current start time!
         
-        # Start buffer: Go back by buffer amount, but don't go negative or overlap
+        # Start buffer: Go back by buffer amount, but check for actual overlaps
+        desired_start = start_time - buffer
+        
         if idx > 0:
             prev_end = srt_segments[idx - 1][1]
-            # Only enforce no-overlap if segments are actually close
-            # (merged segments are separated by gaps, so this rarely triggers)
-            buffered_start = max(prev_end, start_time - buffer, 0)
+            # Only block if prev_end is AFTER our desired start (actual overlap)
+            # AND the gap is small (< 0.3s = likely continuous speech)
+            if prev_end > desired_start and (prev_end - desired_start) < 0.3:
+                buffered_start = max(prev_end, 0)
+            else:
+                buffered_start = max(desired_start, 0)
         else:
             # First segment: can safely go back by buffer amount
-            buffered_start = max(0, start_time - buffer)
+            buffered_start = max(desired_start, 0)
         
         # End buffer: Extend by buffer amount, but don't overlap with next
         if idx < len(srt_segments) - 1:

@@ -17,7 +17,7 @@ import traceback
 from utils.formatter import format_audio_list,find_latest_best_model, list_audios
 from utils.gpt_train import train_gpt
 from utils import srt_processor
-from utils import youtube_downloader
+from utils import youtube_downloader, srt_processor, audio_slicer, dataset_tracker
 from utils import audio_slicer
 
 from faster_whisper import WhisperModel
@@ -449,6 +449,19 @@ if __name__ == "__main__":
                     if not srt_file_path or not media_file_path:
                         return "Please upload both SRT file and media file!"
                     
+                    # Check if already processed
+                    tracker = dataset_tracker.get_tracker(os.path.join(out_path, "dataset_history.json"))
+                    is_processed, existing_dataset = tracker.is_file_processed(srt_file_path, "srt")
+                    
+                    if is_processed:
+                        date = existing_dataset.get("processed_at", "unknown")[:19].replace("T", " ")
+                        return f"⚠ SRT File Already Processed!\n\nThis file was already processed:\n" \
+                               f"File: {existing_dataset.get('file_name', 'Unknown')}\n" \
+                               f"Language: {existing_dataset.get('language', '?')}\n" \
+                               f"Segments: {existing_dataset.get('num_segments', 0)}\n" \
+                               f"Processed: {date}\n\n" \
+                               f"ℹ If you want to reprocess, use a different output directory."
+                    
                     progress(0, desc="Initializing SRT processor...")
                     output_path = os.path.join(out_path, "dataset")
                     os.makedirs(output_path, exist_ok=True)
@@ -468,8 +481,18 @@ if __name__ == "__main__":
                     eval_df = pd.read_csv(eval_csv, sep='|')
                     num_segments = len(train_df) + len(eval_df)
                     
+                    # Track this dataset
+                    tracker.add_file_dataset(
+                        file_path=srt_file_path,
+                        file_type="srt",
+                        language=language,
+                        num_segments=num_segments,
+                        output_path=output_path,
+                        media_file=media_file_path
+                    )
+                    
                     progress(1.0, desc="SRT processing complete!")
-                    return f"✓ SRT Processing Complete!\nProcessed {num_segments} segments\nTotal audio: {duration:.1f}s\nDataset created at: {output_path}"
+                    return f"✓ SRT Processing Complete!\nProcessed {num_segments} segments\nTotal audio: {duration:.1f}s\nDataset created at: {output_path}\n\nℹ This dataset has been saved to history and won't be reprocessed."
                     
                 except Exception as e:
                     traceback.print_exc()
@@ -480,6 +503,20 @@ if __name__ == "__main__":
                 try:
                     if not url:
                         return "Please enter a YouTube URL!"
+                    
+                    # Check if already processed
+                    tracker = dataset_tracker.get_tracker(os.path.join(out_path, "dataset_history.json"))
+                    is_processed, existing_dataset = tracker.is_youtube_processed(url, transcript_lang)
+                    
+                    if is_processed:
+                        date = existing_dataset.get("processed_at", "unknown")[:19].replace("T", " ")
+                        return f"⚠ Video Already Processed!\n\nThis video was already downloaded and processed:\n" \
+                               f"Title: {existing_dataset.get('title', 'Unknown')}\n" \
+                               f"Language: {existing_dataset.get('language', '?')}\n" \
+                               f"Segments: {existing_dataset.get('num_segments', 0)}\n" \
+                               f"Processed: {date}\n" \
+                               f"Output: {existing_dataset.get('output_path', 'Unknown')}\n\n" \
+                               f"ℹ If you want to reprocess, please delete the dataset first or use a different output directory."
                     
                     progress(0, desc="Initializing YouTube downloader...")
                     temp_dir = tempfile.mkdtemp()
@@ -522,6 +559,19 @@ if __name__ == "__main__":
                     eval_df = pd.read_csv(eval_csv, sep='|')
                     num_segments = len(train_df) + len(eval_df)
                     
+                    # Track this dataset
+                    video_id = tracker._extract_youtube_id(url)
+                    if video_id:
+                        tracker.add_youtube_dataset(
+                            url=url,
+                            video_id=video_id,
+                            title=info.get('title', 'Unknown'),
+                            language=dataset_language,
+                            duration=info.get('duration', 0),
+                            num_segments=num_segments,
+                            output_path=output_path
+                        )
+                    
                     # Cleanup temp directory
                     try:
                         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -529,7 +579,7 @@ if __name__ == "__main__":
                         pass
                     
                     progress(1.0, desc="YouTube processing complete!")
-                    return f"✓ YouTube Processing Complete!\nTitle: {info.get('title', 'Unknown')}\nDuration: {info.get('duration', 0):.0f}s\nProcessed {num_segments} segments\nDataset created at: {output_path}"
+                    return f"✓ YouTube Processing Complete!\nTitle: {info.get('title', 'Unknown')}\nDuration: {info.get('duration', 0):.0f}s\nProcessed {num_segments} segments\nDataset created at: {output_path}\n\nℹ This dataset has been saved to history and won't be reprocessed."
                     
                 except Exception as e:
                     traceback.print_exc()

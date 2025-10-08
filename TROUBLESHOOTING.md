@@ -334,6 +334,49 @@ Look for messages like:
 
 ---
 
+### Issue 9: TTS Tokenizer "Language 'am' is not supported"
+
+**Error Message:**
+```
+NotImplementedError: Language 'am' is not supported.
+```
+
+**Cause:**
+The TTS library's tokenizer only recognizes `"amh"` (ISO 639-3), not `"am"` (ISO 639-1).
+
+This error occurs during training when the dataset metadata contains `"am"` but the XTTS tokenizer expects `"amh"`.
+
+**Solution:**
+✅ **Fixed in commit `b91ab17`**
+
+Added automatic language code normalization:
+
+```python
+def normalize_xtts_lang(lang: str) -> str:
+    """Normalize user language code to XTTS-supported code."""
+    if lang in ("am", "amh"):
+        return "amh"  # XTTS requires 'amh'
+    return lang
+```
+
+**Where Applied:**
+- Training: `train_gpt()` function automatically converts `"am"` → `"amh"`
+- Inference: `run_tts()` function automatically converts `"am"` → `"amh"`
+- G2P: Accepts both `"am"` and `"amh"` for activation
+
+**User Experience:**
+- ✅ Users can select **"am"** in the UI
+- ✅ Internally normalized to **"amh"** for XTTS
+- ✅ Both codes work seamlessly
+
+**Manual Fix (if needed):**
+If you created datasets before this fix, update the language in `lang.txt`:
+```bash
+echo "amh" > output/dataset/lang.txt
+```
+
+---
+
 ## 🔍 General Debugging Tips
 
 ### Enable Verbose Logging
@@ -388,6 +431,7 @@ rm -rf /tmp/gradio_*
 | Missing "am" in language dropdowns | `d66d843` | `xtts_demo.py`, `headlessXttsTrain.py` | ✅ Fixed |
 | Grad accumulation slider minimum | `aca4904` | `xtts_demo.py` | ✅ Fixed |
 | PyTorch 2.6 weights_only error | `3d10cfa` | `pytorch26_patch.py`, `xtts_demo.py`, `gpt_train.py` | ✅ Fixed |
+| TTS tokenizer "am" not supported | `b91ab17` | `xtts_demo.py`, `gpt_train.py` | ✅ Fixed |
 
 ---
 

@@ -6,6 +6,8 @@ Downloads videos and subtitles from YouTube using yt-dlp with auto-update.
 import os
 import subprocess
 import json
+import time
+import random
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict
 import yt_dlp
@@ -56,6 +58,205 @@ def get_video_info(url: str) -> Dict:
             'has_automatic_captions': bool(info.get('automatic_captions', {})),
             'available_languages': list(info.get('subtitles', {}).keys())
         }
+
+
+def download_subtitles_robust(
+    url: str,
+    output_path: Path,
+    sanitized_title: str,
+    language: str,
+    result: dict,
+    max_retries: int = 3
+) -> Optional[str]:
+    """
+    Robustly download subtitles with multiple fallback strategies to bypass rate limiting.
+    
+    Strategies:
+    1. Direct API extraction from result metadata (fastest, no extra request)
+    2. yt-dlp with cookies and browser impersonation
+    3. Exponential backoff retry with random delays
+    4. Alternative subtitle formats and languages
+    
+    Args:
+        url: YouTube video URL
+        output_path: Directory to save subtitles
+        sanitized_title: Sanitized video title
+        language: Preferred language
+        result: Video info dict from initial download
+        max_retries: Maximum retry attempts
+        
+    Returns:
+        Path to subtitle file if successful, None otherwise
+    """
+    subtitle_file = None
+    
+    print("\n🔍 Attempting to download subtitles with robust strategies...")
+    
+    # Strategy 1: Extract subtitles directly from metadata (no extra download)
+    print("\n[Strategy 1] Extracting subtitles from video metadata...")
+    try:
+        # Check for manual subtitles first
+        subtitles_dict = result.get('subtitles', {})
+        automatic_captions_dict = result.get('automatic_captions', {})
+        
+        # Try manual subtitles first (better quality)
+        all_subs = {**subtitles_dict, **automatic_captions_dict}
+        
+        # Preferred language order
+        lang_priority = [language, 'en', 'en-US', 'en-GB']
+        if language not in lang_priority:
+            lang_priority.insert(0, language)
+        
+        subtitle_url = None
+        selected_lang = None
+        
+        for lang in lang_priority:
+            if lang in all_subs:
+                # Find SRT format or any text format
+                for sub_format in all_subs[lang]:
+                    if sub_format.get('ext') in ['srt', 'vtt', 'srv3', 'srv2', 'srv1']:
+                        subtitle_url = sub_format.get('url')
+                        selected_lang = lang
+                        print(f"  ✓ Found {sub_format.get('ext')} subtitles in '{lang}'")
+                        break
+                if subtitle_url:
+                    break
+        
+        # Download subtitle file directly
+        if subtitle_url:
+            import urllib.request
+            subtitle_path = output_path / f"{sanitized_title}.{selected_lang}.srt"
+            
+            print(f"  Downloading from: {subtitle_url[:80]}...")
+            urllib.request.urlretrieve(subtitle_url, subtitle_path)
+            
+            # Convert VTT to SRT if needed
+            if subtitle_path.suffix == '.vtt':
+                srt_path = subtitle_path.with_suffix('.srt')
+                convert_vtt_to_srt(subtitle_path, srt_path)
+                subtitle_path.unlink()  # Remove VTT file
+                subtitle_path = srt_path
+            
+            if subtitle_path.exists() and subtitle_path.stat().st_size > 0:
+                print(f"  ✅ Successfully downloaded subtitles: {subtitle_path.name}")
+                return str(subtitle_path)
+    
+    except Exception as e:
+        print(f"  ⚠ Strategy 1 failed: {e}")
+    
+    # Strategy 2: Use yt-dlp with advanced options and retry logic
+    print("\n[Strategy 2] Using yt-dlp with browser impersonation and retries...")
+    
+    for attempt in range(max_retries):
+        try:
+            if attempt > 0:
+                # Exponential backoff with jitter
+                delay = (2 ** attempt) + random.uniform(1, 3)
+                print(f"  ⏳ Waiting {delay:.1f}s before retry {attempt + 1}/{max_retries}...")
+                time.sleep(delay)
+            
+            # Advanced yt-dlp options to bypass rate limiting
+            subtitle_opts = {
+                'skip_download': True,
+                'writesubtitles': True,
+                'writeautomaticsub': True,
+                'subtitleslangs': [language, 'en'],
+                'subtitlesformat': 'srt/vtt/best',
+                'outtmpl': str(output_path / '%(title)s.%(ext)s'),
+                'quiet': True,
+                'no_warnings': True,
+                'ignoreerrors': True,
+                # Rate limit bypass options
+                'extractor_retries': 3,
+                'fragment_retries': 3,
+                'retries': 3,
+                'sleep_interval': 2,
+                'max_sleep_interval': 5,
+                # Use cookies to appear as logged-in user (helps with rate limits)
+                'cookiefile': None,  # Can be set to browser cookies file
+                # Headers to appear more like a browser
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-us,en;q=0.5',
+                    'Sec-Fetch-Mode': 'navigate',
+                }
+            }
+            
+            with yt_dlp.YoutubeDL(subtitle_opts) as ydl:
+                print(f"  Attempt {attempt + 1}/{max_retries}: Downloading subtitles...")
+                ydl.download([url])
+            
+            # Look for subtitle file
+            subtitle_patterns = [
+                f"{sanitized_title}.{language}.srt",
+                f"{sanitized_title}.en.srt",
+                f"{sanitized_title}.srt",
+                f"{sanitized_title}.{language}.vtt",
+                f"{sanitized_title}.en.vtt",
+            ]
+            
+            for pattern in subtitle_patterns:
+                subtitle_candidate = output_path / pattern
+                if subtitle_candidate.exists() and subtitle_candidate.stat().st_size > 0:
+                    subtitle_file = str(subtitle_candidate)
+                    print(f"  ✅ Successfully downloaded: {subtitle_candidate.name}")
+                    return subtitle_file
+            
+            print(f"  ⚠ Attempt {attempt + 1} completed but no subtitle file found")
+        
+        except Exception as e:
+            print(f"  ⚠ Attempt {attempt + 1} failed: {str(e)[:100]}")
+            if attempt == max_retries - 1:
+                print("\n❌ All subtitle download strategies exhausted")
+                print("   This is likely due to:")
+                print("   - YouTube rate limiting (HTTP 429)")
+                print("   - Temporary API issues")
+                print("   - Regional restrictions")
+                print("   📝 Will use Whisper transcription as fallback")
+    
+    return None
+
+
+def convert_vtt_to_srt(vtt_path: Path, srt_path: Path):
+    """
+    Convert WebVTT subtitle format to SRT format.
+    
+    Args:
+        vtt_path: Path to VTT file
+        srt_path: Path to output SRT file
+    """
+    try:
+        import webvtt
+        vtt = webvtt.read(str(vtt_path))
+        
+        with open(srt_path, 'w', encoding='utf-8') as f:
+            for i, caption in enumerate(vtt, start=1):
+                # Write subtitle index
+                f.write(f"{i}\n")
+                # Write timestamp (convert VTT format to SRT format)
+                start = caption.start.replace('.', ',')
+                end = caption.end.replace('.', ',')
+                f.write(f"{start} --> {end}\n")
+                # Write text
+                f.write(f"{caption.text}\n\n")
+    except ImportError:
+        # Fallback: simple text replacement
+        with open(vtt_path, 'r', encoding='utf-8') as vtt_file:
+            lines = vtt_file.readlines()
+        
+        with open(srt_path, 'w', encoding='utf-8') as srt_file:
+            # Skip VTT header
+            start_writing = False
+            for line in lines:
+                if 'WEBVTT' in line or 'Kind:' in line or 'Language:' in line:
+                    continue
+                if '-->' in line:
+                    start_writing = True
+                    # Replace . with , in timestamps for SRT format
+                    line = line.replace('.', ',')
+                if start_writing:
+                    srt_file.write(line)
 
 
 def download_youtube_video(
@@ -154,44 +355,15 @@ def download_youtube_video(
                     print(f"✓ Audio downloaded: {audio_file}")
                     break
         
-        # Now try to download subtitles separately (non-fatal if it fails)
+        # Now try to download subtitles using robust strategies
         if download_subtitles:
-            try:
-                print("\nAttempting to download subtitles...")
-                subtitle_opts = {
-                    'skip_download': True,  # Don't re-download audio
-                    'writesubtitles': True,
-                    'writeautomaticsub': True,
-                    'subtitleslangs': [language, 'en'],
-                    'subtitlesformat': 'srt',
-                    'outtmpl': str(output_path / '%(title)s.%(ext)s'),
-                    'quiet': False,
-                    'ignoreerrors': True,
-                }
-                
-                with yt_dlp.YoutubeDL(subtitle_opts) as ydl:
-                    ydl.download([url])
-                
-                # Look for subtitle file
-                subtitle_patterns = [
-                    f"{sanitized_title}.{language}.srt",
-                    f"{sanitized_title}.en.srt",
-                    f"{sanitized_title}.srt"
-                ]
-                for pattern in subtitle_patterns:
-                    subtitle_candidate = output_path / pattern
-                    if subtitle_candidate.exists():
-                        subtitle_file = str(subtitle_candidate)
-                        print(f"✓ Subtitles downloaded: {subtitle_file}")
-                        break
-                
-                if not subtitle_file:
-                    print("⚠ No subtitles downloaded")
-            
-            except Exception as sub_e:
-                print(f"⚠ Could not download subtitles: {sub_e}")
-                print("  This is often due to rate limiting (HTTP 429) or unavailable subtitles.")
-                print("  Continuing without subtitles - will use Whisper transcription as fallback.")
+            subtitle_file = download_subtitles_robust(
+                url=url,
+                output_path=output_path,
+                sanitized_title=sanitized_title,
+                language=language,
+                result=result
+            )
     
     except Exception as e:
         print(f"❌ Error downloading audio from YouTube: {e}")

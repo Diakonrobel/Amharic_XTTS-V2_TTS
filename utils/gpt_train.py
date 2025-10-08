@@ -38,18 +38,9 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     GRAD_ACUMM_STEPS = grad_acumm  # set here the grad accumulation steps
 
 
-    # Define here the dataset that you want to use for the fine-tuning on.
-    config_dataset = BaseDatasetConfig(
-        formatter="coqui",
-        dataset_name="ft_dataset",
-        path=os.path.dirname(train_csv),
-        meta_file_train=os.path.basename(train_csv),
-        meta_file_val=os.path.basename(eval_csv),
-        language=language,
-    )
-
-    # Add here the configs of the datasets
-    DATASETS_CONFIG_LIST = [config_dataset]
+    # Dataset config will be created after G2P preprocessing (if enabled)
+    # to ensure correct language code is used
+    DATASETS_CONFIG_LIST = []
 
     # Define the path where XTTS v2.0.1 files will be downloaded
     CHECKPOINTS_OUT_PATH = os.path.join(Path.cwd(), "base_models",f"{version}")
@@ -122,20 +113,41 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     if language == "ja":
         num_workers = 0
     
-    # Handle Amharic-specific preprocessing
-    # Accept both 'am' and 'amh' for G2P (language is already normalized to 'amh' for XTTS)
-    if use_amharic_g2p and language in ["am", "amh"]:
-        print(" > Amharic G2P mode enabled: Text will be converted to IPA phonemes")
+    # Handle Amharic-specific preprocessing - ROBUST IMPLEMENTATION
+    # Accept both 'am' and 'amh' for G2P
+    amharic_g2p_enabled = use_amharic_g2p and language in ["am", "amh", "en"]
+    effective_language = language  # Will be updated if G2P preprocessing is applied
+    
+    if amharic_g2p_enabled:
+        print(" > Amharic G2P mode ENABLED")
+        print(" > Dataset will be checked and converted if needed")
+        
+        # Check if dataset needs preprocessing
         try:
-            from amharic_tts.tokenizer.xtts_tokenizer_wrapper import create_xtts_tokenizer
-            print(" > Creating Amharic tokenizer with G2P preprocessing...")
-            # Note: The tokenizer will be created but XTTS internally uses its own
-            # In future updates, this can be integrated more deeply
-            print(" > Note: For full G2P integration, preprocess your dataset text")
-            print(" >       Or use the hybrid tokenizer in inference")
-        except ImportError as e:
-            print(f" > Warning: Could not load Amharic tokenizer: {e}")
-            print(" > Continuing with standard tokenization")
+            from utils.amharic_g2p_dataset_wrapper import is_dataset_already_preprocessed
+            train_already_processed = is_dataset_already_preprocessed(train_csv)
+            eval_already_processed = is_dataset_already_preprocessed(eval_csv)
+            
+            if train_already_processed and eval_already_processed:
+                print(" > Dataset is already preprocessed with phonemes")
+                print(" > Switching language code to 'en' for XTTS tokenizer")
+                effective_language = "en"
+            else:
+                print(" > Dataset contains Amharic script - will convert to phonemes")
+                effective_language = language  # Keep original for now, will be updated after loading
+        except Exception as e:
+            print(f" > Warning: Could not check dataset preprocessing status: {e}")
+    
+    # Create dataset config with effective language
+    config_dataset = BaseDatasetConfig(
+        formatter="coqui",
+        dataset_name="ft_dataset",
+        path=os.path.dirname(train_csv),
+        meta_file_train=os.path.basename(train_csv),
+        meta_file_val=os.path.basename(eval_csv),
+        language=effective_language,
+    )
+    DATASETS_CONFIG_LIST = [config_dataset]
     
     # init args and config
     model_args = GPTArgs(
@@ -203,6 +215,36 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         eval_split_max_size=config.eval_split_max_size,
         eval_split_size=config.eval_split_size,
     )
+    
+    # Apply G2P preprocessing if enabled and needed
+    if amharic_g2p_enabled and effective_language != "en":
+        print(" > Applying Amharic G2P preprocessing to training data...")
+        try:
+            from utils.amharic_g2p_dataset_wrapper import apply_g2p_to_training_data
+            
+            # Preprocess samples and get effective language
+            train_samples, eval_samples, new_language = apply_g2p_to_training_data(
+                train_samples=train_samples,
+                eval_samples=eval_samples,
+                train_csv_path=train_csv,
+                eval_csv_path=eval_csv,
+                language=language,
+                g2p_backend="transphone"
+            )
+            
+            # Update effective language
+            print(f" > Language code updated for tokenizer: '{effective_language}' → '{new_language}'")
+            effective_language = new_language
+            
+            # Update dataset config language
+            config_dataset.language = effective_language
+            print(f" > Dataset config language updated to: '{effective_language}'")
+            
+        except Exception as e:
+            print(f" > ERROR: G2P preprocessing failed: {e}")
+            print(" > Training will continue with original data - may fail with UNK tokens!")
+            import traceback
+            traceback.print_exc()
 
     # init the trainer and 🚀
     trainer = Trainer(

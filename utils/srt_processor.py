@@ -155,27 +155,27 @@ def extract_segments_from_audio(
             print(f"Skipping segment {idx+1}: duration {duration:.2f}s out of range")
             continue
         
-        # Intelligent buffering similar to format_audio_list
-        # Start buffer: use midpoint between previous segment end and current start
+        # CRITICAL FIX: Proper buffering that respects subtitle timing
+        # The goal is to add a small buffer while preventing overlap between segments
+        
+        # Start buffer: Add buffer but don't overlap with previous segment
         if idx > 0:
             prev_end = srt_segments[idx - 1][1]
-            buffered_start = max(
-                start_time - buffer,  # At most buffer seconds before
-                (prev_end + start_time) / 2  # Or midpoint with previous
-            )
+            # Ensure we don't go before previous segment ends (leave small gap)
+            earliest_start = prev_end + 0.05  # 50ms gap minimum
+            buffered_start = max(earliest_start, start_time - buffer)
         else:
-            # First segment: just subtract buffer or use 0
+            # First segment: can safely go back by buffer amount
             buffered_start = max(0, start_time - buffer)
         
-        # End buffer: use midpoint between current segment end and next start
+        # End buffer: Add buffer but don't overlap with next segment
         if idx < len(srt_segments) - 1:
             next_start = srt_segments[idx + 1][0]
-            buffered_end = min(
-                end_time + buffer,  # At most buffer seconds after
-                (end_time + next_start) / 2  # Or midpoint with next
-            )
+            # Ensure we don't go past next segment starts (leave small gap)
+            latest_end = next_start - 0.05  # 50ms gap minimum
+            buffered_end = min(latest_end, end_time + buffer)
         else:
-            # Last segment: just add buffer or use audio end
+            # Last segment: can safely extend by buffer amount
             buffered_end = min(len(wav) / sr, end_time + buffer)
         
         # Convert to samples

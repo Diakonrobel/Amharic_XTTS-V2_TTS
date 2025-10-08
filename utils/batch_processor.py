@@ -6,6 +6,7 @@ Handles batch processing of multiple YouTube URLs and files with dataset merging
 import os
 import re
 import tempfile
+import traceback
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
 import pandas as pd
@@ -174,6 +175,7 @@ def process_youtube_batch(
     """
     temp_datasets = []
     video_infos = []
+    failed_videos = []  # Track failed videos
     
     print(f"🎬 Batch Processing {len(urls)} YouTube Videos...")
     
@@ -231,7 +233,21 @@ def process_youtube_batch(
         
         except Exception as e:
             print(f"  ❌ Error processing video {idx}: {e}")
+            print(f"  Full traceback:")
+            traceback.print_exc()
+            failed_videos.append({
+                'index': idx,
+                'url': url,
+                'error': str(e)
+            })
             continue
+    
+    # Print summary of failures if any
+    if failed_videos:
+        print(f"\n⚠️ {len(failed_videos)} video(s) failed to process:")
+        for failed in failed_videos:
+            print(f"  Video {failed['index']}: {failed['url']}")
+            print(f"    Error: {failed['error']}")
     
     if not temp_datasets:
         raise ValueError("No videos were successfully processed")

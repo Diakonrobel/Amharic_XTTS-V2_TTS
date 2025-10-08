@@ -96,6 +96,7 @@ def extract_segments_from_audio(
     srt_segments: List[Tuple[float, float, str]],
     output_dir: str,
     speaker_name: str = "speaker",
+    language: str = "en",
     min_duration: float = 0.5,
     max_duration: float = 15.0,
     buffer: float = 0.2,
@@ -230,11 +231,10 @@ def extract_segments_from_audio(
     print(f"  Training: {len(train_df)} samples")
     print(f"  Evaluation: {len(eval_df)} samples")
     
-    # Save language file
+    # Save language file with correct language
     lang_file = output_path / "lang.txt"
-    if not lang_file.exists():
-        with open(lang_file, 'w', encoding='utf-8') as f:
-            f.write("en\n")  # Default to English, can be changed
+    with open(lang_file, 'w', encoding='utf-8') as f:
+        f.write(f"{language}\n")
     
     return str(train_path), str(eval_path)
 
@@ -312,6 +312,7 @@ def process_srt_with_media(
         srt_segments=srt_segments,
         output_dir=output_dir,
         speaker_name=speaker_name,
+        language=language,
         min_duration=min_duration,
         max_duration=max_duration,
         buffer=buffer,
@@ -321,11 +322,6 @@ def process_srt_with_media(
     # Calculate total audio duration
     wav, sr = torchaudio.load(audio_path)
     total_duration = wav.shape[1] / sr
-    
-    # Update language file
-    lang_file = output_path / "lang.txt"
-    with open(lang_file, 'w', encoding='utf-8') as f:
-        f.write(f"{language}\n")
     
     print(f"\n✓ SRT processing complete!")
     print(f"  Output directory: {output_dir}")

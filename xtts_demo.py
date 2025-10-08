@@ -504,11 +504,15 @@ if __name__ == "__main__":
                     output_path = os.path.join(out_path, "dataset")
                     os.makedirs(output_path, exist_ok=True)
                     
+                    # Use transcript language as dataset language (transcript_lang is the actual content language)
+                    dataset_language = transcript_lang
+                    print(f"Setting dataset language to '{dataset_language}' (from YouTube transcript language)")
+                    
                     train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
                         srt_path=srt_path,
                         media_path=audio_path,
                         output_dir=output_path,
-                        language=language,
+                        language=dataset_language,
                         gradio_progress=progress
                     )
                     

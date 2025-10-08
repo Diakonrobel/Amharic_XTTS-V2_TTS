@@ -224,299 +224,219 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    with gr.Blocks(title=os.environ.get("APP_NAME", "Gradio")) as demo:
-        with gr.Tab("1 - Data processing"):
-            out_path = gr.Textbox(
-                label="Output path (where data and checkpoints will be saved):",
-                value=args.out_path,
-            )
-            # upload_file = gr.Audio(
-            #     sources="upload",
-            #     label="Select here the audio files that you want to use for XTTS trainining !",
-            #     type="filepath",
-            # )
-            upload_file = gr.File(
-                file_count="multiple",
-                label="Select here the audio files that you want to use for XTTS trainining (Supported formats: wav, mp3, and flac)",
-            )
+    with gr.Blocks(title=os.environ.get("APP_NAME", "Amharic XTTS Fine-tuning WebUI"), theme=gr.themes.Soft(), css="""
+        .gradio-container {max-width: 1400px !important;}
+        .tabs {border-radius: 8px;}
+        .tab-nav button {font-weight: 500;}
+        h1 {text-align: center; margin-bottom: 1em;}
+        .compact-row {gap: 0.5em !important;}
+    """) as demo:
+        gr.Markdown("# 🎙️ Amharic XTTS Fine-tuning WebUI", elem_classes=["text-center"])
+        gr.Markdown("### Professional Voice Cloning System with Advanced Dataset Processing", elem_classes=["text-center"])
+        
+        with gr.Tab("📁 Data Processing"):
+            gr.Markdown("## Dataset Creation & Management")
             
-            audio_folder_path = gr.Textbox(
-                label="Path to the folder with audio files (optional):",
-                value=args.audio_folder_path,
-            )
-            
-            # Advanced Dataset Processing Options
-            gr.Markdown("---")
-            gr.Markdown("### 🎬 Advanced Dataset Processing Options")
-            gr.Markdown("Process SRT subtitles, YouTube videos, or use intelligent audio slicing")
-            
-            with gr.Accordion("📝 SRT + Media File Processing", open=False) as srt_accordion:
-                gr.Markdown(
-                    "Upload subtitle files (SRT/VTT) with corresponding audio/video files for precise timestamp-based dataset creation."
-                )
-                srt_files = gr.File(
-                    file_count="multiple",  # Support multiple files
-                    label="SRT/VTT Subtitle File(s)",
-                    file_types=[".srt", ".vtt"],
-                )
-                media_files = gr.File(
-                    file_count="multiple",  # Support multiple files
-                    label="Media File(s) (Audio or Video)",
-                    file_types=[".mp4", ".mkv", ".avi", ".wav", ".mp3", ".flac"],
-                )
-                
-                srt_batch_mode = gr.Checkbox(
-                    label="🎬 Batch Mode (Process multiple SRT+Media pairs)",
-                    value=False,
-                    info="Enable to process multiple file pairs. Files are matched by name and merged into one dataset."
-                )
-                
-                use_vad_refinement = gr.Checkbox(
-                    label="🎤 VAD Enhancement (Voice Activity Detection)",
-                    value=False,
-                    info="Enable AI-powered speech detection for cleaner segments. Automatically trims silence and improves boundaries. (+20% processing time)"
-                )
-                
-                with gr.Accordion("⚙️ VAD Advanced Settings", open=False) as vad_settings_accordion:
-                    gr.Markdown(
-                        "Fine-tune VAD parameters for optimal results. Default values work well for most audio."
+            with gr.Group():
+                gr.Markdown("### 🎯 **Configuration**")
+                with gr.Row():
+                    out_path = gr.Textbox(
+                        label="Output Directory",
+                        value=args.out_path,
+                        placeholder="Path where datasets and models will be saved",
+                        scale=3
                     )
-                    vad_threshold = gr.Slider(
-                        label="VAD Sensitivity Threshold",
-                        minimum=0.1,
-                        maximum=0.9,
-                        step=0.05,
-                        value=0.5,
-                        info="Higher = stricter (only clear speech), Lower = more sensitive (may include quiet speech/noise)"
+                    whisper_model = gr.Dropdown(
+                        label="Whisper Model",
+                        value=args.whisper_model,
+                        choices=["large-v3", "large-v2", "large", "medium", "small"],
+                        scale=1
+                    )
+                with gr.Row():
+                    lang = gr.Dropdown(
+                        label="Dataset Language",
+                        value="en",
+                        choices=["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh", "hu", "ko", "ja", "am", "amh"],
+                        scale=1,
+                        info="Use 'am' or 'amh' for Amharic"
+                    )
+                    audio_folder_path = gr.Textbox(
+                        label="Audio Folder Path (Optional)",
+                        value=args.audio_folder_path,
+                        placeholder="Leave empty to use uploaded files",
+                        scale=2
+                    )
+            
+            with gr.Tabs():
+                with gr.TabItem("📤 Upload Audio Files"):
+                    upload_file = gr.File(
+                        file_count="multiple",
+                        label="Audio Files (WAV, MP3, FLAC)",
+                        file_types=[".wav", ".mp3", ".flac"],
+                        height=150
+                    )
+                    gr.Markdown("*Upload one or more audio files for automatic transcription and dataset creation*")
+                
+                with gr.TabItem("📝 SRT Processing"):
+                    gr.Markdown("**Process subtitle files with media for timestamp-accurate datasets**")
+                    with gr.Row():
+                        srt_files = gr.File(
+                            file_count="multiple",
+                            label="📄 Subtitle Files (SRT/VTT)",
+                            file_types=[".srt", ".vtt"],
+                            scale=1
+                        )
+                        media_files = gr.File(
+                            file_count="multiple",
+                            label="🎬 Media Files (Audio/Video)",
+                            file_types=[".mp4", ".mkv", ".avi", ".wav", ".mp3", ".flac"],
+                            scale=1
+                        )
+                    
+                    with gr.Row():
+                        srt_batch_mode = gr.Checkbox(
+                            label="🎬 Batch Mode",
+                            value=False,
+                            info="Process multiple file pairs as one dataset",
+                            scale=1
+                        )
+                        use_vad_refinement = gr.Checkbox(
+                            label="🎤 VAD Enhancement",
+                            value=False,
+                            info="AI-powered speech detection (+20% time)",
+                            scale=1
+                        )
+                    
+                    with gr.Accordion("⚙️ VAD Settings", open=False):
+                        with gr.Row():
+                            vad_threshold = gr.Slider(
+                                label="Sensitivity",
+                                minimum=0.1, maximum=0.9, step=0.05, value=0.5,
+                                info="Higher = stricter"
+                            )
+                            vad_min_speech_duration = gr.Slider(
+                                label="Min Speech (ms)",
+                                minimum=100, maximum=1000, step=50, value=250
+                            )
+                        with gr.Row():
+                            vad_min_silence_duration = gr.Slider(
+                                label="Min Silence (ms)",
+                                minimum=100, maximum=1000, step=50, value=300
+                            )
+                            vad_speech_pad = gr.Slider(
+                                label="Padding (ms)",
+                                minimum=0, maximum=200, step=10, value=30
+                            )
+                    
+                    process_srt_btn = gr.Button(value="▶️ Process SRT + Media", variant="primary", size="lg")
+                    srt_status = gr.Textbox(label="Status", interactive=False, lines=6, show_label=False)
+                
+                with gr.TabItem("📹 YouTube Processing"):
+                    gr.Markdown("**Download videos and extract transcripts automatically**")
+                    youtube_url = gr.Textbox(
+                        label="🔗 YouTube URL(s)",
+                        placeholder="https://youtube.com/watch?v=... (comma or newline separated for batch)",
+                        lines=2,
+                        max_lines=5
                     )
                     with gr.Row():
-                        vad_min_speech_duration = gr.Slider(
-                            label="Min Speech Duration (ms)",
-                            minimum=100,
-                            maximum=1000,
-                            step=50,
-                            value=250,
-                            info="Minimum duration to consider as speech"
+                        youtube_transcript_lang = gr.Dropdown(
+                            label="🌐 Transcript Language",
+                            value="en",
+                            choices=[
+                                ("English", "en"), ("Spanish", "es"), ("French", "fr"), ("German", "de"),
+                                ("Italian", "it"), ("Portuguese", "pt"), ("Russian", "ru"), ("Chinese", "zh"),
+                                ("Japanese", "ja"), ("Korean", "ko"), ("Arabic", "ar"),
+                                ("Amharic (አማርኛ)", "am"), ("Oromo (Oromoo)", "om"), ("Tigrinya (ትግርኛ)", "ti"),
+                                ("Somali (Soomaali)", "so"), ("Swahili", "sw"), ("Hausa", "ha"),
+                                ("Hindi", "hi"), ("Bengali", "bn"), ("Vietnamese", "vi"), ("Thai", "th"),
+                                ("Indonesian", "id"), ("Filipino", "fil"), ("Polish", "pl"), ("Turkish", "tr"),
+                                ("Dutch", "nl"), ("Czech", "cs"), ("Hungarian", "hu"), ("Ukrainian", "uk"),
+                            ],
+                            allow_custom_value=True,
+                            scale=2
                         )
-                        vad_min_silence_duration = gr.Slider(
-                            label="Min Silence to Split (ms)",
-                            minimum=100,
-                            maximum=1000,
-                            step=50,
-                            value=300,
-                            info="Minimum silence duration to split segments"
+                        youtube_batch_mode = gr.Checkbox(
+                            label="🎬 Batch Mode",
+                            value=False,
+                            info="Merge multiple videos",
+                            scale=1
+                        )
+                    
+                    download_youtube_btn = gr.Button(value="▶️ Download & Process", variant="primary", size="lg")
+                    youtube_status = gr.Textbox(label="Status", interactive=False, lines=6, show_label=False)
+                
+                with gr.TabItem("✂️ Audio Slicer"):
+                    gr.Markdown("**Intelligently segment audio based on silence detection**")
+                    slicer_audio_file = gr.File(
+                        file_count="single",
+                        label="🎵 Audio File",
+                        file_types=[".wav", ".mp3", ".flac"],
+                    )
+                    with gr.Row():
+                        slicer_threshold_db = gr.Slider(
+                            label="Silence Threshold (dB)",
+                            minimum=-60, maximum=-10, step=1, value=-40,
+                            info="Volume for silence"
+                        )
+                        slicer_min_length = gr.Slider(
+                            label="Min Length (sec)",
+                            minimum=1.0, maximum=20.0, step=0.5, value=5.0,
+                            info="Min segment duration"
                         )
                     with gr.Row():
-                        vad_speech_pad = gr.Slider(
-                            label="Speech Padding (ms)",
-                            minimum=0,
-                            maximum=200,
-                            step=10,
-                            value=30,
-                            info="Padding around speech segments"
+                        slicer_min_interval = gr.Slider(
+                            label="Min Silence (sec)",
+                            minimum=0.1, maximum=2.0, step=0.1, value=0.3,
+                            info="Min silence to split"
                         )
+                        slicer_max_sil_kept = gr.Slider(
+                            label="Padding (sec)",
+                            minimum=0.0, maximum=2.0, step=0.1, value=0.5,
+                            info="Silence padding"
+                        )
+                    slicer_auto_transcribe = gr.Checkbox(
+                        label="🎤 Auto-transcribe with Whisper",
+                        value=True,
+                        info="Generate transcriptions automatically"
+                    )
+                    slice_audio_btn = gr.Button(value="▶️ Slice Audio", variant="primary", size="lg")
+                    slicer_status = gr.Textbox(label="Status", interactive=False, lines=6, show_label=False)
                 
-                process_srt_btn = gr.Button(value="Process SRT + Media", variant="secondary")
-                srt_status = gr.Textbox(label="SRT Processing Status", interactive=False, lines=10)
+                with gr.TabItem("📊 History"):
+                    gr.Markdown("**View and manage dataset processing history**")
+                    history_display = gr.Textbox(
+                        label="Processing History",
+                        lines=12,
+                        interactive=False,
+                        max_lines=20,
+                        show_label=False
+                    )
+                    with gr.Row():
+                        refresh_history_btn = gr.Button("🔄 Refresh", variant="secondary", scale=1)
+                        clear_history_btn = gr.Button("🗑️ Clear All", variant="stop", scale=1)
             
-            with gr.Accordion("📹 YouTube Video Download", open=False) as youtube_accordion:
-                gr.Markdown(
-                    "Download YouTube videos and extract available transcripts/subtitles automatically."
-                )
-                youtube_url = gr.Textbox(
-                    label="YouTube URL(s)",
-                    placeholder="Single URL or multiple URLs (comma/newline separated)\nExample: https://youtube.com/watch?v=VIDEO1, https://youtube.com/watch?v=VIDEO2",
-                    lines=3,  # Multi-line support
-                    max_lines=10
-                )
-                youtube_transcript_lang = gr.Dropdown(
-                    label="Preferred Transcript Language",
-                    value="en",
-                    choices=[
-                        # Major languages
-                        ("English", "en"),
-                        ("Spanish", "es"),
-                        ("French", "fr"),
-                        ("German", "de"),
-                        ("Italian", "it"),
-                        ("Portuguese", "pt"),
-                        ("Russian", "ru"),
-                        ("Chinese", "zh"),
-                        ("Japanese", "ja"),
-                        ("Korean", "ko"),
-                        ("Arabic", "ar"),
-                        # Ethiopian languages
-                        ("Amharic (አማርኛ)", "am"),
-                        ("Oromo (Oromoo)", "om"),
-                        ("Tigrinya (ትግርኛ)", "ti"),
-                        ("Somali (Soomaali)", "so"),
-                        ("Afar", "aa"),
-                        # Other African languages
-                        ("Swahili", "sw"),
-                        ("Hausa", "ha"),
-                        ("Yoruba", "yo"),
-                        ("Zulu", "zu"),
-                        ("Xhosa", "xh"),
-                        # Asian languages
-                        ("Hindi", "hi"),
-                        ("Bengali", "bn"),
-                        ("Vietnamese", "vi"),
-                        ("Thai", "th"),
-                        ("Indonesian", "id"),
-                        ("Filipino", "fil"),
-                        ("Urdu", "ur"),
-                        ("Persian", "fa"),
-                        # European languages
-                        ("Polish", "pl"),
-                        ("Turkish", "tr"),
-                        ("Dutch", "nl"),
-                        ("Czech", "cs"),
-                        ("Hungarian", "hu"),
-                        ("Ukrainian", "uk"),
-                        ("Greek", "el"),
-                        ("Hebrew", "he"),
-                        ("Romanian", "ro"),
-                        ("Swedish", "sv"),
-                        ("Norwegian", "no"),
-                        ("Danish", "da"),
-                        ("Finnish", "fi"),
-                    ],
-                    info="Language for transcript/subtitle extraction (auto-fallback to English if unavailable)",
-                    allow_custom_value=True
-                )
-                
-                youtube_batch_mode = gr.Checkbox(
-                    label="🎬 Batch Mode (Process multiple URLs as single dataset)",
-                    value=False,
-                    info="Enable to process multiple URLs. Videos will be merged into one unified dataset."
-                )
-                
-                download_youtube_btn = gr.Button(value="Download & Process YouTube", variant="secondary")
-                youtube_status = gr.Textbox(label="YouTube Processing Status", interactive=False, lines=10)
-            
-            with gr.Accordion("✂️ RMS-Based Audio Slicing", open=False) as slicer_accordion:
-                gr.Markdown(
-                    "Intelligently segment long audio files based on silence detection without manual editing."
-                )
-                slicer_audio_file = gr.File(
-                    file_count="single",
-                    label="Audio File to Slice",
-                    file_types=[".wav", ".mp3", ".flac"],
-                )
+            with gr.Group():
+                gr.Markdown("### 🎯 **Amharic G2P Options** (for 'amh' language)")
                 with gr.Row():
-                    slicer_threshold_db = gr.Slider(
-                        label="Silence Threshold (dB)",
-                        minimum=-60,
-                        maximum=-10,
-                        step=1,
-                        value=-40,
-                        info="Volume threshold for silence detection"
+                    use_amharic_g2p_preprocessing = gr.Checkbox(
+                        label="Enable G2P Preprocessing",
+                        value=False,
+                        info="Convert Amharic text to phonemes",
+                        scale=2
                     )
-                    slicer_min_length = gr.Slider(
-                        label="Min Segment Length (seconds)",
-                        minimum=1.0,
-                        maximum=20.0,
-                        step=0.5,
-                        value=5.0,
-                        info="Minimum duration of each segment"
+                    g2p_backend_selection = gr.Dropdown(
+                        label="G2P Backend",
+                        value="transphone",
+                        choices=["transphone", "epitran", "rule_based"],
+                        info="Auto-fallback if unavailable",
+                        scale=1
                     )
-                with gr.Row():
-                    slicer_min_interval = gr.Slider(
-                        label="Min Silence Interval (seconds)",
-                        minimum=0.1,
-                        maximum=2.0,
-                        step=0.1,
-                        value=0.3,
-                        info="Minimum silence duration to split"
-                    )
-                    slicer_max_sil_kept = gr.Slider(
-                        label="Silence Padding (seconds)",
-                        minimum=0.0,
-                        maximum=2.0,
-                        step=0.1,
-                        value=0.5,
-                        info="Silence kept at segment boundaries"
-                    )
-                slicer_auto_transcribe = gr.Checkbox(
-                    label="Auto-transcribe sliced segments with Whisper",
-                    value=True,
-                    info="Automatically generate transcriptions for sliced audio"
-                )
-                slice_audio_btn = gr.Button(value="Slice Audio", variant="secondary")
-                slicer_status = gr.Textbox(label="Audio Slicing Status", interactive=False)
             
-            with gr.Accordion("📊 Dataset Processing History", open=False) as history_accordion:
-                gr.Markdown(
-                    "View and manage your dataset processing history. Track all SRT files, YouTube videos, and audio files you've processed."
-                )
-                history_display = gr.Textbox(
-                    label="Processing History",
-                    lines=15,
-                    interactive=False,
-                    max_lines=20
-                )
-                
-                with gr.Row():
-                    refresh_history_btn = gr.Button("🔄 Refresh History", variant="secondary")
-                    clear_history_btn = gr.Button("🗑️ Clear History", variant="stop")
-            
-            gr.Markdown("---")
-
-            whisper_model = gr.Dropdown(
-                label="Whisper Model",
-                value=args.whisper_model,
-                choices=[
-                    "large-v3",
-                    "large-v2",
-                    "large",
-                    "medium",
-                    "small"
-                ],
-            )
-
-            lang = gr.Dropdown(
-                label="Dataset Language",
-                value="en",
-                choices=[
-                    "en",
-                    "es",
-                    "fr",
-                    "de",
-                    "it",
-                    "pt",
-                    "pl",
-                    "tr",
-                    "ru",
-                    "nl",
-                    "cs",
-                    "ar",
-                    "zh",
-                    "hu",
-                    "ko",
-                    "ja",
-                    "amh"  # Amharic
-                ],
-            )
-            
-            # Amharic G2P Options for Dataset Preprocessing
-            with gr.Accordion("Amharic G2P Options (for 'amh' language)", open=False) as amh_g2p_accordion:
-                use_amharic_g2p_preprocessing = gr.Checkbox(
-                    label="Enable Amharic G2P preprocessing for dataset",
-                    value=False,
-                    info="Convert Amharic text to phonemes during dataset preparation"
-                )
-                g2p_backend_selection = gr.Dropdown(
-                    label="G2P Backend",
-                    value="transphone",
-                    choices=["transphone", "epitran", "rule_based"],
-                    info="Primary G2P backend (will auto-fallback if unavailable)"
-                )
-            progress_data = gr.Label(
-                label="Progress:"
-            )
-            # demo.load(read_logs, None, logs, every=1)
-
-            prompt_compute_btn = gr.Button(value="Step 1 - Create dataset")
+            with gr.Group():
+                gr.Markdown("### 🚀 **Create Dataset**")
+                progress_data = gr.Label(label="Status", value="Ready")
+                prompt_compute_btn = gr.Button(value="▶️ Step 1 - Create Dataset", variant="primary", size="lg")
         
             # Advanced processing functions
             def show_dataset_history(out_path):
@@ -988,88 +908,81 @@ if __name__ == "__main__":
                 return "Dataset Processed!", train_meta, eval_meta
 
 
-        with gr.Tab("2 - Fine-tuning XTTS Encoder"):
-            load_params_btn = gr.Button(value="Load Params from output folder")
-            version = gr.Dropdown(
-                label="XTTS base version",
-                value="v2.0.2",
-                choices=[
-                    "v2.0.3",
-                    "v2.0.2",
-                    "v2.0.1",
-                    "v2.0.0",
-                    "main"
-                ],
-            )
-            train_csv = gr.Textbox(
-                label="Train CSV:",
-            )
-            eval_csv = gr.Textbox(
-                label="Eval CSV:",
-            )
-            custom_model = gr.Textbox(
-                label="(Optional) Custom model.pth file , leave blank if you want to use the base file.",
-                value="",
-            )
-            num_epochs =  gr.Slider(
-                label="Number of epochs:",
-                minimum=1,
-                maximum=100,
-                step=1,
-                value=args.num_epochs,
-            )
-            batch_size = gr.Slider(
-                label="Batch size:",
-                minimum=2,
-                maximum=512,
-                step=1,
-                value=args.batch_size,
-            )
-            grad_acumm = gr.Slider(
-                label="Grad accumulation steps:",
-                minimum=2,
-                maximum=128,
-                step=1,
-                value=args.grad_acumm,
-            )
-            max_audio_length = gr.Slider(
-                label="Max permitted audio size in seconds:",
-                minimum=2,
-                maximum=20,
-                step=1,
-                value=args.max_audio_length,
-            )
-            clear_train_data = gr.Dropdown(
-                label="Clear train data, you will delete selected folder, after optimizing",
-                value="none",
-                choices=[
-                    "none",
-                    "run",
-                    "dataset",
-                    "all"
-                ])
+        with gr.Tab("🔧 Fine-tuning"):
+            gr.Markdown("## Model Training Configuration")
             
-            # Amharic G2P Training Options
-            with gr.Accordion("Amharic G2P Training Options (for 'amh' language)", open=False) as amh_training_accordion:
-                enable_amharic_g2p = gr.Checkbox(
-                    label="Enable Amharic G2P for training",
-                    value=False,
-                    info="Use phoneme tokenization for Amharic training"
+            with gr.Group():
+                gr.Markdown("### 📂 **Dataset Configuration**")
+                load_params_btn = gr.Button(value="📥 Load Parameters from Output Folder", variant="secondary")
+                with gr.Row():
+                    train_csv = gr.Textbox(label="Train CSV Path", placeholder="Auto-filled after loading", scale=2)
+                    eval_csv = gr.Textbox(label="Eval CSV Path", placeholder="Auto-filled after loading", scale=2)
+                    version = gr.Dropdown(
+                        label="XTTS Version",
+                        value="v2.0.2",
+                        choices=["v2.0.3", "v2.0.2", "v2.0.1", "v2.0.0", "main"],
+                        scale=1
+                    )
+            
+            with gr.Group():
+                gr.Markdown("### ⚙️ **Training Parameters**")
+                custom_model = gr.Textbox(
+                    label="Custom Model Path (Optional)",
+                    placeholder="Leave blank to use base model or enter URL/path",
+                    value="",
                 )
-                g2p_backend_train = gr.Dropdown(
-                    label="G2P Backend for Training",
-                    value="transphone",
-                    choices=["transphone", "epitran", "rule_based"],
-                    info="Backend used for G2P conversion during training"
+                with gr.Row():
+                    num_epochs = gr.Slider(
+                        label="Epochs",
+                        minimum=1, maximum=100, step=1, value=args.num_epochs,
+                        info="Training iterations"
+                    )
+                    batch_size = gr.Slider(
+                        label="Batch Size",
+                        minimum=2, maximum=512, step=1, value=args.batch_size,
+                        info="Samples per batch"
+                    )
+                with gr.Row():
+                    grad_acumm = gr.Slider(
+                        label="Grad Accumulation",
+                        minimum=2, maximum=128, step=1, value=args.grad_acumm,
+                        info="Gradient accumulation steps"
+                    )
+                    max_audio_length = gr.Slider(
+                        label="Max Audio (sec)",
+                        minimum=2, maximum=20, step=1, value=args.max_audio_length,
+                        info="Max permitted audio length"
+                    )
+                clear_train_data = gr.Dropdown(
+                    label="Cleanup After Training",
+                    value="none",
+                    choices=["none", "run", "dataset", "all"],
+                    info="Delete training data after optimization"
                 )
             
-            progress_train = gr.Label(
-                label="Progress:"
-            )
-
-            # demo.load(read_logs, None, logs_tts_train, every=1)
-            train_btn = gr.Button(value="Step 2 - Run the training")
-            optimize_model_btn = gr.Button(value="Step 2.5 - Optimize the model")
+            with gr.Group():
+                gr.Markdown("### 🇪🇹 **Amharic G2P Options** (for 'amh' language)")
+                with gr.Row():
+                    enable_amharic_g2p = gr.Checkbox(
+                        label="Enable G2P for Training",
+                        value=False,
+                        info="Use phoneme tokenization",
+                        scale=2
+                    )
+                    g2p_backend_train = gr.Dropdown(
+                        label="G2P Backend",
+                        value="transphone",
+                        choices=["transphone", "epitran", "rule_based"],
+                        info="G2P conversion backend",
+                        scale=1
+                    )
+            
+            with gr.Group():
+                gr.Markdown("### 🚀 **Execute Training**")
+                progress_train = gr.Label(label="Status", value="Ready")
+                with gr.Row():
+                    train_btn = gr.Button(value="▶️ Step 2 - Train Model", variant="primary", size="lg", scale=2)
+                    optimize_model_btn = gr.Button(value="⚡ Step 2.5 - Optimize Model", variant="primary", size="lg", scale=1)
             
             import os
             import shutil
@@ -1106,8 +1019,8 @@ if __name__ == "__main__":
                         
                 if not train_csv or not eval_csv:
                     return "You need to run the data processing step or manually set `Train CSV` and `Eval CSV` fields !", "", "", "", ""
-                # Configure Amharic G2P for training
-                use_amharic_g2p = enable_amharic_g2p and language == "amh"
+                # Configure Amharic G2P for training (accept both 'am' and 'amh')
+                use_amharic_g2p = enable_amharic_g2p and language in ["am", "amh"]
                 if use_amharic_g2p:
                     print(f"Amharic G2P enabled with backend: {g2p_backend_train}")
                     # Set backend order based on user selection
@@ -1217,124 +1130,66 @@ if __name__ == "__main__":
                 print(current_language)
                 return "The data has been updated", eval_train, eval_csv, current_language
 
-        with gr.Tab("3 - Inference"):
+        with gr.Tab("🎤 Inference"):
+            gr.Markdown("## Text-to-Speech Generation")
+            
             with gr.Row():
-                with gr.Column() as col1:
-                    load_params_tts_btn = gr.Button(value="Load params for TTS from output folder")
-                    xtts_checkpoint = gr.Textbox(
-                        label="XTTS checkpoint path:",
-                        value="",
-                    )
-                    xtts_config = gr.Textbox(
-                        label="XTTS config path:",
-                        value="",
-                    )
+                with gr.Column(scale=1):
+                    with gr.Group():
+                        gr.Markdown("### 📥 **Model Loading**")
+                        load_params_tts_btn = gr.Button(value="📂 Load from Output Folder", variant="secondary")
+                        xtts_checkpoint = gr.Textbox(label="Checkpoint Path", placeholder="Auto-filled")
+                        xtts_config = gr.Textbox(label="Config Path", placeholder="Auto-filled")
+                        xtts_vocab = gr.Textbox(label="Vocab Path", placeholder="Auto-filled")
+                        xtts_speaker = gr.Textbox(label="Speaker Path", placeholder="Auto-filled")
+                        progress_load = gr.Label(label="Status", value="Not Loaded")
+                        load_btn = gr.Button(value="▶️ Step 3 - Load Model", variant="primary", size="lg")
 
-                    xtts_vocab = gr.Textbox(
-                        label="XTTS vocab path:",
-                        value="",
-                    )
-                    xtts_speaker = gr.Textbox(
-                        label="XTTS speaker path:",
-                        value="",
-                    )
-                    progress_load = gr.Label(
-                        label="Progress:"
-                    )
-                    load_btn = gr.Button(value="Step 3 - Load Fine-tuned XTTS model")
-
-                with gr.Column() as col2:
-                    speaker_reference_audio = gr.Textbox(
-                        label="Speaker reference audio:",
-                        value="",
-                    )
-                    tts_language = gr.Dropdown(
-                        label="Language",
-                        value="en",
-                        choices=[
-                            "en",
-                            "es",
-                            "fr",
-                            "de",
-                            "it",
-                            "pt",
-                            "pl",
-                            "tr",
-                            "ru",
-                            "nl",
-                            "cs",
-                            "ar",
-                            "zh",
-                            "hu",
-                            "ko",
-                            "ja",
-                            "amh",  # Amharic
-                        ]
-                    )
-                    tts_text = gr.Textbox(
-                        label="Input Text.",
-                        value="This model sounds really good and above all, it's reasonably fast.",
-                    )
-                    with gr.Accordion("Advanced settings", open=False) as acr:
-                        temperature = gr.Slider(
-                            label="temperature",
-                            minimum=0,
-                            maximum=1,
-                            step=0.05,
-                            value=0.75,
+                with gr.Column(scale=1):
+                    with gr.Group():
+                        gr.Markdown("### 🎙️ **Generation Settings**")
+                        speaker_reference_audio = gr.Textbox(label="Reference Audio Path", placeholder="Auto-filled")
+                        tts_language = gr.Dropdown(
+                            label="Language",
+                            value="en",
+                            choices=["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh", "hu", "ko", "ja", "am", "amh"],
+                            info="Use 'am' or 'amh' for Amharic"
                         )
-                        length_penalty  = gr.Slider(
-                            label="length_penalty",
-                            minimum=-10.0,
-                            maximum=10.0,
-                            step=0.5,
-                            value=1,
+                        tts_text = gr.Textbox(
+                            label="Text to Synthesize",
+                            placeholder="Enter the text you want to convert to speech...",
+                            lines=4,
+                            value="This model sounds really good and above all, it's reasonably fast.",
                         )
-                        repetition_penalty = gr.Slider(
-                            label="repetition penalty",
-                            minimum=1,
-                            maximum=10,
-                            step=0.5,
-                            value=5,
-                        )
-                        top_k = gr.Slider(
-                            label="top_k",
-                            minimum=1,
-                            maximum=100,
-                            step=1,
-                            value=50,
-                        )
-                        top_p = gr.Slider(
-                            label="top_p",
-                            minimum=0,
-                            maximum=1,
-                            step=0.05,
-                            value=0.85,
-                        )
-                        sentence_split = gr.Checkbox(
-                            label="Enable text splitting",
-                            value=True,
-                        )
-                        use_config = gr.Checkbox(
-                            label="Use Inference settings from config, if disabled use the settings above",
-                            value=False,
-                        )
-                    tts_btn = gr.Button(value="Step 4 - Inference")
+                        
+                        with gr.Accordion("⚙️ Advanced Settings", open=False):
+                            with gr.Row():
+                                temperature = gr.Slider(label="Temperature", minimum=0, maximum=1, step=0.05, value=0.75)
+                                length_penalty = gr.Slider(label="Length Penalty", minimum=-10.0, maximum=10.0, step=0.5, value=1)
+                            with gr.Row():
+                                repetition_penalty = gr.Slider(label="Repetition Penalty", minimum=1, maximum=10, step=0.5, value=5)
+                                top_k = gr.Slider(label="Top K", minimum=1, maximum=100, step=1, value=50)
+                            with gr.Row():
+                                top_p = gr.Slider(label="Top P", minimum=0, maximum=1, step=0.05, value=0.85)
+                                sentence_split = gr.Checkbox(label="Text Splitting", value=True)
+                            use_config = gr.Checkbox(label="Use Config Settings", value=False, info="Override above with config values")
+                        
+                        tts_btn = gr.Button(value="▶️ Step 4 - Generate Speech", variant="primary", size="lg")
                     
-                    model_download_btn = gr.Button("Step 5 - Download Optimized Model ZIP")
-                    dataset_download_btn = gr.Button("Step 5 - Download Dataset ZIP")
-                
-                    model_zip_file = gr.File(label="Download Optimized Model", interactive=False)
-                    dataset_zip_file = gr.File(label="Download Dataset", interactive=False)
+                    with gr.Group():
+                        gr.Markdown("### 📦 **Export**")
+                        with gr.Row():
+                            model_download_btn = gr.Button("📥 Download Model", variant="secondary", scale=1)
+                            dataset_download_btn = gr.Button("📥 Download Dataset", variant="secondary", scale=1)
+                        model_zip_file = gr.File(label="Model ZIP", interactive=False, visible=False)
+                        dataset_zip_file = gr.File(label="Dataset ZIP", interactive=False, visible=False)
 
-
-
-                with gr.Column() as col3:
-                    progress_gen = gr.Label(
-                        label="Progress:"
-                    )
-                    tts_output_audio = gr.Audio(label="Generated Audio.")
-                    reference_audio = gr.Audio(label="Reference audio used.")
+                with gr.Column(scale=1):
+                    with gr.Group():
+                        gr.Markdown("### 🔊 **Output**")
+                        progress_gen = gr.Label(label="Status", value="Ready")
+                        tts_output_audio = gr.Audio(label="Generated Audio", type="filepath")
+                        reference_audio = gr.Audio(label="Reference Audio Used", type="filepath")
 
             prompt_compute_btn.click(
                 fn=preprocess_dataset,

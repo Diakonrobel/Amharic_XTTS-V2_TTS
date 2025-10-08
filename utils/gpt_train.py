@@ -123,7 +123,8 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         num_workers = 0
     
     # Handle Amharic-specific preprocessing
-    if use_amharic_g2p and language == "am":
+    # Accept both 'am' and 'amh' for G2P (language is already normalized to 'amh' for XTTS)
+    if use_amharic_g2p and language in ["am", "amh"]:
         print(" > Amharic G2P mode enabled: Text will be converted to IPA phonemes")
         try:
             from amharic_tts.tokenizer.xtts_tokenizer_wrapper import create_xtts_tokenizer

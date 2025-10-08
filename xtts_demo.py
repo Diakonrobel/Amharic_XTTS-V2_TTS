@@ -80,6 +80,21 @@ def get_dataset_zip(out_path):
         return create_zip(dataset_folder, "dataset")
     return None
 
+def normalize_xtts_lang(lang: str) -> str:
+    """Normalize user language code to XTTS-supported code.
+    - Map 'am' -> 'amh'
+    - Map 'zh' -> 'zh-cn' (XTTS expectation in some paths)
+    """
+    if not lang:
+        return lang
+    lang = lang.strip().lower()
+    if lang in ("am", "amh"):
+        return "amh"
+    if lang == "zh":
+        return "zh-cn"
+    return lang
+
+
 def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
     global XTTS_MODEL
     clear_gpu_cache()
@@ -102,10 +117,13 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
 
     gpt_cond_latent, speaker_embedding = XTTS_MODEL.get_conditioning_latents(audio_path=speaker_audio_file, gpt_cond_len=XTTS_MODEL.config.gpt_cond_len, max_ref_length=XTTS_MODEL.config.max_ref_len, sound_norm_refs=XTTS_MODEL.config.sound_norm_refs)
     
+    # Normalize language code for XTTS (am -> amh)
+    lang_norm = normalize_xtts_lang(lang)
+    
     if use_config:
         out = XTTS_MODEL.inference(
             text=tts_text,
-            language=lang,
+            language=lang_norm,
             gpt_cond_latent=gpt_cond_latent,
             speaker_embedding=speaker_embedding,
             temperature=XTTS_MODEL.config.temperature, # Add custom parameters here
@@ -118,7 +136,7 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
     else:
         out = XTTS_MODEL.inference(
             text=tts_text,
-            language=lang,
+            language=lang_norm,
             gpt_cond_latent=gpt_cond_latent,
             speaker_embedding=speaker_embedding,
             temperature=temperature, # Add custom parameters here
@@ -1041,7 +1059,15 @@ if __name__ == "__main__":
                 try:
                     # convert seconds to waveform frames
                     max_audio_length = int(max_audio_length * 22050)
-                    speaker_xtts_path, config_path, original_xtts_checkpoint, vocab_file, exp_path, speaker_wav = train_gpt(custom_model, version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path=output_path, max_audio_length=max_audio_length, use_amharic_g2p=use_amharic_g2p)
+
+                    # Normalize language code for XTTS internals
+                    language_norm = normalize_xtts_lang(language)
+
+                    speaker_xtts_path, config_path, original_xtts_checkpoint, vocab_file, exp_path, speaker_wav = train_gpt(
+                        custom_model, version, language_norm, num_epochs, batch_size, grad_acumm,
+                        train_csv, eval_csv, output_path=output_path, max_audio_length=max_audio_length,
+                        use_amharic_g2p=use_amharic_g2p
+                    )
                 except:
                     traceback.print_exc()
                     error = traceback.format_exc()

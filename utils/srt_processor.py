@@ -238,25 +238,25 @@ def extract_segments_from_audio(
             print(f"Skipping segment {idx+1}: duration {duration:.2f}s out of range")
             continue
         
-        # CRITICAL FIX: Proper buffering that respects subtitle timing
-        # The goal is to add a small buffer while preventing overlap between segments
+        # FIXED: Simple buffering since merging already prevents overlaps
+        # After merging, segments are properly separated, so we can safely add buffer
+        # without complex gap enforcement that was cutting off merged segments
         
-        # Start buffer: Add buffer but don't overlap with previous segment
+        # Start buffer: Go back by buffer amount, but don't go negative or overlap
         if idx > 0:
             prev_end = srt_segments[idx - 1][1]
-            # Ensure we don't go before previous segment ends (leave small gap)
-            earliest_start = prev_end + 0.05  # 50ms gap minimum
-            buffered_start = max(earliest_start, start_time - buffer)
+            # Only enforce no-overlap if segments are actually close
+            # (merged segments are separated by gaps, so this rarely triggers)
+            buffered_start = max(prev_end, start_time - buffer, 0)
         else:
             # First segment: can safely go back by buffer amount
             buffered_start = max(0, start_time - buffer)
         
-        # End buffer: Add buffer but don't overlap with next segment
+        # End buffer: Extend by buffer amount, but don't overlap with next
         if idx < len(srt_segments) - 1:
             next_start = srt_segments[idx + 1][0]
-            # Ensure we don't go past next segment starts (leave small gap)
-            latest_end = next_start - 0.05  # 50ms gap minimum
-            buffered_end = min(latest_end, end_time + buffer)
+            # Only enforce no-overlap if segments are actually close
+            buffered_end = min(next_start, end_time + buffer)
         else:
             # Last segment: can safely extend by buffer amount
             buffered_end = min(len(wav) / sr, end_time + buffer)

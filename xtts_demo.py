@@ -231,14 +231,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch_size",
         type=int,
-        help="Batch size. Default: 2",
-        default=2,
+        help="Batch size. Default: 4 (optimized for extended vocabulary)",
+        default=4,
     )
     parser.add_argument(
         "--grad_acumm",
         type=int,
-        help="Grad accumulation steps. Default: 1",
-        default=1,
+        help="Grad accumulation steps. Default: 4 (effective batch = 16)",
+        default=4,
     )
     parser.add_argument(
         "--max_audio_length",

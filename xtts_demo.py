@@ -254,18 +254,70 @@ if __name__ == "__main__":
                 gr.Markdown(
                     "Upload subtitle files (SRT/VTT) with corresponding audio/video files for precise timestamp-based dataset creation."
                 )
-                srt_file = gr.File(
-                    file_count="single",
-                    label="SRT/VTT Subtitle File",
+                srt_files = gr.File(
+                    file_count="multiple",  # Support multiple files
+                    label="SRT/VTT Subtitle File(s)",
                     file_types=[".srt", ".vtt"],
                 )
-                media_file = gr.File(
-                    file_count="single",
-                    label="Media File (Audio or Video)",
+                media_files = gr.File(
+                    file_count="multiple",  # Support multiple files
+                    label="Media File(s) (Audio or Video)",
                     file_types=[".mp4", ".mkv", ".avi", ".wav", ".mp3", ".flac"],
                 )
+                
+                srt_batch_mode = gr.Checkbox(
+                    label="🎬 Batch Mode (Process multiple SRT+Media pairs)",
+                    value=False,
+                    info="Enable to process multiple file pairs. Files are matched by name and merged into one dataset."
+                )
+                
+                use_vad_refinement = gr.Checkbox(
+                    label="🎤 VAD Enhancement (Voice Activity Detection)",
+                    value=False,
+                    info="Enable AI-powered speech detection for cleaner segments. Automatically trims silence and improves boundaries. (+20% processing time)"
+                )
+                
+                with gr.Accordion("⚙️ VAD Advanced Settings", open=False) as vad_settings_accordion:
+                    gr.Markdown(
+                        "Fine-tune VAD parameters for optimal results. Default values work well for most audio."
+                    )
+                    vad_threshold = gr.Slider(
+                        label="VAD Sensitivity Threshold",
+                        minimum=0.1,
+                        maximum=0.9,
+                        step=0.05,
+                        value=0.5,
+                        info="Higher = stricter (only clear speech), Lower = more sensitive (may include quiet speech/noise)"
+                    )
+                    with gr.Row():
+                        vad_min_speech_duration = gr.Slider(
+                            label="Min Speech Duration (ms)",
+                            minimum=100,
+                            maximum=1000,
+                            step=50,
+                            value=250,
+                            info="Minimum duration to consider as speech"
+                        )
+                        vad_min_silence_duration = gr.Slider(
+                            label="Min Silence to Split (ms)",
+                            minimum=100,
+                            maximum=1000,
+                            step=50,
+                            value=300,
+                            info="Minimum silence duration to split segments"
+                        )
+                    with gr.Row():
+                        vad_speech_pad = gr.Slider(
+                            label="Speech Padding (ms)",
+                            minimum=0,
+                            maximum=200,
+                            step=10,
+                            value=30,
+                            info="Padding around speech segments"
+                        )
+                
                 process_srt_btn = gr.Button(value="Process SRT + Media", variant="secondary")
-                srt_status = gr.Textbox(label="SRT Processing Status", interactive=False)
+                srt_status = gr.Textbox(label="SRT Processing Status", interactive=False, lines=10)
             
             with gr.Accordion("📹 YouTube Video Download", open=False) as youtube_accordion:
                 gr.Markdown(
@@ -452,11 +504,94 @@ if __name__ == "__main__":
             prompt_compute_btn = gr.Button(value="Step 1 - Create dataset")
         
             # Advanced processing functions
-            def process_srt_media(srt_file_path, media_file_path, language, out_path, progress=gr.Progress(track_tqdm=True)):
-                """Process SRT subtitle file with corresponding media file"""
+            def process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, progress):
+                """Handle batch processing of multiple SRT+media pairs"""
                 try:
-                    if not srt_file_path or not media_file_path:
-                        return "Please upload both SRT file and media file!"
+                    progress(0, desc=f"Initializing batch processing for {len(srt_files_list)} pairs...")
+                    
+                    # Process all pairs
+                    train_csv, eval_csv, file_infos = batch_processor.process_srt_media_batch(
+                        srt_files=srt_files_list,
+                        media_files=media_files_list,
+                        language=language,
+                        out_path=out_path,
+                        srt_processor=srt_processor,
+                        progress_callback=lambda p, desc: progress(p, desc=desc)
+                    )
+                    
+                    # Count total segments
+                    import pandas as pd
+                    train_df = pd.read_csv(train_csv, sep='|')
+                    eval_df = pd.read_csv(eval_csv, sep='|')
+                    total_segments = len(train_df) + len(eval_df)
+                    
+                    # Track batch as single entry
+                    tracker = dataset_tracker.get_tracker(os.path.join(out_path, "dataset_history.json"))
+                    
+                    # Add batch entry (using first file info as representative)
+                    if file_infos:
+                        first_info = file_infos[0]
+                        tracker.add_file_dataset(
+                            file_path=f"BATCH: {len(file_infos)} SRT files",
+                            file_type="srt_batch",
+                            language=language,
+                            num_segments=total_segments,
+                            output_path=os.path.join(out_path, "dataset"),
+                            media_file=f"BATCH: {len(file_infos)} media files"
+                        )
+                    
+                    # Format summary
+                    summary = batch_processor.format_srt_batch_summary(file_infos, total_segments)
+                    summary += "\n\nℹ This batch dataset has been saved to history."
+                    
+                    progress(1.0, desc="Batch processing complete!")
+                    return summary
+                    
+                except Exception as e:
+                    traceback.print_exc()
+                    return f"❌ Error in batch processing: {str(e)}"
+            
+            def process_srt_media(
+                srt_file_input, 
+                media_file_input, 
+                language, 
+                out_path, 
+                batch_mode, 
+                use_vad, 
+                vad_threshold_val=0.5,
+                vad_min_speech_ms=250,
+                vad_min_silence_ms=300,
+                vad_pad_ms=30,
+                progress=gr.Progress(track_tqdm=True)
+            ):
+                """Process SRT subtitle file(s) with corresponding media file(s)"""
+                try:
+                    # Handle file inputs - can be None, single file path, or list of file paths
+                    srt_files_list = []
+                    media_files_list = []
+                    
+                    if srt_file_input:
+                        if isinstance(srt_file_input, list):
+                            srt_files_list = srt_file_input
+                        else:
+                            srt_files_list = [srt_file_input]
+                    
+                    if media_file_input:
+                        if isinstance(media_file_input, list):
+                            media_files_list = media_file_input
+                        else:
+                            media_files_list = [media_file_input]
+                    
+                    if not srt_files_list or not media_files_list:
+                        return "Please upload both SRT file(s) and media file(s)!"
+                    
+                    # Check if batch mode and multiple files
+                    if batch_mode and (len(srt_files_list) > 1 or len(media_files_list) > 1):
+                        return process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, progress)
+                    
+                    # Single file processing
+                    srt_file_path = srt_files_list[0]
+                    media_file_path = media_files_list[0]
                     
                     # Check if already processed
                     tracker = dataset_tracker.get_tracker(os.path.join(out_path, "dataset_history.json"))
@@ -471,18 +606,39 @@ if __name__ == "__main__":
                                f"Processed: {date}\n\n" \
                                f"ℹ If you want to reprocess, use a different output directory."
                     
-                    progress(0, desc="Initializing SRT processor...")
                     output_path = os.path.join(out_path, "dataset")
                     os.makedirs(output_path, exist_ok=True)
                     
-                    progress(0.3, desc="Processing SRT and extracting audio segments...")
-                    train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
-                        srt_path=srt_file_path,
-                        media_path=media_file_path,
-                        output_dir=output_path,
-                        language=language,
-                        gradio_progress=progress
-                    )
+                    # Choose processor based on VAD setting
+                    if use_vad:
+                        from utils import srt_processor_vad
+                        
+                        mode_desc = "VAD-enhanced"
+                        progress(0, desc=f"Initializing {mode_desc} SRT processor...")
+                        progress(0.2, desc="Loading VAD model...")
+                        progress(0.3, desc="Processing SRT with VAD refinement...")
+                        
+                        train_csv, eval_csv, duration = srt_processor_vad.process_srt_with_media_vad(
+                            srt_path=srt_file_path,
+                            media_path=media_file_path,
+                            output_dir=output_path,
+                            language=language,
+                            use_vad_refinement=True,
+                            vad_threshold=vad_threshold_val,
+                            gradio_progress=progress
+                        )
+                    else:
+                        mode_desc = "standard"
+                        progress(0, desc=f"Initializing {mode_desc} SRT processor...")
+                        progress(0.3, desc="Processing SRT and extracting audio segments...")
+                        
+                        train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+                            srt_path=srt_file_path,
+                            media_path=media_file_path,
+                            output_dir=output_path,
+                            language=language,
+                            gradio_progress=progress
+                        )
                     
                     # Count segments from train CSV
                     import pandas as pd
@@ -501,7 +657,8 @@ if __name__ == "__main__":
                     )
                     
                     progress(1.0, desc="SRT processing complete!")
-                    return f"✓ SRT Processing Complete!\nProcessed {num_segments} segments\nTotal audio: {duration:.1f}s\nDataset created at: {output_path}\n\nℹ This dataset has been saved to history and won't be reprocessed."
+                    vad_info = f" (VAD-enhanced)" if use_vad else ""
+                    return f"✓ SRT Processing Complete{vad_info}!\nProcessed {num_segments} segments\nTotal audio: {duration:.1f}s\nDataset created at: {output_path}\nMode: {mode_desc.capitalize()}\n\nℹ This dataset has been saved to history and won't be reprocessed."
                     
                 except Exception as e:
                     traceback.print_exc()
@@ -1172,10 +1329,16 @@ if __name__ == "__main__":
             process_srt_btn.click(
                 fn=process_srt_media,
                 inputs=[
-                    srt_file,
-                    media_file,
+                    srt_files,
+                    media_files,
                     lang,
                     out_path,
+                    srt_batch_mode,
+                    use_vad_refinement,  # VAD enable/disable
+                    vad_threshold,  # VAD threshold
+                    vad_min_speech_duration,  # Min speech duration
+                    vad_min_silence_duration,  # Min silence duration
+                    vad_speech_pad,  # Speech padding
                 ],
                 outputs=[srt_status],
             )

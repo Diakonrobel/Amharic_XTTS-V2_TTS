@@ -250,6 +250,131 @@ def process_youtube_batch(
     return train_csv, eval_csv, video_infos
 
 
+def pair_srt_with_media(srt_files: List[str], media_files: List[str]) -> List[Tuple[str, str]]:
+    """
+    Pair SRT files with media files based on filename similarity.
+    
+    Matches based on case-insensitive filename stems (without extension).
+    
+    Args:
+        srt_files: List of SRT file paths
+        media_files: List of media file paths
+        
+    Returns:
+        List of tuples (srt_path, media_path) for matched pairs
+    """
+    pairs = []
+    
+    # Create lookup dict for media files by stem name
+    media_lookup = {}
+    for media_path in media_files:
+        stem = Path(media_path).stem.lower()
+        media_lookup[stem] = media_path
+    
+    # Match SRT files to media
+    for srt_path in srt_files:
+        srt_stem = Path(srt_path).stem.lower()
+        
+        if srt_stem in media_lookup:
+            pairs.append((srt_path, media_lookup[srt_stem]))
+            print(f"✓ Paired: {Path(srt_path).name} <-> {Path(media_lookup[srt_stem]).name}")
+        else:
+            print(f"⚠ No media file found for SRT: {Path(srt_path).name}")
+    
+    return pairs
+
+
+def process_srt_media_batch(
+    srt_files: List[str],
+    media_files: List[str],
+    language: str,
+    out_path: str,
+    srt_processor,
+    progress_callback=None
+) -> Tuple[str, str, List[Dict]]:
+    """
+    Process multiple SRT+media file pairs in batch mode and merge into single dataset.
+    
+    Args:
+        srt_files: List of SRT file paths
+        media_files: List of media file paths
+        language: Dataset language
+        out_path: Output base path
+        srt_processor: SRT processor module
+        progress_callback: Optional progress callback function
+        
+    Returns:
+        Tuple of (train_csv, eval_csv, list of file info dicts)
+    """
+    # Pair files
+    pairs = pair_srt_with_media(srt_files, media_files)
+    
+    if not pairs:
+        raise ValueError("No SRT-media pairs could be matched. Ensure filenames match (excluding extension).")
+    
+    temp_datasets = []
+    file_infos = []
+    
+    print(f"📄 Batch Processing {len(pairs)} SRT-Media Pairs...")
+    
+    for idx, (srt_path, media_path) in enumerate(pairs, 1):
+        try:
+            if progress_callback:
+                progress_callback((idx - 1) / len(pairs),
+                                desc=f"Processing pair {idx}/{len(pairs)}...")
+            
+            print(f"\n[{idx}/{len(pairs)}] Processing: {Path(srt_path).name} + {Path(media_path).name}")
+            
+            # Process to temporary dataset
+            temp_dataset_dir = os.path.join(out_path, f"temp_srt_dataset_{idx}")
+            os.makedirs(temp_dataset_dir, exist_ok=True)
+            
+            train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+                srt_path=srt_path,
+                media_path=media_path,
+                output_dir=temp_dataset_dir,
+                language=language
+            )
+            
+            temp_datasets.append(temp_dataset_dir)
+            
+            # Count segments
+            train_df = pd.read_csv(train_csv, sep='|')
+            eval_df = pd.read_csv(eval_csv, sep='|')
+            total_segs = len(train_df) + len(eval_df)
+            
+            file_infos.append({
+                'srt_file': Path(srt_path).name,
+                'media_file': Path(media_path).name,
+                'duration': duration,
+                'segments': total_segs
+            })
+            
+            print(f"  ✓ Pair {idx} processed: {total_segs} segments, {duration:.1f}s")
+        
+        except Exception as e:
+            print(f"  ❌ Error processing pair {idx}: {e}")
+            import traceback
+            traceback.print_exc()
+            continue
+    
+    if not temp_datasets:
+        raise ValueError("No SRT-media pairs were successfully processed")
+    
+    # Merge all datasets
+    if progress_callback:
+        progress_callback(0.9, desc="Merging datasets...")
+    
+    final_dataset_dir = os.path.join(out_path, "dataset")
+    train_csv, eval_csv, total_segments = merge_datasets(
+        dataset_paths=temp_datasets,
+        output_dir=final_dataset_dir,
+        remove_sources=True
+    )
+    
+    return train_csv, eval_csv, file_infos
+
+
 def format_batch_summary(video_infos: List[Dict], total_segments: int) -> str:
     """
     Format summary of batch processing results.
@@ -275,5 +400,34 @@ def format_batch_summary(video_infos: List[Dict], total_segments: int) -> str:
     lines.append(f"Total Duration: {total_duration:.0f}s ({total_duration/60:.1f} minutes)")
     lines.append(f"Total Segments: {total_segments}")
     lines.append(f"Average Segments per Video: {total_segments/len(video_infos):.0f}")
+    
+    return "\n".join(lines)
+
+
+def format_srt_batch_summary(file_infos: List[Dict], total_segments: int) -> str:
+    """
+    Format summary of SRT batch processing results.
+    
+    Args:
+        file_infos: List of file info dictionaries
+        total_segments: Total number of segments
+        
+    Returns:
+        Formatted summary string
+    """
+    lines = ["✓ SRT Batch Processing Complete!", "=" * 60]
+    
+    total_duration = sum(f['duration'] for f in file_infos)
+    
+    lines.append(f"\nProcessed {len(file_infos)} SRT-Media pairs:")
+    for i, info in enumerate(file_infos, 1):
+        lines.append(f"\n{i}. {info['srt_file']} + {info['media_file']}")
+        lines.append(f"   Duration: {info['duration']:.1f}s | Segments: {info['segments']}")
+    
+    lines.append("\n" + "=" * 60)
+    lines.append(f"Total Pairs: {len(file_infos)}")
+    lines.append(f"Total Duration: {total_duration:.1f}s ({total_duration/60:.1f} minutes)")
+    lines.append(f"Total Segments: {total_segments}")
+    lines.append(f"Average Segments per Pair: {total_segments/len(file_infos):.0f}")
     
     return "\n".join(lines)

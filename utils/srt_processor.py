@@ -97,8 +97,8 @@ def extract_segments_from_audio(
     output_dir: str,
     speaker_name: str = "speaker",
     language: str = "en",
-    min_duration: float = 0.5,
-    max_duration: float = 15.0,
+    min_duration: float = 0.3,
+    max_duration: float = 20.0,
     buffer: float = 0.2,
     gradio_progress=None
 ) -> Tuple[str, str]:
@@ -188,8 +188,8 @@ def extract_segments_from_audio(
         
         segment = wav[start_sample:end_sample]
         
-        # Verify segment is not too short (at least 1/3 second)
-        if segment.shape[0] < sr / 3:
+        # Verify segment is not too short (at least 0.2 second)
+        if segment.shape[0] < sr / 5:
             print(f"Skipping segment {idx+1}: extracted audio too short ({segment.shape[0]/sr:.2f}s)")
             continue
         
@@ -245,8 +245,8 @@ def process_srt_with_media(
     output_dir: str,
     speaker_name: str = "speaker",
     language: str = "en",
-    min_duration: float = 0.5,
-    max_duration: float = 15.0,
+    min_duration: float = 0.3,
+    max_duration: float = 20.0,
     buffer: float = 0.2,
     gradio_progress=None
 ) -> Tuple[str, str, float]:

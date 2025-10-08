@@ -1016,6 +1016,11 @@ if __name__ == "__main__":
             
             def train_model(custom_model, version, language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length, enable_amharic_g2p=False, g2p_backend_train="transphone"):
                 clear_gpu_cache()
+                
+                # Strip whitespace from paths to prevent accidental spaces
+                train_csv = train_csv.strip() if train_csv else ""
+                eval_csv = eval_csv.strip() if eval_csv else ""
+                custom_model = custom_model.strip() if custom_model else ""
           
                 # Check if `custom_model` is a URL and download it if true.
                 if custom_model.startswith("http"):

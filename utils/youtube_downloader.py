@@ -122,13 +122,34 @@ def download_subtitles_robust(
                 if subtitle_url:
                     break
         
-        # Download subtitle file directly
+        # Download subtitle file directly with custom headers
         if subtitle_url:
             import urllib.request
             subtitle_path = output_path / f"{sanitized_title}.{selected_lang}.srt"
             
             print(f"  Downloading from: {subtitle_url[:80]}...")
-            urllib.request.urlretrieve(subtitle_url, subtitle_path)
+            
+            # Create request with browser-like headers to avoid rate limiting
+            req = urllib.request.Request(
+                subtitle_url,
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': '*/*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'Referer': 'https://www.youtube.com/',
+                    'Origin': 'https://www.youtube.com',
+                    'Connection': 'keep-alive',
+                }
+            )
+            
+            # Add small delay to be respectful
+            time.sleep(random.uniform(0.5, 1.5))
+            
+            with urllib.request.urlopen(req, timeout=30) as response:
+                subtitle_content = response.read()
+                with open(subtitle_path, 'wb') as f:
+                    f.write(subtitle_content)
             
             # Convert VTT to SRT if needed
             if subtitle_path.suffix == '.vtt':
@@ -142,7 +163,16 @@ def download_subtitles_robust(
                 return str(subtitle_path)
     
     except Exception as e:
-        print(f"  ⚠ Strategy 1 failed: {e}")
+        error_msg = str(e)
+        if '429' in error_msg:
+            print(f"  ⚠ Strategy 1 failed: YouTube rate limit detected")
+            print(f"    Trying alternative extraction method...")
+            # Try alternative: use youtube-transcript-api as fallback
+            subtitle_file = try_transcript_api(url, output_path, sanitized_title, language)
+            if subtitle_file:
+                return subtitle_file
+        else:
+            print(f"  ⚠ Strategy 1 failed: {e}")
     
     # Strategy 2: Use yt-dlp with advanced options and retry logic
     print("\n[Strategy 2] Using yt-dlp with browser impersonation and retries...")
@@ -216,6 +246,105 @@ def download_subtitles_robust(
                 print("   📝 Will use Whisper transcription as fallback")
     
     return None
+
+
+def try_transcript_api(url: str, output_path: Path, sanitized_title: str, language: str) -> Optional[str]:
+    """
+    Try using youtube-transcript-api as an alternative to bypass rate limits.
+    This uses a different endpoint that may not be rate limited.
+    
+    Args:
+        url: YouTube video URL
+        output_path: Output directory
+        sanitized_title: Sanitized video title
+        language: Preferred language
+        
+    Returns:
+        Path to subtitle file if successful, None otherwise
+    """
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+        import re
+        
+        # Extract video ID
+        video_id_match = re.search(r'(?:v=|/)([0-9A-Za-z_-]{11}).*', url)
+        if not video_id_match:
+            return None
+        
+        video_id = video_id_match.group(1)
+        print(f"  Using youtube-transcript-api for video ID: {video_id}")
+        
+        # Try to get transcript
+        try:
+            # Try preferred language first
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            # Try to find transcript in preferred language
+            transcript = None
+            try:
+                transcript = transcript_list.find_transcript([language, 'en'])
+            except:
+                # Fallback: get any available transcript
+                transcript = transcript_list.find_generated_transcript(['en'])
+            
+            if transcript:
+                transcript_data = transcript.fetch()
+                
+                # Convert to SRT format
+                srt_path = output_path / f"{sanitized_title}.{language}.srt"
+                with open(srt_path, 'w', encoding='utf-8') as f:
+                    for i, entry in enumerate(transcript_data, start=1):
+                        start = entry['start']
+                        duration = entry['duration']
+                        end = start + duration
+                        text = entry['text']
+                        
+                        # Format timestamp
+                        start_time = format_timestamp(start)
+                        end_time = format_timestamp(end)
+                        
+                        f.write(f"{i}\n")
+                        f.write(f"{start_time} --> {end_time}\n")
+                        f.write(f"{text}\n\n")
+                
+                if srt_path.exists() and srt_path.stat().st_size > 0:
+                    print(f"  ✅ Successfully downloaded via transcript API: {srt_path.name}")
+                    return str(srt_path)
+        
+        except Exception as api_error:
+            print(f"  Could not fetch transcript: {api_error}")
+            return None
+    
+    except ImportError:
+        print("  youtube-transcript-api not installed, installing now...")
+        try:
+            import subprocess
+            subprocess.run(['pip', 'install', 'youtube-transcript-api'], 
+                         check=True, capture_output=True)
+            print("  Installed youtube-transcript-api, please retry the download")
+        except:
+            pass
+        return None
+    except Exception as e:
+        print(f"  Transcript API failed: {e}")
+        return None
+
+
+def format_timestamp(seconds: float) -> str:
+    """
+    Format seconds to SRT timestamp format (HH:MM:SS,mmm).
+    
+    Args:
+        seconds: Time in seconds
+        
+    Returns:
+        Formatted timestamp string
+    """
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds % 1) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
 
 
 def convert_vtt_to_srt(vtt_path: Path, srt_path: Path):

@@ -227,6 +227,7 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
         return "You need to run the previous step to load the model !!", None, None
 
     # Apply G2P preprocessing if enabled for Amharic text
+    g2p_active = False
     if use_g2p_inference and lang in ["am", "amh"]:
         try:
             from amharic_tts.tokenizer.xtts_tokenizer_wrapper import XTTSAmharicTokenizer
@@ -243,11 +244,24 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
                 print(f" > ⚠️  This could happen if G2P backends are not properly installed")
             else:
                 print(f" > ✅ G2P conversion successful")
+                g2p_active = True
                 
         except Exception as e:
             print(f" > ❌ Error: G2P preprocessing failed: {e}")
             print(f" > 🔄 Falling back to original text")
             print(f" > 💡 Tip: For best results, install Transphone: pip install transphone")
+
+    # Normalize language code for XTTS
+    lang_norm = normalize_xtts_lang(lang)
+    # If G2P active, align language with training pipeline (phoneme mode uses 'en')
+    if g2p_active:
+        if lang_norm != "en":
+            print(f" > Language override for phoneme mode: {lang_norm} → en (matches training)")
+        lang_norm = "en"
+    if lang != lang_norm:
+        print(f" > Language normalization: {lang} → {lang_norm}")
+    else:
+        print(f" > Using language: {lang_norm}")
     
     gpt_cond_latent, speaker_embedding = XTTS_MODEL.get_conditioning_latents(audio_path=speaker_audio_file, gpt_cond_len=XTTS_MODEL.config.gpt_cond_len, max_ref_length=XTTS_MODEL.config.max_ref_len, sound_norm_refs=XTTS_MODEL.config.sound_norm_refs)
     
@@ -305,12 +319,17 @@ def load_params_tts(out_path,version):
     ready_model_path = out_path / "ready" 
 
     # Check for extended vocabulary first (Amharic G2P)
-    vocab_extended_path = ready_model_path / "vocab_extended.json"
+    # Support both legacy and current extended vocab filenames
+    vocab_extended_path_legacy = ready_model_path / "vocab_extended.json"
+    vocab_extended_path_amharic = ready_model_path / "vocab_extended_amharic.json"
     vocab_path = ready_model_path / "vocab.json"
-    
-    if vocab_extended_path.exists():
-        vocab_path = vocab_extended_path
-        print(" > Found extended vocabulary (Amharic G2P)")
+
+    if vocab_extended_path_amharic.exists():
+        vocab_path = vocab_extended_path_amharic
+        print(" > Found extended vocabulary (Amharic): vocab_extended_amharic.json")
+    elif vocab_extended_path_legacy.exists():
+        vocab_path = vocab_extended_path_legacy
+        print(" > Found extended vocabulary (legacy): vocab_extended.json")
     elif vocab_path.exists():
         print(" > Using standard vocabulary")
     else:

@@ -183,6 +183,42 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
             XTTS_MODEL.tokenizer.char_limits['amh'] = 200  # Amharic (ISO 639-3)
             print(" > ✅ Patched tokenizer to support 'amh' language code")
 
+        # Patch tokenizer preprocessing to accept 'am' without raising NotImplementedError
+        try:
+            if hasattr(XTTS_MODEL.tokenizer, 'preprocess_text'):
+                _orig_preprocess = XTTS_MODEL.tokenizer.preprocess_text
+
+                def _preprocess_text_am_safe(txt, lang):
+                    # Normalize to base code without region (e.g., zh-cn -> zh)
+                    try:
+                        base_lang = lang.split('-')[0].lower() if isinstance(lang, str) else lang
+                    except Exception:
+                        base_lang = lang
+
+                    if base_lang == 'am':
+                        # If text looks like IPA phonemes, bypass cleaning entirely to preserve phonetic content
+                        try:
+                            ipa_markers = ('ə', 'ɨ', 'ʔ', 'ʕ', 'ʷ', 'ː', 'ʼ', 'ʃ', 'ʧ', 'ʤ', 'ɲ')
+                            if txt and any(marker in txt for marker in ipa_markers):
+                                return txt
+                        except Exception:
+                            # If any inspection fails, fall back to safe behavior below
+                            pass
+
+                        # Otherwise, try Amharic cleaner path if available; if that fails, return as-is
+                        try:
+                            return _orig_preprocess(txt, 'amh')
+                        except Exception:
+                            return txt
+
+                    # Default behavior for all other languages
+                    return _orig_preprocess(txt, lang)
+
+                XTTS_MODEL.tokenizer.preprocess_text = _preprocess_text_am_safe
+                print(" > ✅ Patched tokenizer preprocessing for 'am' (bypass or map to 'amh')")
+        except Exception as e:
+            print(f" > ⚠️ Could not patch tokenizer preprocess_text for 'am': {e}")
+
     print("Model Loaded!")
     return "Model Loaded!"
 

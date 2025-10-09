@@ -644,7 +644,8 @@ class VoiceBpeTokenizer:
             "ja": 71,
             "hu": 224,
             "ko": 95,
-            "amh": 200,  # Amharic
+            "am": 200,   # Amharic (ISO 639-1)
+            "amh": 200,  # Amharic (ISO 639-3)
         }
 
     @cached_property

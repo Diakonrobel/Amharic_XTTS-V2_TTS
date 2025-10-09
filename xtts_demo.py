@@ -183,46 +183,47 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
             XTTS_MODEL.tokenizer.char_limits['amh'] = 200  # Amharic (ISO 639-3)
             print(" > ✅ Patched tokenizer to support 'amh' language code")
 
-        # Patch tokenizer preprocessing to accept 'am' without raising NotImplementedError
+        # Patch tokenizer preprocessing to protect IPA for Amharic phoneme mode
         try:
             if hasattr(XTTS_MODEL.tokenizer, 'preprocess_text'):
                 _orig_preprocess = XTTS_MODEL.tokenizer.preprocess_text
 
-                def _preprocess_text_am_safe(txt, lang):
+                def _preprocess_text_ipa_safe(txt, lang):
                     # Normalize to base code without region (e.g., zh-cn -> zh)
                     try:
                         base_lang = lang.split('-')[0].lower() if isinstance(lang, str) else lang
                     except Exception:
                         base_lang = lang
 
-                    if base_lang == 'am':
-                        # If text looks like IPA phonemes, bypass cleaning entirely to preserve phonetic content
+                    # IPA markers to detect phoneme strings
+                    ipa_markers = ('ə', 'ɨ', 'ʔ', 'ʕ', 'ʷ', 'ː', 'ʼ', 'ʃ', 'ʧ', 'ʤ', 'ɲ')
+
+                    # Protect IPA for Amharic ('am') and also when routed via 'en' in phoneme mode
+                    if base_lang in ('am', 'en'):
                         try:
-                            ipa_markers = ('ə', 'ɨ', 'ʔ', 'ʕ', 'ʷ', 'ː', 'ʼ', 'ʃ', 'ʧ', 'ʤ', 'ɲ')
                             if txt and any(marker in txt for marker in ipa_markers):
                                 return txt
                         except Exception:
-                            # If any inspection fails, fall back to safe behavior below
                             pass
+                        # For 'am' without clear IPA, try 'amh' cleaner path
+                        if base_lang == 'am':
+                            try:
+                                return _orig_preprocess(txt, 'amh')
+                            except Exception:
+                                return txt
 
-                        # Otherwise, try Amharic cleaner path if available; if that fails, return as-is
-                        try:
-                            return _orig_preprocess(txt, 'amh')
-                        except Exception:
-                            return txt
-
-                    # Default behavior for all other languages
+                    # Default behavior for all other cases
                     return _orig_preprocess(txt, lang)
 
-                XTTS_MODEL.tokenizer.preprocess_text = _preprocess_text_am_safe
-                print(" > ✅ Patched tokenizer preprocessing for 'am' (bypass or map to 'amh')")
+                XTTS_MODEL.tokenizer.preprocess_text = _preprocess_text_ipa_safe
+                print(" > ✅ Patched tokenizer preprocessing to preserve IPA (for 'am' and phoneme 'en')")
         except Exception as e:
-            print(f" > ⚠️ Could not patch tokenizer preprocess_text for 'am': {e}")
+            print(f" > ⚠️ Could not patch tokenizer preprocess_text IPA protection: {e}")
 
     print("Model Loaded!")
     return "Model Loaded!"
 
-def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repetition_penalty,top_k,top_p,sentence_split,use_config,use_g2p_inference=False):
+def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repetition_penalty,top_k,top_p,sentence_split,use_config,use_g2p_inference=False, g2p_backend_infer="auto"):
     if XTTS_MODEL is None or not speaker_audio_file:
         return "You need to run the previous step to load the model !!", None, None
 
@@ -230,10 +231,29 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
     g2p_active = False
     if use_g2p_inference and lang in ["am", "amh"]:
         try:
-            from amharic_tts.tokenizer.xtts_tokenizer_wrapper import XTTSAmharicTokenizer
-            print(f" > 🇪🇹 Amharic G2P enabled for inference")
+            # Choose backend: UI prefer, otherwise training meta if available, else transphone
+            resolved_backend = g2p_backend_infer
+            if resolved_backend == "auto":
+                try:
+                    # Derive ready dir from the speaker reference path
+                    from pathlib import Path as _Path
+                    ready_dir = _Path(speaker_audio_file).parent if speaker_audio_file else None
+                    meta_path = ready_dir / "training_meta.json" if ready_dir else None
+                    if meta_path and meta_path.exists():
+                        import json as _json
+                        with open(meta_path, 'r', encoding='utf-8') as _f:
+                            _meta = _json.load(_f)
+                            _am_meta = _meta.get('amharic', {})
+                            resolved_backend = _am_meta.get('g2p_backend', 'transphone') or 'transphone'
+                    else:
+                        resolved_backend = 'transphone'
+                except Exception:
+                    resolved_backend = 'transphone'
+
+            from amharic_tts.tokenizer.xtts_tokenizer_wrapper import create_xtts_tokenizer
+            print(f" > 🇪🇹 Amharic G2P enabled for inference (backend: {resolved_backend})")
             print(f" > Original text: {tts_text[:50]}{'...' if len(tts_text) > 50 else ''}")
-            tokenizer = XTTSAmharicTokenizer(use_phonemes=True)
+            tokenizer = create_xtts_tokenizer(use_phonemes=True, g2p_backend=resolved_backend)
             original_text = tts_text
             tts_text = tokenizer.preprocess_text(tts_text, lang=lang)
             print(f" > Converted to phonemes: {tts_text[:100]}{'...' if len(tts_text) > 100 else ''}")
@@ -1297,6 +1317,24 @@ if __name__ == "__main__":
                 shutil.copy(speaker_reference_path, speaker_reference_new_path)
             
                 print("Model training done!")
+
+                # Write training metadata for inference alignment
+                try:
+                    import json as _json
+                    amharic_meta = {
+                        "g2p_training_enabled": bool(enable_amharic_g2p and language in ["am", "amh"]),
+                        "g2p_backend": g2p_backend_train if (enable_amharic_g2p and language in ["am", "amh"]) else None,
+                        # When G2P is applied, training pipeline switches tokenizer language to 'en'
+                        "effective_language": "en" if (enable_amharic_g2p and language in ["am", "amh"]) else normalize_xtts_lang(language),
+                        "vocab_used": "extended" if (ready_dir / "vocab_extended_amharic.json").exists() or (ready_dir / "vocab_extended.json").exists() else "standard",
+                    }
+                    meta = {"amharic": amharic_meta}
+                    with open(ready_dir / "training_meta.json", "w", encoding="utf-8") as _f:
+                        _json.dump(meta, _f, indent=2, ensure_ascii=False)
+                    print(" > Saved training metadata to ready/training_meta.json")
+                except Exception as _e:
+                    print(f" > Warning: Could not write training metadata: {_e}")
+
                 return "Model training done!", config_path, vocab_file, ft_xtts_checkpoint, speaker_xtts_path, speaker_reference_new_path
 
             def optimize_model(out_path, clear_train_data):
@@ -1410,6 +1448,12 @@ if __name__ == "__main__":
                             label="🇪🇹 Enable Amharic G2P",
                             value=True,
                             info="Convert Amharic text to phonemes (required if model trained with G2P)"
+                        )
+                        g2p_backend_infer = gr.Dropdown(
+                            label="G2P Backend (Inference)",
+                            value="auto",
+                            choices=["auto", "transphone", "epitran", "rule_based"],
+                            info="Auto uses the backend from training_meta.json if available; otherwise transphone"
                         )
                         
                         with gr.Accordion("⚙️ Advanced Settings", open=False):
@@ -1577,7 +1621,7 @@ if __name__ == "__main__":
                 outputs=[progress_load],
             )
 
-            tts_btn.click(
+                tts_btn.click(
                 fn=run_tts,
                 inputs=[
                     tts_language,
@@ -1590,7 +1634,8 @@ if __name__ == "__main__":
                     top_p,
                     sentence_split,
                     use_config,
-                    use_g2p_inference
+                    use_g2p_inference,
+                    g2p_backend_infer,
                 ],
                 outputs=[progress_gen, tts_output_audio,reference_audio],
             )

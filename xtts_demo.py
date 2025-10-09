@@ -171,6 +171,17 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
     
     if torch.cuda.is_available():
         XTTS_MODEL.cuda()
+    
+    # Patch tokenizer to support Amharic language codes
+    if hasattr(XTTS_MODEL, 'tokenizer') and hasattr(XTTS_MODEL.tokenizer, 'char_limits'):
+        if 'am' not in XTTS_MODEL.tokenizer.char_limits:
+            # Add support for ISO 639-1 Amharic code
+            XTTS_MODEL.tokenizer.char_limits['am'] = 200  # Amharic (ISO 639-1)
+            print(" > ✅ Patched tokenizer to support 'am' language code")
+        if 'amh' not in XTTS_MODEL.tokenizer.char_limits:
+            # Add support for ISO 639-3 Amharic code
+            XTTS_MODEL.tokenizer.char_limits['amh'] = 200  # Amharic (ISO 639-3)
+            print(" > ✅ Patched tokenizer to support 'amh' language code")
 
     print("Model Loaded!")
     return "Model Loaded!"

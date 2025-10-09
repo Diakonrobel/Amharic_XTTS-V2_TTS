@@ -100,11 +100,70 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
     clear_gpu_cache()
     if not xtts_checkpoint or not xtts_config or not xtts_vocab:
         return "You need to run the previous steps or manually set the `XTTS checkpoint path`, `XTTS config path`, and `XTTS vocab path` fields !!"
+    
     config = XttsConfig()
     config.load_json(xtts_config)
-    XTTS_MODEL = Xtts.init_from_config(config)
+    
     print("Loading XTTS model! ")
-    XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab,speaker_file_path=xtts_speaker, use_deepspeed=False)
+    
+    # Check if checkpoint has extended vocabulary
+    try:
+        checkpoint = torch.load(xtts_checkpoint, map_location="cpu", weights_only=False)
+        checkpoint_vocab_size = checkpoint["model"]["gpt.text_embedding.weight"].shape[0]
+        
+        # Load vocabulary to check size
+        import json
+        with open(xtts_vocab, 'r', encoding='utf-8') as f:
+            vocab_data = json.load(f)
+            vocab_size = len(vocab_data['model']['vocab'])
+        
+        print(f" > Checkpoint vocabulary size: {checkpoint_vocab_size}")
+        print(f" > Vocab file size: {vocab_size}")
+        
+        if checkpoint_vocab_size != vocab_size:
+            print(f" > ⚠️  SIZE MISMATCH DETECTED!")
+            print(f" > Checkpoint was trained with extended vocabulary ({checkpoint_vocab_size} tokens)")
+            print(f" > But vocab file has {vocab_size} tokens")
+            print(f" > Attempting to resize model to match checkpoint...")
+            
+            # Initialize model with standard vocab first
+            XTTS_MODEL = Xtts.init_from_config(config)
+            
+            # Resize embeddings to match checkpoint
+            if hasattr(XTTS_MODEL, 'gpt'):
+                old_text_embedding = XTTS_MODEL.gpt.text_embedding
+                old_text_head = XTTS_MODEL.gpt.text_head
+                
+                embed_dim = old_text_embedding.weight.shape[1]
+                
+                # Create new embeddings with checkpoint size
+                new_text_embedding = torch.nn.Embedding(checkpoint_vocab_size, embed_dim)
+                new_text_head = torch.nn.Linear(embed_dim, checkpoint_vocab_size)
+                
+                # Replace in model
+                XTTS_MODEL.gpt.text_embedding = new_text_embedding
+                XTTS_MODEL.gpt.text_head = new_text_head
+                
+                print(f" > ✅ Model resized to {checkpoint_vocab_size} tokens")
+            
+            # Now load checkpoint - should work
+            XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, speaker_file_path=xtts_speaker, use_deepspeed=False, eval=True)
+        else:
+            # Normal loading - sizes match
+            XTTS_MODEL = Xtts.init_from_config(config)
+            XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, speaker_file_path=xtts_speaker, use_deepspeed=False)
+        
+    except Exception as e:
+        print(f" > Warning: Could not check vocabulary size: {e}")
+        print(f" > Attempting standard loading...")
+        XTTS_MODEL = Xtts.init_from_config(config)
+        try:
+            XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, speaker_file_path=xtts_speaker, use_deepspeed=False)
+        except RuntimeError as load_error:
+            if "size mismatch" in str(load_error):
+                return f"VOCABULARY SIZE MISMATCH ERROR\n\nYour model was trained with Amharic G2P (extended vocabulary) but the vocab file doesn't match.\n\nPlease check if you have 'vocab_extended.json' in your model folder and use that instead of 'vocab.json'.\n\nError: {str(load_error)}"
+            raise
+    
     if torch.cuda.is_available():
         XTTS_MODEL.cuda()
 
@@ -178,7 +237,18 @@ def load_params_tts(out_path,version):
 
     ready_model_path = out_path / "ready" 
 
-    vocab_path =  ready_model_path / "vocab.json"
+    # Check for extended vocabulary first (Amharic G2P)
+    vocab_extended_path = ready_model_path / "vocab_extended.json"
+    vocab_path = ready_model_path / "vocab.json"
+    
+    if vocab_extended_path.exists():
+        vocab_path = vocab_extended_path
+        print(" > Found extended vocabulary (Amharic G2P)")
+    elif vocab_path.exists():
+        print(" > Using standard vocabulary")
+    else:
+        return "Vocabulary file not found", "", "", "", "", ""
+    
     config_path = ready_model_path / "config.json"
     speaker_path =  ready_model_path / "speakers_xtts.pth"
     reference_path  = ready_model_path / "reference.wav"
@@ -188,7 +258,7 @@ def load_params_tts(out_path,version):
     if not model_path.exists():
         model_path = ready_model_path / "unoptimize_model.pth"
         if not model_path.exists():
-          return "Params for TTS not found", "", "", ""         
+          return "Params for TTS not found", "", "", "", "", ""         
 
     return "Params for TTS loaded", model_path, config_path, vocab_path,speaker_path, reference_path
      

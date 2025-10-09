@@ -82,14 +82,19 @@ def get_dataset_zip(out_path):
 
 def normalize_xtts_lang(lang: str) -> str:
     """Normalize user language code to XTTS-supported code.
-    - Map 'am'/'amh' -> 'en' (Amharic not natively supported, use English as multilingual fallback)
+    
+    IMPORTANT: For Amharic fine-tuned models with G2P phonemes:
+    - Keep 'am'/'amh' as 'am' to preserve phoneme interpretation context
+    - The model was fine-tuned with Amharic data, so it can handle 'am' correctly
+    - Mapping to 'en' breaks phoneme pronunciation (Amharic phonemes interpreted as English)
+    
     - Map 'zh' -> 'zh-cn' (XTTS expectation in some paths)
     """
     if not lang:
         return lang
     lang = lang.strip().lower()
     if lang in ("am", "amh"):
-        return "en"  # Use English as fallback for Amharic - XTTS will treat as multilingual
+        return "am"  # Keep as Amharic for correct phoneme interpretation in fine-tuned models
     if lang == "zh":
         return "zh-cn"
     return lang
@@ -178,18 +183,33 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
     if use_g2p_inference and lang in ["am", "amh"]:
         try:
             from amharic_tts.tokenizer.xtts_tokenizer_wrapper import XTTSAmharicTokenizer
-            print(f" > Amharic G2P enabled for inference: converting input text to phonemes")
+            print(f" > 🇪🇹 Amharic G2P enabled for inference")
+            print(f" > Original text: {tts_text[:50]}{'...' if len(tts_text) > 50 else ''}")
             tokenizer = XTTSAmharicTokenizer(use_phonemes=True)
+            original_text = tts_text
             tts_text = tokenizer.preprocess_text(tts_text, lang=lang)
-            print(f" > Converted to phonemes: {tts_text[:100]}...")
+            print(f" > Converted to phonemes: {tts_text[:100]}{'...' if len(tts_text) > 100 else ''}")
+            
+            # Validate G2P conversion worked
+            if tts_text == original_text:
+                print(f" > ⚠️  Warning: G2P conversion may not have worked (text unchanged)")
+                print(f" > ⚠️  This could happen if G2P backends are not properly installed")
+            else:
+                print(f" > ✅ G2P conversion successful")
+                
         except Exception as e:
-            print(f" > Warning: G2P preprocessing failed: {e}")
-            print(f" > Using original text")
+            print(f" > ❌ Error: G2P preprocessing failed: {e}")
+            print(f" > 🔄 Falling back to original text")
+            print(f" > 💡 Tip: For best results, install Transphone: pip install transphone")
     
     gpt_cond_latent, speaker_embedding = XTTS_MODEL.get_conditioning_latents(audio_path=speaker_audio_file, gpt_cond_len=XTTS_MODEL.config.gpt_cond_len, max_ref_length=XTTS_MODEL.config.max_ref_len, sound_norm_refs=XTTS_MODEL.config.sound_norm_refs)
     
-    # Normalize language code for XTTS (am -> amh)
+    # Normalize language code for XTTS
     lang_norm = normalize_xtts_lang(lang)
+    if lang != lang_norm:
+        print(f" > Language normalization: {lang} → {lang_norm}")
+    else:
+        print(f" > Using language: {lang_norm}")
     
     if use_config:
         out = XTTS_MODEL.inference(

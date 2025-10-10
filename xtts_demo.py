@@ -273,12 +273,13 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
 
     # Normalize language code for XTTS
     lang_norm = normalize_xtts_lang(lang)
-    # If G2P active, align language with training pipeline (phoneme mode uses 'en')
+    
+    # FIXED: Don't override Amharic to English for G2P
+    # This was causing the pronunciation issues by making the model
+    # interpret Amharic phonemes as English
     if g2p_active:
-        if lang_norm != "en":
-            print(f" > Language override for phoneme mode: {lang_norm} → en (matches training)")
-        lang_norm = "en"
-    if lang != lang_norm:
+        print(f" > Using language: {lang_norm} with phoneme mode")
+    elif lang != lang_norm:
         print(f" > Language normalization: {lang} → {lang_norm}")
     else:
         print(f" > Using language: {lang_norm}")

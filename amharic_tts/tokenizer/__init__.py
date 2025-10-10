@@ -1,6 +1,17 @@
-"""
-Amharic Tokenizer Module
-Provides tokenization support for Amharic/Ethiopic script
+"""Amharic Tokenizer Package.
+
+This package contains tokenizer implementations tailored for the Amharic
+XTTS pipeline. The primary entry point is the hybrid tokenizer that wraps
+the multilingual XTTS tokenizer and optionally applies Amharic-specific
+G2P before handing the text off to the base tokenizer.
 """
 
-# Placeholder for future Amharic-specific tokenizer implementation
+from .hybrid_tokenizer import (
+    HybridAmharicTokenizer,
+    create_hybrid_tokenizer,
+)
+
+__all__ = [
+    "HybridAmharicTokenizer",
+    "create_hybrid_tokenizer",
+]

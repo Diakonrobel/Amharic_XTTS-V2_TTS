@@ -285,13 +285,6 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
     
     gpt_cond_latent, speaker_embedding = XTTS_MODEL.get_conditioning_latents(audio_path=speaker_audio_file, gpt_cond_len=XTTS_MODEL.config.gpt_cond_len, max_ref_length=XTTS_MODEL.config.max_ref_len, sound_norm_refs=XTTS_MODEL.config.sound_norm_refs)
     
-    # Normalize language code for XTTS
-    lang_norm = normalize_xtts_lang(lang)
-    if lang != lang_norm:
-        print(f" > Language normalization: {lang} → {lang_norm}")
-    else:
-        print(f" > Using language: {lang_norm}")
-    
     if use_config:
         out = XTTS_MODEL.inference(
             text=tts_text,

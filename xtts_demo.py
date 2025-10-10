@@ -1621,7 +1621,7 @@ if __name__ == "__main__":
                 outputs=[progress_load],
             )
 
-                tts_btn.click(
+            tts_btn.click(
                 fn=run_tts,
                 inputs=[
                     tts_language,

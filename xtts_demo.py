@@ -185,6 +185,22 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
                         print(" > ✅ Initialized internal tokenizer from vocab file")
                 except Exception as _e:
                     print(f" > ⚠️ Could not init internal tokenizer: {_e}")
+                # Ensure gpt_inference compatibility proxy exists
+                try:
+                    if hasattr(XTTS_MODEL, 'gpt') and not hasattr(XTTS_MODEL.gpt, 'gpt_inference'):
+                        tgt = getattr(XTTS_MODEL.gpt, 'gpt', XTTS_MODEL.gpt)
+                        class _InferenceProxy:
+                            def __init__(self, target):
+                                self._target = target
+                                self.prefix_emb = None
+                            def store_prefix_emb(self, emb):
+                                self.prefix_emb = emb
+                            def __getattr__(self, name):
+                                return getattr(self._target, name)
+                        XTTS_MODEL.gpt.gpt_inference = _InferenceProxy(tgt)
+                        print(" > ✅ Created compatibility proxy for gpt_inference")
+                except Exception as _e:
+                    print(f" > ⚠️ Could not create gpt_inference proxy: {_e}")
                 print(f" > ✅ Checkpoint loaded (manual) and embeddings expanded to {vocab_size} tokens")
             else:
                 # Sizes now match; proceed with standard load
@@ -278,6 +294,22 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
                         print(" > ✅ Initialized internal tokenizer from vocab file")
                 except Exception as _e:
                     print(f" > ⚠️ Could not init internal tokenizer: {_e}")
+                # Ensure gpt_inference compatibility proxy exists
+                try:
+                    if hasattr(XTTS_MODEL, 'gpt') and not hasattr(XTTS_MODEL.gpt, 'gpt_inference'):
+                        tgt = getattr(XTTS_MODEL.gpt, 'gpt', XTTS_MODEL.gpt)
+                        class _InferenceProxy:
+                            def __init__(self, target):
+                                self._target = target
+                                self.prefix_emb = None
+                            def store_prefix_emb(self, emb):
+                                self.prefix_emb = emb
+                            def __getattr__(self, name):
+                                return getattr(self._target, name)
+                        XTTS_MODEL.gpt.gpt_inference = _InferenceProxy(tgt)
+                        print(" > ✅ Created compatibility proxy for gpt_inference")
+                except Exception as _e:
+                    print(f" > ⚠️ Could not create gpt_inference proxy: {_e}")
                 print(f" > ✅ Manual load successful with vocab size {vocab_size} (ckpt tokens: {checkpoint_vocab_size or 'unknown'})")
             else:
                 print(" > ⚠️ Model does not expose gpt module; manual embedding resize skipped")

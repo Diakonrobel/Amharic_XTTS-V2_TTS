@@ -123,30 +123,60 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
             print(f" > ⚠️  SIZE MISMATCH DETECTED!")
             print(f" > Checkpoint was trained with extended vocabulary ({checkpoint_vocab_size} tokens)")
             print(f" > But vocab file has {vocab_size} tokens")
-            print(f" > Attempting to resize model to match checkpoint...")
-            
-            # Initialize model with standard vocab first
+
+            # Try to find a vocab file in ready/ that matches checkpoint size
+            try:
+                from pathlib import Path as _Path
+                ready_dir = _Path(xtts_vocab).parent
+                import json as _json
+                candidate = None
+                for p in sorted(ready_dir.glob("vocab*.json")):
+                    try:
+                        with open(p, 'r', encoding='utf-8') as _f:
+                            _v = _json.load(_f)
+                        _sz = len(_v.get('model', {}).get('vocab', []))
+                        if _sz == checkpoint_vocab_size:
+                            candidate = str(p)
+                            break
+                    except Exception:
+                        continue
+                if candidate and candidate != xtts_vocab:
+                    print(f" > Found matching vocab for checkpoint: {candidate}")
+                    xtts_vocab = candidate
+                    vocab_size = checkpoint_vocab_size
+            except Exception as _e:
+                print(f" > Warning: vocab scan failed: {_e}")
+
+            # Initialize model
             XTTS_MODEL = Xtts.init_from_config(config)
-            
-            # Resize embeddings to match checkpoint
-            if hasattr(XTTS_MODEL, 'gpt'):
-                old_text_embedding = XTTS_MODEL.gpt.text_embedding
-                old_text_head = XTTS_MODEL.gpt.text_head
-                
-                embed_dim = old_text_embedding.weight.shape[1]
-                
-                # Create new embeddings with checkpoint size
-                new_text_embedding = torch.nn.Embedding(checkpoint_vocab_size, embed_dim)
-                new_text_head = torch.nn.Linear(embed_dim, checkpoint_vocab_size)
-                
-                # Replace in model
+
+            # If still mismatched after scan, expand embeddings to vocab file size and load weights manually
+            if vocab_size != checkpoint_vocab_size and hasattr(XTTS_MODEL, 'gpt'):
+                print(f" > Resizing embeddings to vocab size ({vocab_size}) and loading weights manually")
+                state_dict = checkpoint["model"]
+                embed_dim = state_dict['gpt.text_embedding.weight'].shape[1]
+                # Build new layers with vocab_size
+                new_text_embedding = torch.nn.Embedding(vocab_size, embed_dim)
+                new_text_embedding.weight.data[:checkpoint_vocab_size] = state_dict['gpt.text_embedding.weight']
+                new_text_embedding.weight.data[checkpoint_vocab_size:] = torch.randn(vocab_size - checkpoint_vocab_size, embed_dim) * 0.02
+
+                new_text_head = torch.nn.Linear(embed_dim, vocab_size)
+                new_text_head.weight.data[:checkpoint_vocab_size] = state_dict['gpt.text_head.weight']
+                new_text_head.weight.data[checkpoint_vocab_size:] = torch.randn(vocab_size - checkpoint_vocab_size, embed_dim) * 0.02
+                new_text_head.bias.data[:checkpoint_vocab_size] = state_dict['gpt.text_head.bias']
+                new_text_head.bias.data[checkpoint_vocab_size:] = torch.zeros(vocab_size - checkpoint_vocab_size)
+
+                # Load non-text layers
+                filtered_state = {k: v for k, v in state_dict.items() if 'text_embedding' not in k and 'text_head' not in k}
+                XTTS_MODEL.load_state_dict(filtered_state, strict=False)
+
+                # Replace layers
                 XTTS_MODEL.gpt.text_embedding = new_text_embedding
                 XTTS_MODEL.gpt.text_head = new_text_head
-                
-                print(f" > ✅ Model resized to {checkpoint_vocab_size} tokens")
-            
-            # Now load checkpoint - should work
-            XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, speaker_file_path=xtts_speaker, use_deepspeed=False, eval=True)
+                print(f" > ✅ Checkpoint loaded (manual) and embeddings expanded to {vocab_size} tokens")
+            else:
+                # Sizes now match; proceed with standard load
+                XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, speaker_file_path=xtts_speaker, use_deepspeed=False, eval=True)
         else:
             # Normal loading - sizes match
             XTTS_MODEL = Xtts.init_from_config(config)

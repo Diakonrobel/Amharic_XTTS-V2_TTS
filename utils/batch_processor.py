@@ -209,7 +209,7 @@ def process_youtube_batch(
             temp_dataset_dir = os.path.join(out_path, f"temp_dataset_{idx}")
             os.makedirs(temp_dataset_dir, exist_ok=True)
             
-train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+            train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
                 srt_path=srt_path,
                 media_path=audio_path,
                 output_dir=temp_dataset_dir,
@@ -346,7 +346,7 @@ def process_srt_media_batch(
             temp_dataset_dir = os.path.join(out_path, f"temp_srt_dataset_{idx}")
             os.makedirs(temp_dataset_dir, exist_ok=True)
             
-train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+            train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
                 srt_path=srt_path,
                 media_path=media_path,
                 output_dir=temp_dataset_dir,

@@ -12,6 +12,7 @@ import torchaudio
 import torch
 import pandas as pd
 from tqdm import tqdm
+from utils.lang_norm import canonical_lang
 
 def parse_srt_file(srt_path: str) -> List[Tuple[float, float, str]]:
     """
@@ -323,8 +324,10 @@ def extract_segments_from_audio(
     print(f"  Training: {len(train_df)} samples")
     print(f"  Evaluation: {len(eval_df)} samples")
     
-    # Save language file with correct language
+# Save language file with correct language
     lang_file = output_path / "lang.txt"
+    # Canonicalize language for dataset artifacts
+    language = canonical_lang(language)
     with open(lang_file, 'w', encoding='utf-8') as f:
         f.write(f"{language}\n")
     
@@ -364,8 +367,11 @@ def process_srt_with_media(
     Returns:
         Tuple of (train_csv_path, eval_csv_path, total_audio_duration)
     """
-    output_path = Path(output_dir)
+output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    # Canonicalize language for dataset artifacts
+    language = canonical_lang(language)
     
     # Parse SRT file
     print("Step 1: Parsing SRT file...")

@@ -24,6 +24,7 @@ from faster_whisper import WhisperModel # Keep for data processing
 
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import Xtts
+from utils.lang_norm import canonical_lang
 
 # Keep utility functions (potentially modified)
 def download_file(url, destination):
@@ -208,6 +209,8 @@ def prepare_audio(input_path, temp_dir, max_duration_minutes=40):
 def preprocess_dataset_headless(audio_file_path, language, whisper_model_name, dataset_out_path):
     """Headless version of preprocess_dataset."""
     clear_gpu_cache()
+    # Canonicalize language for dataset artifacts (ensure 'amh' for Amharic)
+    language = canonical_lang(language)
     print(f"\n--- Starting Step 1: Data Processing ---")
     print(f"Using audio file: {audio_file_path}")
     print(f"Language: {language}")
@@ -278,6 +281,8 @@ def preprocess_dataset_headless(audio_file_path, language, whisper_model_name, d
 def train_model_headless(language, train_csv_path, eval_csv_path, num_epochs, batch_size, grad_acumm, output_path_base, max_audio_length_sec, version="v2.0.2", custom_model=""):
     """Headless version of train_model."""
     clear_gpu_cache()
+    # Canonicalize language for training (ensure 'amh')
+    language = canonical_lang(language)
     print(f"\n--- Starting Step 2: Fine-tuning XTTS ---")
     print(f"Language: {language}")
     print(f"Training CSV Path: {train_csv_path}") # Log original path for reference
@@ -586,6 +591,8 @@ def load_model_headless(xtts_checkpoint, xtts_config, xtts_vocab, xtts_speaker):
 
 def run_tts_headless(lang, tts_text, speaker_audio_file, output_wav_path, temperature=0.75, length_penalty=1.0, repetition_penalty=5.0, top_k=50, top_p=0.85, sentence_split=True):
     """Headless version of run_tts."""
+    # Canonicalize language for inference (ensure 'amh')
+    lang = canonical_lang(lang)
     print(f"\n--- Starting Step 4: Generating Example TTS ---")
     print(f"Language: {lang}")
     print(f"Text: '{tts_text}'")
@@ -720,7 +727,10 @@ def main():
     parser.add_argument("--no_sentence_split", action="store_true", help="Disable sentence splitting during TTS inference.")
 
 
-    args = parser.parse_args()
+args = parser.parse_args()
+    
+    # Canonicalize primary language early (keeps youtube_transcript_lang unchanged)
+    args.lang = canonical_lang(args.lang)
     
     # --- Validate Input Methods ---
     input_modes = sum([

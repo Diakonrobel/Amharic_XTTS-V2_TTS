@@ -33,6 +33,7 @@ from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import Xtts
 
 import requests
+from utils.lang_norm import canonical_lang, is_amharic
 
 def download_file(url, destination):
     try:
@@ -81,23 +82,16 @@ def get_dataset_zip(out_path):
     return None
 
 def normalize_xtts_lang(lang: str) -> str:
-    """Normalize user language code to XTTS-supported code.
+    """Normalize user-provided language to the canonical code for Coqui/XTTS.
     
-    IMPORTANT: For Amharic fine-tuned models with G2P phonemes:
-    - Keep 'am'/'amh' as 'am' to preserve phoneme interpretation context
-    - The model was fine-tuned with Amharic data, so it can handle 'am' correctly
-    - Mapping to 'en' breaks phoneme pronunciation (Amharic phonemes interpreted as English)
-    
-    - Map 'zh' -> 'zh-cn' (XTTS expectation in some paths)
+    Rules:
+    - Amharic: accept 'am', 'amh', 'am-ET', etc. → return 'amh' (ISO 639-3)
+      This avoids NotImplementedError in upstream tokenizer and ensures
+      dataset/lang.txt, training, and inference are consistent.
+    - Chinese: 'zh' → 'zh-cn' (as expected in some XTTS paths)
+    - Others: lowercased base code.
     """
-    if not lang:
-        return lang
-    lang = lang.strip().lower()
-    if lang in ("am", "amh"):
-        return "am"  # Keep as Amharic for correct phoneme interpretation in fine-tuned models
-    if lang == "zh":
-        return "zh-cn"
-    return lang
+    return canonical_lang(lang, purpose="coqui") or lang
 
 
 def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
@@ -227,6 +221,9 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
     if XTTS_MODEL is None or not speaker_audio_file:
         return "You need to run the previous step to load the model !!", None, None
 
+    # Canonicalize language early (ensures 'amh')
+    lang = normalize_xtts_lang(lang)
+
     # Apply G2P preprocessing if enabled for Amharic text
     g2p_active = False
     if use_g2p_inference and lang in ["am", "amh"]:
@@ -271,7 +268,7 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
             print(f" > 🔄 Falling back to original text")
             print(f" > 💡 Tip: For best results, install Transphone: pip install transphone")
 
-    # Normalize language code for XTTS
+# Normalize language code for XTTS (already canonicalized above)
     lang_norm = normalize_xtts_lang(lang)
     
     # FIXED: Don't override Amharic to English for G2P
@@ -665,6 +662,8 @@ if __name__ == "__main__":
             def process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, progress):
                 """Handle batch processing of multiple SRT+media pairs"""
                 try:
+                    # Canonicalize language for dataset artifacts
+                    language = normalize_xtts_lang(language)
                     progress(0, desc=f"Initializing batch processing for {len(srt_files_list)} pairs...")
                     
                     # Process all pairs
@@ -724,6 +723,8 @@ if __name__ == "__main__":
             ):
                 """Process SRT subtitle file(s) with corresponding media file(s)"""
                 try:
+                    # Canonicalize language for dataset artifacts
+                    language = normalize_xtts_lang(language)
                     # Handle file inputs - can be None, single file path, or list of file paths
                     srt_files_list = []
                     media_files_list = []
@@ -928,8 +929,8 @@ if __name__ == "__main__":
                     output_path = os.path.join(out_path, "dataset")
                     os.makedirs(output_path, exist_ok=True)
                     
-                    # Use transcript language as dataset language (transcript_lang is the actual content language)
-                    dataset_language = transcript_lang
+# Use transcript language as dataset language (transcript_lang is the actual content language)
+                    dataset_language = normalize_xtts_lang(transcript_lang)
                     print(f"Setting dataset language to '{dataset_language}' (from YouTube transcript language)")
                     
                     train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
@@ -978,6 +979,9 @@ if __name__ == "__main__":
                     if not audio_file_path:
                         return "Please upload an audio file to slice!"
                     
+                    # Canonicalize dataset language for metadata writing
+                    language = normalize_xtts_lang(language)
+
                     progress(0, desc="Initializing audio slicer...")
                     
                     output_path = os.path.join(out_path, "dataset", "wavs")
@@ -1052,6 +1056,9 @@ if __name__ == "__main__":
                 train_csv = ""
                 eval_csv = ""
             
+                # Canonicalize dataset language (ensure 'amh' for Amharic)
+                language = normalize_xtts_lang(language)
+
                 out_path = os.path.join(out_path, "dataset")
                 os.makedirs(out_path, exist_ok=True)
                 
@@ -1280,7 +1287,7 @@ if __name__ == "__main__":
                     # convert seconds to waveform frames
                     max_audio_length = int(max_audio_length * 22050)
 
-                    # Normalize language code for XTTS internals
+# Normalize language code for XTTS internals
                     language_norm = normalize_xtts_lang(language)
 
                     speaker_xtts_path, config_path, original_xtts_checkpoint, vocab_file, exp_path, speaker_wav = train_gpt(

@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 from utils import srt_processor
 from utils.vad_slicer import VADSlicer, AudioSegment
+from utils.lang_norm import canonical_lang
 
 
 def extract_segments_with_vad(
@@ -193,8 +194,10 @@ def extract_segments_with_vad(
     print(f"  Training: {len(train_df)} samples")
     print(f"  Evaluation: {len(eval_df)} samples")
     
-    # Save language file
+# Save language file
     lang_file = output_path / "lang.txt"
+    # Canonicalize language for dataset artifacts
+    language = canonical_lang(language)
     with open(lang_file, 'w', encoding='utf-8') as f:
         f.write(f"{language}\n")
     
@@ -344,10 +347,13 @@ def process_srt_with_media_vad(
                 raise RuntimeError("Failed to convert audio")
             audio_path = str(temp_audio_path)
         else:
-            audio_path = media_path
+audio_path = media_path
     else:
         raise ValueError(f"Unsupported media format: {media_ext}")
     
+    # Canonicalize language for dataset artifacts
+    language = canonical_lang(language)
+
     # Extract segments with VAD
     mode_str = "VAD-enhanced" if use_vad_refinement else "standard"
     print(f"Step 3: Extracting audio segments ({mode_str})...")

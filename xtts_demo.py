@@ -379,6 +379,22 @@ def load_params_tts(out_path,version):
         if not model_path.exists():
           return "Params for TTS not found", "", "", "", "", ""         
 
+    # Ensure 'amh' appears in config.json languages for clarity (does not affect runtime behavior)
+    try:
+        import json as _json
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as _f:
+                _cfg = _json.load(_f)
+            langs = _cfg.get("languages")
+            if isinstance(langs, list) and "amh" not in langs:
+                langs.append("amh")
+                _cfg["languages"] = langs
+                with open(config_path, "w", encoding="utf-8") as _f:
+                    _json.dump(_cfg, _f, indent=2, ensure_ascii=False)
+                print(" > Appended 'amh' to languages in ready/config.json")
+    except Exception as _e:
+        print(f" > Warning: Could not update languages in config.json: {_e}")
+
     return "Params for TTS loaded", model_path, config_path, vocab_path,speaker_path, reference_path
      
 

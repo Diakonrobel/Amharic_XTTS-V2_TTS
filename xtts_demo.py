@@ -1407,20 +1407,33 @@ if __name__ == "__main__":
             
             with gr.Group():
                 gr.Markdown("### 🇪🇹 **Amharic G2P Options** (for 'amh' language)")
+                gr.Markdown("""
+                ⚠️ **Important**: Enable this if your dataset contains **raw Amharic text** (not phonemes).
+                The training will convert text to phonemes automatically.
+                """)
                 with gr.Row():
                     enable_amharic_g2p = gr.Checkbox(
                         label="Enable G2P for Training",
-                        value=False,
-                        info="Use phoneme tokenization",
+                        value=True,  # Default to True for Amharic!
+                        info="Convert Amharic → IPA phonemes during training",
                         scale=2
                     )
                     g2p_backend_train = gr.Dropdown(
                         label="G2P Backend",
-                        value="transphone",
-                        choices=["transphone", "epitran", "rule_based"],
-                        info="G2P conversion backend",
+                        value="rule_based",  # rule_based is most reliable
+                        choices=["rule_based", "transphone", "epitran"],
+                        info="rule_based = offline, no dependencies",
                         scale=1
                     )
+                
+                # Add vocab info display
+                vocab_info_display = gr.Textbox(
+                    label="📚 Vocabulary Information",
+                    value="Click 'Check Vocab' to verify vocabulary consistency",
+                    interactive=False,
+                    lines=3
+                )
+                check_vocab_btn = gr.Button(value="🔍 Check Vocab & Dataset", size="sm", variant="secondary")
             
             with gr.Group():
                 gr.Markdown("### 🚀 **Execute Training**")
@@ -1433,6 +1446,84 @@ if __name__ == "__main__":
             import shutil
             from pathlib import Path
             import traceback
+            
+            def check_vocab_and_dataset(output_path, train_csv):
+                """Check vocab consistency and dataset info"""
+                try:
+                    import json
+                    import pandas as pd
+                    
+                    result = []
+                    result.append("✅ **Vocabulary & Dataset Check**")
+                    result.append("="*50)
+                    
+                    # Check vocab files
+                    ready_dir = Path(output_path) / "ready"
+                    vocab_files = list(ready_dir.glob("vocab*.json"))
+                    
+                    if not vocab_files:
+                        return "❌ No vocab files found in ready/ directory!\nPlease create dataset first."
+                    
+                    vocab_sizes = {}
+                    for vf in vocab_files:
+                        try:
+                            with open(vf, 'r', encoding='utf-8') as f:
+                                vocab_data = json.load(f)
+                                size = len(vocab_data['model']['vocab'])
+                                vocab_sizes[vf.name] = size
+                        except:
+                            vocab_sizes[vf.name] = "Error reading"
+                    
+                    result.append("\n📚 **Vocabulary Files:**")
+                    for name, size in vocab_sizes.items():
+                        result.append(f"  • {name}: {size} tokens")
+                    
+                    # Check if sizes match
+                    unique_sizes = set(s for s in vocab_sizes.values() if isinstance(s, int))
+                    if len(unique_sizes) == 1:
+                        result.append(f"\n✅ All vocab files have matching size: {unique_sizes.pop()} tokens")
+                    else:
+                        result.append(f"\n⚠️  WARNING: Vocab files have different sizes! This will cause errors!")
+                        result.append(f"   Sizes found: {unique_sizes}")
+                    
+                    # Check dataset
+                    if train_csv and os.path.exists(train_csv):
+                        try:
+                            df = pd.read_csv(train_csv, sep='|')
+                            result.append(f"\n🎙️ **Dataset Information:**")
+                            result.append(f"  • Training samples: {len(df)}")
+                            
+                            # Check if text is Amharic or phonemes
+                            if len(df) > 0:
+                                sample_text = df.iloc[0]['text'] if 'text' in df.columns else ""
+                                has_amharic = any(ord(c) >= 0x1200 and ord(c) <= 0x137F for c in sample_text[:50])
+                                has_ipa = any(c in sample_text for c in ['ə', 'ɨ', 'ʔ', 'ː'])
+                                
+                                if has_amharic and not has_ipa:
+                                    result.append(f"  • Text format: Raw Amharic characters")
+                                    result.append(f"    ➡️ ENABLE G2P for training!")
+                                elif has_ipa:
+                                    result.append(f"  • Text format: IPA phonemes")
+                                    result.append(f"    ➡️ G2P already applied, disable for training")
+                                else:
+                                    result.append(f"  • Text format: Unknown/Other")
+                        except Exception as e:
+                            result.append(f"\n⚠️  Error reading dataset: {e}")
+                    else:
+                        result.append(f"\n⚠️  Train CSV not found or not specified")
+                    
+                    result.append("\n" + "="*50)
+                    result.append("💡 **Recommendation:**")
+                    if len(unique_sizes) > 1:
+                        result.append("  ⚠️  Fix vocab mismatch before training!")
+                        result.append("  ➡️ Use: python create_7536_vocab.py (if needed)")
+                    else:
+                        result.append("  ✅ Ready to train with current configuration!")
+                    
+                    return "\n".join(result)
+                    
+                except Exception as e:
+                    return f"❌ Error checking vocab: {str(e)}"
             
             def train_model(custom_model, version, language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length, save_step=1000, save_n_checkpoints=1, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False, enable_amharic_g2p=False, g2p_backend_train="transphone"):
                 clear_gpu_cache()
@@ -1773,6 +1864,12 @@ if __name__ == "__main__":
                     eval_csv,
                     lang
                 ]
+            )
+            
+            check_vocab_btn.click(
+                fn=check_vocab_and_dataset,
+                inputs=[out_path, train_csv],
+                outputs=[vocab_info_display]
             )
 
 

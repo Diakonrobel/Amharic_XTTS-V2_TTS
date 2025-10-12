@@ -343,17 +343,17 @@ def process_srt_with_media_vad(
     elif media_ext in audio_extensions:
         if media_ext != '.wav':
             temp_audio_path = output_path / f"{Path(media_path).stem}_converted.wav"
+            
             if not srt_processor.extract_audio_from_video(media_path, str(temp_audio_path)):
                 raise RuntimeError("Failed to convert audio")
             audio_path = str(temp_audio_path)
         else:
-audio_path = media_path
+            audio_path = media_path
     else:
         raise ValueError(f"Unsupported media format: {media_ext}")
     
     # Canonicalize language for dataset artifacts
     language = canonical_lang(language)
-
     # Extract segments with VAD
     mode_str = "VAD-enhanced" if use_vad_refinement else "standard"
     print(f"Step 3: Extracting audio segments ({mode_str})...")

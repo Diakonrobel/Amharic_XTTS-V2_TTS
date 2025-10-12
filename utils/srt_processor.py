@@ -367,7 +367,7 @@ def process_srt_with_media(
     Returns:
         Tuple of (train_csv_path, eval_csv_path, total_audio_duration)
     """
-output_path = Path(output_dir)
+    output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
     # Canonicalize language for dataset artifacts

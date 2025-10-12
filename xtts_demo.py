@@ -1329,6 +1329,14 @@ if __name__ == "__main__":
                 with gr.Row():
                     train_csv = gr.Textbox(label="Train CSV Path", placeholder="Auto-filled after loading", scale=2)
                     eval_csv = gr.Textbox(label="Eval CSV Path", placeholder="Auto-filled after loading", scale=2)
+                with gr.Row():
+                    lang = gr.Dropdown(
+                        label="🌍 Dataset Language",
+                        value="amh",
+                        choices=["ar", "cs", "de", "en", "es", "fr", "hu", "it", "ja", "ko", "nl", "pl", "pt", "ru", "tr", "zh-cn", "amh", "am"],
+                        info="Use 'amh' for Amharic (auto-loaded from dataset)",
+                        scale=2
+                    )
                     version = gr.Dropdown(
                         label="XTTS Version",
                         value="v2.0.2",

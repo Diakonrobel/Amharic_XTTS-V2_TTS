@@ -23,9 +23,22 @@ def create_matching_vocab(input_vocab_path, output_vocab_path):
     with open(input_vocab_path, 'r', encoding='utf-8') as f:
         vocab_data = json.load(f)
     
-    vocab_list = vocab_data['model']['vocab']
-    current_size = len(vocab_list)
+    # Handle both dict and list vocab structures
+    vocab_model = vocab_data['model']['vocab']
     
+    # Convert dict to list if necessary
+    if isinstance(vocab_model, dict):
+        print("   Vocab structure: dictionary")
+        # Dict vocab has char->id mapping
+        vocab_list = list(vocab_model.keys())
+    elif isinstance(vocab_model, list):
+        print("   Vocab structure: list")
+        vocab_list = vocab_model
+    else:
+        print(f"   ❌ Unexpected vocab type: {type(vocab_model)}")
+        return
+    
+    current_size = len(vocab_list)
     print(f"   Current size: {current_size} tokens")
     
     if current_size == 7536:
@@ -39,16 +52,25 @@ def create_matching_vocab(input_vocab_path, output_vocab_path):
     
     # Identify what was added (likely the last token)
     print(f"\n🔍 Last 5 tokens in vocab:")
-    for i, token in enumerate(vocab_list[-5:], start=len(vocab_list)-5):
+    last_5 = vocab_list[-5:] if len(vocab_list) >= 5 else vocab_list
+    for i, token in enumerate(last_5, start=max(0, len(vocab_list)-5)):
         print(f"   [{i}] {repr(token)}")
     
     # Remove the last token
     new_vocab_list = vocab_list[:-1]
     print(f"\n✂️  Removing last token: {repr(vocab_list[-1])}")
     
-    # Create new vocab data
-    new_vocab_data = vocab_data.copy()
-    new_vocab_data['model']['vocab'] = new_vocab_list
+    # Create new vocab data - preserve original structure
+    import copy
+    new_vocab_data = copy.deepcopy(vocab_data)
+    
+    if isinstance(vocab_model, dict):
+        # Rebuild dict with new list
+        new_vocab_dict = {char: idx for idx, char in enumerate(new_vocab_list)}
+        new_vocab_data['model']['vocab'] = new_vocab_dict
+    else:
+        # Just use the list
+        new_vocab_data['model']['vocab'] = new_vocab_list
     
     print(f"   New size: {len(new_vocab_list)} tokens")
     

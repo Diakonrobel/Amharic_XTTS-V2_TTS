@@ -217,51 +217,11 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
         try:
             XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, speaker_file_path=xtts_speaker, use_deepspeed=False)
         except Exception as std_err:
-            # Try to adjust vocab to checkpoint size and retry standard load
+            print(f" > Standard load failed: {std_err}")
+            print(f" > Attempting robust manual loading...")
+            # Fallback path: initialize model and load checkpoint manually, ignoring text embedding/head mismatches
+            XTTS_MODEL = Xtts.init_from_config(config)
             try:
-                import json as _json
-                checkpoint = torch.load(xtts_checkpoint, map_location="cpu", weights_only=False)
-                state_dict = checkpoint.get("model", checkpoint)
-                # Infer checkpoint vocab size from known keys
-                ckpt_vocab_size = None
-                for k, v in state_dict.items():
-                    if isinstance(v, torch.Tensor) and v.ndim == 2 and (k.endswith('text_embedding.weight') or k.endswith('wte.weight') or k.endswith('embeddings.weight')):
-                        ckpt_vocab_size = v.shape[0]
-                        break
-                if ckpt_vocab_size:
-                    from pathlib import Path as _Path
-                    vocab_path_obj = _Path(xtts_vocab)
-                    with open(vocab_path_obj, 'r', encoding='utf-8') as _f:
-                        vocab_json = _json.load(_f)
-                    vocab_dict = vocab_json.get('model', {}).get('vocab')
-                    if isinstance(vocab_dict, dict):
-                        # In HF tokenizers JSON, vocab is token->id mapping
-                        # Trim to checkpoint size by keeping lowest ids
-                        items = sorted(((tok, idx) for tok, idx in vocab_dict.items()), key=lambda x: x[1])
-                        trimmed = items[:ckpt_vocab_size]
-                        new_vocab = {tok: idx for idx, (tok, _) in enumerate(trimmed)}
-                        # Remap ids to 0..ckpt_vocab_size-1 in order
-                        # Also adjust added_tokens if present
-                        vocab_json['model']['vocab'] = new_vocab
-                        adjusted_path = str(vocab_path_obj.parent / 'vocab_adjusted.json')
-                        with open(adjusted_path, 'w', encoding='utf-8') as _fw:
-                            _json.dump(vocab_json, _fw, ensure_ascii=False, indent=2)
-                        print(f" > Created adjusted vocab to match checkpoint: {adjusted_path}")
-                        # Retry standard load with adjusted vocab
-                        XTTS_MODEL = Xtts.init_from_config(config)
-                        XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=adjusted_path, speaker_file_path=xtts_speaker, use_deepspeed=False)
-                        xtts_vocab = adjusted_path
-                        print(" > ✅ Standard load succeeded with adjusted vocab")
-                    else:
-                        raise RuntimeError("Unexpected vocab format in tokenizer JSON")
-                else:
-                    raise RuntimeError("Could not infer checkpoint vocab size")
-            except Exception as adjust_err:
-                print(f" > Adjusted vocab load failed: {adjust_err}")
-                print(f" > Attempting robust manual loading...")
-                # Fallback path: initialize model and load checkpoint manually, ignoring text embedding/head mismatches
-                XTTS_MODEL = Xtts.init_from_config(config)
-                try:
                     # Load checkpoint and vocab sizes
                     import json as _json
                     checkpoint = torch.load(xtts_checkpoint, map_location="cpu", weights_only=False)

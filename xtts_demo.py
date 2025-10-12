@@ -300,19 +300,19 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
                     # IPA markers to detect phoneme strings
                     ipa_markers = ('ə', 'ɨ', 'ʔ', 'ʕ', 'ʷ', 'ː', 'ʼ', 'ʃ', 'ʧ', 'ʤ', 'ɲ')
 
-                    # Protect IPA for Amharic ('am') and also when routed via 'en' in phoneme mode
-                    if base_lang in ('am', 'en'):
+                    # Treat Amharic codes ('am','amh') and 'en' specially
+                    if base_lang in ('am', 'amh', 'en'):
+                        # If looks like IPA, return unchanged (already phonemized)
                         try:
                             if txt and any(marker in txt for marker in ipa_markers):
                                 return txt
                         except Exception:
                             pass
-                        # For 'am' without clear IPA, try 'amh' cleaner path
-                        if base_lang == 'am':
-                            try:
-                                return _orig_preprocess(txt, 'amh')
-                            except Exception:
-                                return txt
+                        # Fallback: use English cleaner to avoid NotImplementedError for 'amh'/'am'
+                        try:
+                            return _orig_preprocess(txt, 'en')
+                        except Exception:
+                            return txt
 
                     # Default behavior for all other cases
                     return _orig_preprocess(txt, lang)
@@ -360,7 +360,8 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
             print(f" > Original text: {tts_text[:50]}{'...' if len(tts_text) > 50 else ''}")
             tokenizer = create_xtts_tokenizer(use_phonemes=True, g2p_backend=resolved_backend)
             original_text = tts_text
-            tts_text = tokenizer.preprocess_text(tts_text, lang=lang)
+            _g2p_lang = 'am' if lang in ('am', 'amh') else lang
+            tts_text = tokenizer.preprocess_text(tts_text, lang=_g2p_lang)
             print(f" > Converted to phonemes: {tts_text[:100]}{'...' if len(tts_text) > 100 else ''}")
             
             # Validate G2P conversion worked
@@ -388,13 +389,21 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
         print(f" > Language normalization: {lang} → {lang_norm}")
     else:
         print(f" > Using language: {lang_norm}")
-    
-    gpt_cond_latent, speaker_embedding = XTTS_MODEL.get_conditioning_latents(audio_path=speaker_audio_file, gpt_cond_len=XTTS_MODEL.config.gpt_cond_len, max_ref_length=XTTS_MODEL.config.max_ref_len, sound_norm_refs=XTTS_MODEL.config.sound_norm_refs)
-    
+
+    # Use 'am' for XTTS inference API when Amharic selected to avoid upstream NotImplementedError
+    _inference_lang = 'am' if lang_norm in ('am', 'amh') else lang_norm
+
+    gpt_cond_latent, speaker_embedding = XTTS_MODEL.get_conditioning_latents(
+        audio_path=speaker_audio_file,
+        gpt_cond_len=XTTS_MODEL.config.gpt_cond_len,
+        max_ref_length=XTTS_MODEL.config.max_ref_len,
+        sound_norm_refs=XTTS_MODEL.config.sound_norm_refs
+    )
+
     if use_config:
         out = XTTS_MODEL.inference(
             text=tts_text,
-            language=lang_norm,
+            language=_inference_lang,
             gpt_cond_latent=gpt_cond_latent,
             speaker_embedding=speaker_embedding,
             temperature=XTTS_MODEL.config.temperature, # Add custom parameters here
@@ -402,12 +411,12 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
             repetition_penalty=XTTS_MODEL.config.repetition_penalty,
             top_k=XTTS_MODEL.config.top_k,
             top_p=XTTS_MODEL.config.top_p,
-            enable_text_splitting = True
+            enable_text_splitting=True
         )
     else:
         out = XTTS_MODEL.inference(
             text=tts_text,
-            language=lang_norm,
+            language=_inference_lang,
             gpt_cond_latent=gpt_cond_latent,
             speaker_embedding=speaker_embedding,
             temperature=temperature, # Add custom parameters here
@@ -415,7 +424,7 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
             repetition_penalty=float(repetition_penalty),
             top_k=top_k,
             top_p=top_p,
-            enable_text_splitting = sentence_split
+            enable_text_splitting=sentence_split
         )
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as fp:

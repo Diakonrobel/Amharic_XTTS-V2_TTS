@@ -335,17 +335,39 @@ def load_params_tts(out_path,version):
     vocab_extended_path_amharic = ready_model_path / "vocab_extended_amharic.json"
     vocab_path = ready_model_path / "vocab.json"
 
+    extended_vocab_found = False
     if vocab_extended_path_amharic.exists():
         vocab_path = vocab_extended_path_amharic
+        extended_vocab_found = True
         print(" > Found extended vocabulary (Amharic): vocab_extended_amharic.json")
     elif vocab_extended_path_legacy.exists():
         vocab_path = vocab_extended_path_legacy
+        extended_vocab_found = True
         print(" > Found extended vocabulary (legacy): vocab_extended.json")
     elif vocab_path.exists():
         print(" > Using standard vocabulary")
     else:
         return "Vocabulary file not found", "", "", "", "", ""
     
+    # Ensure a minimal training_meta.json exists (for inference auto settings)
+    try:
+        import json as _json
+        training_meta_path = ready_model_path / "training_meta.json"
+        if not training_meta_path.exists():
+            amharic_meta = {
+                "g2p_training_enabled": bool(extended_vocab_found),
+                "g2p_backend": "transphone" if extended_vocab_found else None,
+                # If G2P was used, tokenizer language during training was effectively 'en'
+                # Otherwise, default to 'amh' for Amharic context in this WebUI
+                "effective_language": "en" if extended_vocab_found else "amh",
+                "vocab_used": "extended" if extended_vocab_found else "standard",
+            }
+            with open(training_meta_path, "w", encoding="utf-8") as _f:
+                _json.dump({"amharic": amharic_meta}, _f, indent=2, ensure_ascii=False)
+            print(" > Created training metadata at ready/training_meta.json (inferred)")
+    except Exception as _e:
+        print(f" > Warning: Could not create training metadata: {_e}")
+
     config_path = ready_model_path / "config.json"
     speaker_path =  ready_model_path / "speakers_xtts.pth"
     reference_path  = ready_model_path / "reference.wav"

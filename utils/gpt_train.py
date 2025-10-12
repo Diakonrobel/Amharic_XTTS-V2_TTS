@@ -126,6 +126,7 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     # Accept both 'am' and 'amh' for G2P
     amharic_g2p_enabled = use_amharic_g2p and language in ["am", "amh", "en"]
     effective_language = language  # Will be updated if G2P preprocessing is applied
+    dataset_already_phonemes = False  # Track if dataset is already phonemes
     
     # Extended vocabulary path (will be created if G2P enabled)
     extended_vocab_path = None
@@ -145,11 +146,14 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
                 print(" > Dataset is already preprocessed with phonemes")
                 print(" > Switching language code to 'en' for XTTS tokenizer")
                 effective_language = "en"
+                dataset_already_phonemes = True  # Mark as already preprocessed
             else:
                 print(" > Dataset contains Amharic script - will convert to phonemes")
                 effective_language = language  # Keep original for now, will be updated after loading
+                dataset_already_phonemes = False  # Needs preprocessing
         except Exception as e:
             print(f" > Warning: Could not check dataset preprocessing status: {e}")
+            dataset_already_phonemes = False  # Assume needs preprocessing on error
         
         # Extend vocabulary with Amharic tokens
         print(" > Extending XTTS vocabulary with Amharic tokens...")
@@ -341,9 +345,11 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         eval_split_size=config.eval_split_size,
     )
     
-    # Apply G2P preprocessing if enabled and needed
-    if amharic_g2p_enabled and effective_language != "en":
+    # Apply G2P preprocessing if enabled and dataset is NOT already phonemes
+    if amharic_g2p_enabled and not dataset_already_phonemes:
         print(" > Applying Amharic G2P preprocessing to training data...")
+        print(f" > Current effective_language: '{effective_language}'")
+        print(f" > Will convert Amharic text → IPA phonemes")
         try:
             from utils.amharic_g2p_dataset_wrapper import apply_g2p_to_training_data
             
@@ -354,7 +360,7 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
                 train_csv_path=train_csv,
                 eval_csv_path=eval_csv,
                 language=language,
-                g2p_backend="transphone"
+                g2p_backend="rule_based"  # Use rule_based for reliability
             )
             
             # Update effective language
@@ -364,12 +370,16 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
             # Update dataset config language
             config_dataset.language = effective_language
             print(f" > Dataset config language updated to: '{effective_language}'")
+            print(f" > ✅ G2P preprocessing completed successfully!")
             
         except Exception as e:
-            print(f" > ERROR: G2P preprocessing failed: {e}")
+            print(f" > ❌ ERROR: G2P preprocessing failed: {e}")
             print(" > Training will continue with original data - may fail with UNK tokens!")
             import traceback
             traceback.print_exc()
+    elif amharic_g2p_enabled and dataset_already_phonemes:
+        print(" > ✅ Dataset already contains phonemes - skipping G2P conversion")
+        print(f" > Using language code: '{effective_language}'")
 
     # init the trainer and 🚀
     trainer = Trainer(

@@ -188,39 +188,10 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
                 # Ensure gpt_inference compatibility proxy exists
                 try:
                     if hasattr(XTTS_MODEL, 'gpt') and not hasattr(XTTS_MODEL.gpt, 'gpt_inference'):
-                        # For legacy checkpoints, gpt_inference should reference the main GPT model
-                        # which in XTTS has the transformer attribute that's a GPT2LMHeadModel
-                        from transformers import GPT2LMHeadModel, GPT2Config
-                        
-                        # Try to find or create the LM head model
-                        if hasattr(XTTS_MODEL.gpt, 'gpt') and hasattr(XTTS_MODEL.gpt.gpt, 'transformer'):
-                            # Modern XTTS structure: gpt.gpt.transformer is GPT2LMHeadModel
-                            XTTS_MODEL.gpt.gpt_inference = XTTS_MODEL.gpt.gpt
-                            print(" > ✅ Created compatibility proxy for gpt_inference (using gpt.gpt)")
-                        elif hasattr(XTTS_MODEL.gpt, 'transformer'):
-                            # Alternative structure
-                            XTTS_MODEL.gpt.gpt_inference = XTTS_MODEL.gpt
-                            print(" > ✅ Created compatibility proxy for gpt_inference (using gpt directly)")
-                        else:
-                            # Fallback: create a wrapper that ensures generate() is available
-                            class _InferenceProxy:
-                                def __init__(self, gpt_model):
-                                    self._gpt = gpt_model
-                                    self.prefix_emb = None
-                                def store_prefix_emb(self, emb):
-                                    self.prefix_emb = emb
-                                def generate(self, *args, **kwargs):
-                                    # Forward to the transformer or gpt component that has LM head
-                                    if hasattr(self._gpt, 'gpt') and hasattr(self._gpt.gpt, 'generate'):
-                                        return self._gpt.gpt.generate(*args, **kwargs)
-                                    elif hasattr(self._gpt, 'transformer') and hasattr(self._gpt.transformer, 'generate'):
-                                        return self._gpt.transformer.generate(*args, **kwargs)
-                                    else:
-                                        raise AttributeError("Cannot find generate() method in GPT model structure")
-                                def __getattr__(self, name):
-                                    return getattr(self._gpt, name)
-                            XTTS_MODEL.gpt.gpt_inference = _InferenceProxy(XTTS_MODEL.gpt)
-                            print(" > ✅ Created compatibility proxy for gpt_inference (with generate() wrapper)")
+                        # For legacy checkpoints, gpt_inference should just point to the main GPT model itself
+                        # The GPT wrapper class in XTTS already has the generate() method
+                        XTTS_MODEL.gpt.gpt_inference = XTTS_MODEL.gpt
+                        print(" > ✅ Created compatibility proxy for gpt_inference (aliased to main gpt)")
                 except Exception as _e:
                     print(f" > ⚠️ Could not create gpt_inference proxy: {_e}")
                 print(f" > ✅ Checkpoint loaded (manual) and embeddings expanded to {vocab_size} tokens")
@@ -326,39 +297,10 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
                     # Ensure gpt_inference compatibility proxy exists
                     try:
                         if hasattr(XTTS_MODEL, 'gpt') and not hasattr(XTTS_MODEL.gpt, 'gpt_inference'):
-                            # For legacy checkpoints, gpt_inference should reference the main GPT model
-                            # which in XTTS has the transformer attribute that's a GPT2LMHeadModel
-                            from transformers import GPT2LMHeadModel, GPT2Config
-                            
-                            # Try to find or create the LM head model
-                            if hasattr(XTTS_MODEL.gpt, 'gpt') and hasattr(XTTS_MODEL.gpt.gpt, 'transformer'):
-                                # Modern XTTS structure: gpt.gpt.transformer is GPT2LMHeadModel
-                                XTTS_MODEL.gpt.gpt_inference = XTTS_MODEL.gpt.gpt
-                                print(" > ✅ Created compatibility proxy for gpt_inference (using gpt.gpt)")
-                            elif hasattr(XTTS_MODEL.gpt, 'transformer'):
-                                # Alternative structure
-                                XTTS_MODEL.gpt.gpt_inference = XTTS_MODEL.gpt
-                                print(" > ✅ Created compatibility proxy for gpt_inference (using gpt directly)")
-                            else:
-                                # Fallback: create a wrapper that ensures generate() is available
-                                class _InferenceProxy:
-                                    def __init__(self, gpt_model):
-                                        self._gpt = gpt_model
-                                        self.prefix_emb = None
-                                    def store_prefix_emb(self, emb):
-                                        self.prefix_emb = emb
-                                    def generate(self, *args, **kwargs):
-                                        # Forward to the transformer or gpt component that has LM head
-                                        if hasattr(self._gpt, 'gpt') and hasattr(self._gpt.gpt, 'generate'):
-                                            return self._gpt.gpt.generate(*args, **kwargs)
-                                        elif hasattr(self._gpt, 'transformer') and hasattr(self._gpt.transformer, 'generate'):
-                                            return self._gpt.transformer.generate(*args, **kwargs)
-                                        else:
-                                            raise AttributeError("Cannot find generate() method in GPT model structure")
-                                    def __getattr__(self, name):
-                                        return getattr(self._gpt, name)
-                                XTTS_MODEL.gpt.gpt_inference = _InferenceProxy(XTTS_MODEL.gpt)
-                                print(" > ✅ Created compatibility proxy for gpt_inference (with generate() wrapper)")
+                            # For legacy checkpoints, gpt_inference should just point to the main GPT model itself
+                            # The GPT wrapper class in XTTS already has the generate() method
+                            XTTS_MODEL.gpt.gpt_inference = XTTS_MODEL.gpt
+                            print(" > ✅ Created compatibility proxy for gpt_inference (aliased to main gpt)")
                     except Exception as _e:
                         print(f" > ⚠️ Could not create gpt_inference proxy: {_e}")
                     print(f" > ✅ Manual load successful with vocab size {vocab_size} (ckpt tokens: {checkpoint_vocab_size or 'unknown'})")

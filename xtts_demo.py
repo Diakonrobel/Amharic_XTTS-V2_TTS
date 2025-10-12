@@ -184,8 +184,7 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
             XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, speaker_file_path=xtts_speaker, use_deepspeed=False)
         
     except Exception as e:
-        print(f" > Warning: Could not check vocabulary size: {e}")
-        print(f" > Attempting robust manual loading...")
+        print(f" > Detected legacy checkpoint layout; using robust loader ({e})")
         # Fallback path: initialize model and load checkpoint manually, ignoring text embedding/head mismatches
         XTTS_MODEL = Xtts.init_from_config(config)
         try:

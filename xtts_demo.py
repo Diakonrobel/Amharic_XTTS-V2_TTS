@@ -34,6 +34,10 @@ from TTS.tts.models.xtts import Xtts
 
 import requests
 from utils.lang_norm import canonical_lang, is_amharic
+try:
+    from tokenizers import Tokenizer as HFTokenizer
+except Exception:
+    HFTokenizer = None
 
 def download_file(url, destination):
     try:
@@ -174,6 +178,13 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
                 # Replace layers
                 XTTS_MODEL.gpt.text_embedding = new_text_embedding
                 XTTS_MODEL.gpt.text_head = new_text_head
+                # Ensure internal tokenizer is initialized from vocab
+                try:
+                    if HFTokenizer and hasattr(XTTS_MODEL, 'tokenizer') and getattr(XTTS_MODEL.tokenizer, 'tokenizer', None) is None:
+                        XTTS_MODEL.tokenizer.tokenizer = HFTokenizer.from_file(xtts_vocab)
+                        print(" > ✅ Initialized internal tokenizer from vocab file")
+                except Exception as _e:
+                    print(f" > ⚠️ Could not init internal tokenizer: {_e}")
                 print(f" > ✅ Checkpoint loaded (manual) and embeddings expanded to {vocab_size} tokens")
             else:
                 # Sizes now match; proceed with standard load
@@ -260,6 +271,13 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
                 # Replace layers on model
                 XTTS_MODEL.gpt.text_embedding = new_text_embedding
                 XTTS_MODEL.gpt.text_head = new_text_head
+                # Ensure internal tokenizer is initialized from vocab
+                try:
+                    if HFTokenizer and hasattr(XTTS_MODEL, 'tokenizer') and getattr(XTTS_MODEL.tokenizer, 'tokenizer', None) is None:
+                        XTTS_MODEL.tokenizer.tokenizer = HFTokenizer.from_file(xtts_vocab)
+                        print(" > ✅ Initialized internal tokenizer from vocab file")
+                except Exception as _e:
+                    print(f" > ⚠️ Could not init internal tokenizer: {_e}")
                 print(f" > ✅ Manual load successful with vocab size {vocab_size} (ckpt tokens: {checkpoint_vocab_size or 'unknown'})")
             else:
                 print(" > ⚠️ Model does not expose gpt module; manual embedding resize skipped")

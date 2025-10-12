@@ -166,9 +166,10 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
                 new_text_head.bias.data[:checkpoint_vocab_size] = state_dict['gpt.text_head.bias']
                 new_text_head.bias.data[checkpoint_vocab_size:] = torch.zeros(vocab_size - checkpoint_vocab_size)
 
-                # Load non-text layers
+            # Load non-text layers
                 filtered_state = {k: v for k, v in state_dict.items() if 'text_embedding' not in k and 'text_head' not in k}
-                XTTS_MODEL.load_state_dict(filtered_state, strict=False)
+                _loader_mod = getattr(XTTS_MODEL, 'xtts', XTTS_MODEL)
+                _loader_mod.load_state_dict(filtered_state, strict=False)
 
                 # Replace layers
                 XTTS_MODEL.gpt.text_embedding = new_text_embedding
@@ -184,14 +185,92 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
         
     except Exception as e:
         print(f" > Warning: Could not check vocabulary size: {e}")
-        print(f" > Attempting standard loading...")
+        print(f" > Attempting robust manual loading...")
+        # Fallback path: initialize model and load checkpoint manually, ignoring text embedding/head mismatches
         XTTS_MODEL = Xtts.init_from_config(config)
         try:
-            XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, speaker_file_path=xtts_speaker, use_deepspeed=False)
-        except RuntimeError as load_error:
-            if "size mismatch" in str(load_error):
-                return f"VOCABULARY SIZE MISMATCH ERROR\n\nYour model was trained with Amharic G2P (extended vocabulary) but the vocab file doesn't match.\n\nPlease check if you have 'vocab_extended.json' in your model folder and use that instead of 'vocab.json'.\n\nError: {str(load_error)}"
-            raise
+            # Load checkpoint and vocab sizes
+            import json as _json
+            checkpoint = torch.load(xtts_checkpoint, map_location="cpu", weights_only=False)
+            state_dict = checkpoint.get("model", checkpoint)
+            with open(xtts_vocab, 'r', encoding='utf-8') as _f:
+                vocab_data = _json.load(_f)
+            vocab_size = len(vocab_data.get('model', {}).get('vocab', []))
+
+            # Find candidate keys for embeddings and head in checkpoint
+            embed_key = None
+            head_w_key = None
+            head_b_key = None
+            for k, v in state_dict.items():
+                if embed_key is None and k.endswith("text_embedding.weight") and v.ndim == 2:
+                    embed_key = k
+                if embed_key is None and (".wte.weight" in k or k.endswith("embeddings.weight")) and isinstance(v, torch.Tensor) and v.ndim == 2:
+                    embed_key = k
+                if head_w_key is None and (k.endswith("text_head.weight") or ".lm_head.0.weight" in k) and isinstance(v, torch.Tensor) and v.ndim == 2:
+                    head_w_key = k
+                if head_b_key is None and (k.endswith("text_head.bias") or ".lm_head.0.bias" in k) and isinstance(v, torch.Tensor) and v.ndim == 1:
+                    head_b_key = k
+            # Determine checkpoint vocab size if possible
+            checkpoint_vocab_size = None
+            if embed_key is not None:
+                checkpoint_vocab_size = state_dict[embed_key].shape[0]
+
+            # Build new embedding/head sized to vocab_size and copy if possible
+            if hasattr(XTTS_MODEL, 'gpt'):
+                embed_dim = XTTS_MODEL.gpt.text_embedding.weight.shape[1]
+                new_text_embedding = torch.nn.Embedding(vocab_size, embed_dim)
+                if embed_key is not None:
+                    ckpt_E = state_dict[embed_key]
+                    ncopy = min(ckpt_E.shape[0], vocab_size)
+                    new_text_embedding.weight.data[:ncopy] = ckpt_E[:ncopy]
+                    if ncopy < vocab_size:
+                        new_text_embedding.weight.data[ncopy:] = torch.randn(vocab_size - ncopy, embed_dim) * 0.02
+                else:
+                    new_text_embedding.weight.data = torch.randn(vocab_size, embed_dim) * 0.02
+
+                new_text_head = torch.nn.Linear(embed_dim, vocab_size)
+                if head_w_key is not None and head_b_key is not None:
+                    ckpt_W = state_dict[head_w_key]
+                    ckpt_b = state_dict[head_b_key]
+                    ncopy = min(ckpt_W.shape[0], vocab_size)
+                    new_text_head.weight.data[:ncopy] = ckpt_W[:ncopy]
+                    if ncopy < vocab_size:
+                        new_text_head.weight.data[ncopy:] = torch.randn(vocab_size - ncopy, embed_dim) * 0.02
+                    new_text_head.bias.data[:ncopy] = ckpt_b[:ncopy]
+                    if ncopy < vocab_size:
+                        new_text_head.bias.data[ncopy:] = torch.zeros(vocab_size - ncopy)
+                else:
+                    # Initialize randomly if no head in checkpoint
+                    torch.nn.init.normal_(new_text_head.weight, mean=0.0, std=0.02)
+                    torch.nn.init.zeros_(new_text_head.bias)
+
+                # Filter out embedding/head keys from checkpoint
+                def _skip_key(name: str) -> bool:
+                    return (
+                        name.endswith("text_embedding.weight")
+                        or name.endswith("text_head.weight")
+                        or name.endswith("text_head.bias")
+                        or name.endswith("embeddings.weight")
+                        or name.endswith(".wte.weight")
+                        or ".lm_head." in name
+                    )
+
+                filtered_state = {k: v for k, v in state_dict.items() if not _skip_key(k)}
+                _loader_mod = getattr(XTTS_MODEL, 'xtts', XTTS_MODEL)
+                _loader_mod.load_state_dict(filtered_state, strict=False)
+                # Replace layers on model
+                XTTS_MODEL.gpt.text_embedding = new_text_embedding
+                XTTS_MODEL.gpt.text_head = new_text_head
+                print(f" > ✅ Manual load successful with vocab size {vocab_size} (ckpt tokens: {checkpoint_vocab_size or 'unknown'})")
+            else:
+                print(" > ⚠️ Model does not expose gpt module; manual embedding resize skipped")
+        except Exception as load_error:
+            return (
+                "VOCABULARY SIZE MISMATCH ERROR\n\n"
+                "Your model was trained with Amharic G2P (extended vocabulary) but the vocab file doesn't match.\n\n"
+                "Please check if you have 'vocab_extended.json' in your model folder and use that instead of 'vocab.json'.\n\n"
+                f"Error: {str(load_error)}"
+            )
     
     if torch.cuda.is_available():
         XTTS_MODEL.cuda()

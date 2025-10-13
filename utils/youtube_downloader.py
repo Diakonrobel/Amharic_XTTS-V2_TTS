@@ -626,6 +626,14 @@ def download_youtube_video(
             print("Downloading audio...")
             result = ydl.extract_info(url, download=True)
             
+            # Check if extraction failed (YouTube blocking)
+            if result is None:
+                raise RuntimeError(
+                    f"YouTube blocked the request for {url}. "
+                    "This usually means YouTube is blocking the server's IP address. "
+                    "Try downloading on a different network or use local processing."
+                )
+            
             # Find downloaded files
             title = result.get('title', 'video')
             sanitized_title = yt_dlp.utils.sanitize_filename(title)

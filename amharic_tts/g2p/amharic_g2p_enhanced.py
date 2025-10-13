@@ -115,16 +115,37 @@ class EnhancedAmharicG2P:
         if G2PBackend.TRANSPHONE in backend_order:
             try:
                 from transphone import read_g2p
-                self.transphone_g2p = read_g2p('amh')
-                logger.info("✅ Transphone backend initialized")
-            except ImportError:
-                logger.warning("⚠️  Transphone not available")
-                self.transphone_g2p = None
                 
+                # Try multiple language codes for Amharic
+                transphone_codes = ['amh', 'am', 'AM', 'AMH']
+                transphone_loaded = False
+                
+                for code in transphone_codes:
+                    try:
+                        self.transphone_g2p = read_g2p(code)
+                        transphone_loaded = True
+                        logger.info(f"✅ Transphone backend initialized (code: '{code}')")
+                        print(f" > ✅ Transphone G2P loaded successfully (language code: '{code}')")
+                        break
+                    except Exception as code_err:
+                        logger.debug(f"Code '{code}' failed: {code_err}")
+                        continue
+                
+                if not transphone_loaded:
+                    raise RuntimeError(f"Could not load Transphone with any of these codes: {transphone_codes}")
+                    
+            except ImportError:
+                logger.warning("⚠️  Transphone not available (not installed)")
+                print(" > ⚠️  Transphone module not found - falling back to rule-based G2P")
+                self.transphone_g2p = None
                 # Offer to install Transphone (recommended)
                 self._offer_transphone_installation()
             except Exception as e:
-                logger.warning(f"⚠️  Transphone init failed: {e}")
+                logger.warning(f"⚠️  Transphone init failed: {type(e).__name__}: {e}")
+                print(f" > ⚠️  Transphone initialization error: {type(e).__name__}: {e}")
+                print(" > Falling back to rule-based G2P")
+                import traceback
+                traceback.print_exc()  # Print full stack trace for debugging
                 self.transphone_g2p = None
         
         # Initialize Epitran if in backend order

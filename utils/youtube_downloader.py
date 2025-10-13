@@ -609,22 +609,19 @@ def download_youtube_video(
     # Try to use browser cookies to bypass bot detection
     cookies_file = os.path.join(os.path.dirname(__file__), '..', 'youtube_cookies.txt')
     if os.path.exists(cookies_file):
-        print(f"Using cookies from file: {cookies_file}")
+        print(f"✓ Using cookies from file: {cookies_file}")
         ydl_opts['cookiefile'] = cookies_file
     else:
-        # Try to extract cookies from browser
-        print("Attempting to use browser cookies to bypass bot detection...")
-        for browser in ['chrome', 'firefox', 'edge', 'brave']:
-            try:
-                ydl_opts['cookiesfrombrowser'] = (browser,)
-                print(f"  Trying {browser} cookies...")
-                break
-            except Exception as e:
-                continue
-        
-        if ydl_opts['cookiesfrombrowser'] is None:
-            print("  ⚠ Could not access browser cookies")
-            print("  ⚠ If you get bot detection errors, export cookies to: youtube_cookies.txt")
+        # Don't use cookiesfrombrowser - it causes errors on headless servers
+        # Users should export cookies manually to youtube_cookies.txt
+        print("ℹ No youtube_cookies.txt found")
+        print("  If YouTube blocks requests, export cookies from your browser:")
+        print("  1. Install 'Get cookies.txt LOCALLY' extension (Chrome/Edge)")
+        print("  2. Visit YouTube.com and sign in")
+        print("  3. Export cookies and save as 'youtube_cookies.txt' in project root")
+        print("  See YOUTUBE_BOT_DETECTION_FIX.md for detailed instructions")
+        # Remove the cookiesfrombrowser option to avoid errors
+        if 'cookiesfrombrowser' in ydl_opts:
             del ydl_opts['cookiesfrombrowser']
     
     # Add subtitle options - make them optional with error handling

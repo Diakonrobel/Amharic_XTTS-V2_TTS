@@ -116,17 +116,20 @@ def preprocess_training_samples_with_g2p(
             
             # Check if text is Amharic
             if not detect_amharic_text(original_text):
-                # Not Amharic, keep as-is
-                preprocessed_samples.append(sample.copy())
+                # Not Amharic, keep as-is but update language to 'en' for consistency
+                new_sample = sample.copy()
+                new_sample["language"] = "en"  # Switch to 'en' for consistency
+                preprocessed_samples.append(new_sample)
                 skip_count += 1
                 continue
             
             # Convert to phonemes
             phoneme_text = g2p_tokenizer.preprocess_text(original_text, lang=language)
             
-            # Create new sample with phoneme text
+            # Create new sample with phoneme text AND update language to 'en'
             new_sample = sample.copy()
             new_sample["text"] = phoneme_text
+            new_sample["language"] = "en"  # CRITICAL: Switch to 'en' since phonemes use Latin alphabet
             preprocessed_samples.append(new_sample)
             success_count += 1
             

@@ -596,7 +596,36 @@ def download_youtube_video(
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }] if audio_only else [],
+        # Anti-bot detection measures
+        'extractor_retries': 5,
+        'fragment_retries': 5,
+        'retries': 10,
+        'sleep_interval': 3,
+        'max_sleep_interval': 8,
+        # Try to use browser cookies to bypass bot detection
+        'cookiesfrombrowser': None,  # Will be set dynamically
     }
+    
+    # Try to use browser cookies to bypass bot detection
+    cookies_file = os.path.join(os.path.dirname(__file__), '..', 'youtube_cookies.txt')
+    if os.path.exists(cookies_file):
+        print(f"Using cookies from file: {cookies_file}")
+        ydl_opts['cookiefile'] = cookies_file
+    else:
+        # Try to extract cookies from browser
+        print("Attempting to use browser cookies to bypass bot detection...")
+        for browser in ['chrome', 'firefox', 'edge', 'brave']:
+            try:
+                ydl_opts['cookiesfrombrowser'] = (browser,)
+                print(f"  Trying {browser} cookies...")
+                break
+            except Exception as e:
+                continue
+        
+        if ydl_opts['cookiesfrombrowser'] is None:
+            print("  ⚠ Could not access browser cookies")
+            print("  ⚠ If you get bot detection errors, export cookies to: youtube_cookies.txt")
+            del ydl_opts['cookiesfrombrowser']
     
     # Add subtitle options - make them optional with error handling
     if download_subtitles:
@@ -625,6 +654,20 @@ def download_youtube_video(
         with yt_dlp.YoutubeDL(opts_audio_only) as ydl:
             print("Downloading audio...")
             result = ydl.extract_info(url, download=True)
+            
+            # Check if result is None (failed extraction)
+            if result is None:
+                raise RuntimeError(
+                    "Failed to extract video information from YouTube.\n"
+                    "This is likely due to:\n"
+                    "  1. YouTube bot detection (Sign in to confirm you're not a bot)\n"
+                    "  2. Video is private, deleted, or region-locked\n"
+                    "  3. Invalid URL\n\n"
+                    "To fix bot detection:\n"
+                    "  - Export cookies from your browser (see YOUTUBE_BOT_DETECTION_FIX.md)\n"
+                    "  - Place cookies in: youtube_cookies.txt\n"
+                    "  - Or try again later (YouTube may temporarily block automated requests)"
+                )
             
             # Find downloaded files
             title = result.get('title', 'video')

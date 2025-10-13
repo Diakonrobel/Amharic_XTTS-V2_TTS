@@ -765,6 +765,25 @@ if __name__ == "__main__":
                             scale=1
                         )
                     
+                    with gr.Row():
+                        youtube_incremental_mode = gr.Checkbox(
+                            label="➕ Incremental Mode",
+                            value=False,
+                            info="Add to existing dataset (no overwrite)",
+                            scale=1
+                        )
+                        youtube_check_duplicates = gr.Checkbox(
+                            label="🔍 Skip Duplicates",
+                            value=True,
+                            info="Auto-detect and skip duplicate audio files",
+                            scale=1
+                        )
+                    
+                    gr.Markdown("""
+                    💡 **Tip**: Use *Incremental Mode* to grow your dataset over time by adding new videos without losing existing data.
+                    Perfect for building large datasets across multiple sessions!
+                    """)
+                    
                     download_youtube_btn = gr.Button(value="▶️ Download & Process", variant="primary", size="lg")
                     youtube_status = gr.Textbox(label="Status", interactive=False, lines=6, show_label=False)
                 
@@ -1021,10 +1040,11 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error processing SRT: {str(e)}"
             
-            def process_youtube_batch_urls(urls, transcript_lang, out_path, progress):
+            def process_youtube_batch_urls(urls, transcript_lang, out_path, incremental, check_duplicates, progress):
                 """Process multiple YouTube URLs in batch mode"""
                 try:
-                    progress(0, desc=f"Initializing batch processing for {len(urls)} videos...")
+                    mode_desc = "INCREMENTAL (adding to existing)" if incremental else "STANDARD (new dataset)"
+                    progress(0, desc=f"Initializing batch processing ({mode_desc}) for {len(urls)} videos...")
                     
                     # Process all videos
                     train_csv, eval_csv, video_infos = batch_processor.process_youtube_batch(
@@ -1033,7 +1053,9 @@ if __name__ == "__main__":
                         out_path=out_path,
                         youtube_downloader=youtube_downloader,
                         srt_processor=srt_processor,
-                        progress_callback=lambda p, desc: progress(p, desc=desc)
+                        progress_callback=lambda p, desc: progress(p, desc=desc),
+                        incremental=incremental,
+                        check_duplicates=check_duplicates
                     )
                     
                     # Count total segments
@@ -1062,7 +1084,11 @@ if __name__ == "__main__":
                     
                     # Format summary
                     summary = batch_processor.format_batch_summary(video_infos, total_segments)
-                    summary += "\n\nℹ This batch dataset has been saved to history."
+                    if incremental:
+                        summary += "\n\n✅ INCREMENTAL MODE: New data added to existing dataset!"
+                        summary += "\nℹ This batch dataset has been saved to history."
+                    else:
+                        summary += "\n\nℹ This batch dataset has been saved to history."
                     
                     progress(1.0, desc="Batch processing complete!")
                     return summary
@@ -1071,7 +1097,7 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error in batch processing: {str(e)}"
             
-            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, progress=gr.Progress(track_tqdm=True)):
+            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, incremental_mode, check_duplicates, progress=gr.Progress(track_tqdm=True)):
                 """Download YouTube video(s) and extract transcripts"""
                 try:
                     if not url:
@@ -1085,7 +1111,7 @@ if __name__ == "__main__":
                     
                     # Check if batch mode and multiple URLs
                     if batch_mode and len(urls) > 1:
-                        return process_youtube_batch_urls(urls, transcript_lang, out_path, progress)
+                        return process_youtube_batch_urls(urls, transcript_lang, out_path, incremental_mode, check_duplicates, progress)
                     
                     # Single URL processing (existing logic)
                     url = urls[0]  # Use first URL
@@ -1828,7 +1854,9 @@ if __name__ == "__main__":
                     youtube_transcript_lang,
                     lang,
                     out_path,
-                    youtube_batch_mode,  # Add batch mode parameter
+                    youtube_batch_mode,
+                    youtube_incremental_mode,  # Incremental mode
+                    youtube_check_duplicates,  # Skip duplicates
                 ],
                 outputs=[youtube_status],
             )

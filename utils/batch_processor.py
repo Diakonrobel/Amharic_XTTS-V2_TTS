@@ -12,6 +12,7 @@ from typing import List, Tuple, Optional, Dict
 import pandas as pd
 import shutil
 from utils.lang_norm import canonical_lang
+from utils.incremental_dataset_merger import merge_datasets_incremental
 
 
 def parse_youtube_urls(input_text: str) -> List[str]:
@@ -40,7 +41,9 @@ def parse_youtube_urls(input_text: str) -> List[str]:
 def merge_datasets(
     dataset_paths: List[str],
     output_dir: str,
-    remove_sources: bool = True
+    remove_sources: bool = True,
+    incremental: bool = False,
+    check_duplicates: bool = True
 ) -> Tuple[str, str, int]:
     """
     Merge multiple datasets into a single unified dataset.
@@ -49,10 +52,25 @@ def merge_datasets(
         dataset_paths: List of dataset directories to merge
         output_dir: Output directory for merged dataset
         remove_sources: Whether to remove source datasets after merging
+        incremental: If True, add to existing dataset; if False, create new dataset
+        check_duplicates: If True, skip duplicate audio files (only used in incremental mode)
         
     Returns:
         Tuple of (train_csv_path, eval_csv_path, total_segments)
     """
+    # Use incremental merger if requested
+    if incremental:
+        print(f"🔄 Using INCREMENTAL mode: Adding to existing dataset...")
+        train_csv, eval_csv, total_segments, stats = merge_datasets_incremental(
+            new_dataset_paths=dataset_paths,
+            base_dataset_path=output_dir,
+            check_duplicates=check_duplicates,
+            keep_sources=not remove_sources
+        )
+        return train_csv, eval_csv, total_segments
+    
+    # Standard merge (create new dataset)
+    print(f"📦 Using STANDARD mode: Creating new merged dataset...")
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
@@ -158,7 +176,9 @@ def process_youtube_batch(
     out_path: str,
     youtube_downloader,
     srt_processor,
-    progress_callback=None
+    progress_callback=None,
+    incremental: bool = False,
+    check_duplicates: bool = True
 ) -> Tuple[str, str, List[Dict]]:
     """
     Process multiple YouTube URLs and merge into single dataset.
@@ -170,6 +190,8 @@ def process_youtube_batch(
         youtube_downloader: YouTube downloader module
         srt_processor: SRT processor module
         progress_callback: Optional progress callback function
+        incremental: If True, add to existing dataset; if False, create new dataset
+        check_duplicates: If True, skip duplicate audio files (only for incremental mode)
         
     Returns:
         Tuple of (train_csv, eval_csv, list of video info dicts)
@@ -261,7 +283,9 @@ def process_youtube_batch(
     train_csv, eval_csv, total_segments = merge_datasets(
         dataset_paths=temp_datasets,
         output_dir=final_dataset_dir,
-        remove_sources=True
+        remove_sources=True,
+        incremental=incremental,
+        check_duplicates=check_duplicates
     )
     
     return train_csv, eval_csv, video_infos
@@ -307,7 +331,9 @@ def process_srt_media_batch(
     language: str,
     out_path: str,
     srt_processor,
-    progress_callback=None
+    progress_callback=None,
+    incremental: bool = False,
+    check_duplicates: bool = True
 ) -> Tuple[str, str, List[Dict]]:
     """
     Process multiple SRT+media file pairs in batch mode and merge into single dataset.
@@ -319,6 +345,8 @@ def process_srt_media_batch(
         out_path: Output base path
         srt_processor: SRT processor module
         progress_callback: Optional progress callback function
+        incremental: If True, add to existing dataset; if False, create new dataset
+        check_duplicates: If True, skip duplicate audio files (only for incremental mode)
         
     Returns:
         Tuple of (train_csv, eval_csv, list of file info dicts)
@@ -386,7 +414,9 @@ def process_srt_media_batch(
     train_csv, eval_csv, total_segments = merge_datasets(
         dataset_paths=temp_datasets,
         output_dir=final_dataset_dir,
-        remove_sources=True
+        remove_sources=True,
+        incremental=incremental,
+        check_duplicates=check_duplicates
     )
     
     return train_csv, eval_csv, file_infos

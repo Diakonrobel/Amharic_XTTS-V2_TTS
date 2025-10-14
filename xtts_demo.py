@@ -1525,6 +1525,44 @@ if __name__ == "__main__":
                     train_btn = gr.Button(value="▶️ Step 2 - Train Model", variant="primary", size="lg", scale=2)
                     optimize_model_btn = gr.Button(value="⚡ Step 2.5 - Optimize Model", variant="primary", size="lg", scale=1)
             
+            with gr.Group():
+                gr.Markdown("### 📦 **Checkpoint Manager** (Monitor & Cleanup)")
+                gr.Markdown("_Manage training checkpoints: monitor, analyze, and cleanup_")
+                
+                with gr.Row():
+                    refresh_train_checkpoints_btn = gr.Button(value="🔄 Refresh Checkpoints", variant="secondary", scale=1, size="sm")
+                    analyze_train_overfitting_btn = gr.Button(value="📊 Analyze Training", variant="secondary", scale=1, size="sm")
+                    cleanup_checkpoints_btn = gr.Button(value="🗑️ Cleanup Old", variant="secondary", scale=1, size="sm")
+                
+                train_checkpoint_display = gr.Textbox(
+                    label="Checkpoint Status",
+                    lines=15,
+                    interactive=False,
+                    placeholder="Click 'Refresh Checkpoints' to see saved checkpoints from your training...",
+                    show_label=False
+                )
+                
+                with gr.Accordion("⚙️ Checkpoint Actions", open=False):
+                    gr.Markdown("**Select checkpoints to manage:**")
+                    
+                    train_checkpoint_selector = gr.CheckboxGroup(
+                        label="Available Checkpoints",
+                        choices=[],
+                        value=[],
+                        interactive=True
+                    )
+                    
+                    with gr.Row():
+                        delete_selected_btn = gr.Button(value="🗑️ Delete Selected", variant="stop", size="sm")
+                        copy_to_ready_btn = gr.Button(value="📋 Copy Best to Ready", variant="primary", size="sm")
+                        export_analysis_btn = gr.Button(value="📄 Export Analysis", variant="secondary", size="sm")
+                    
+                    checkpoint_action_status = gr.Textbox(
+                        label="Action Status",
+                        lines=3,
+                        interactive=False
+                    )
+            
             import os
             import shutil
             from pathlib import Path
@@ -2034,6 +2072,364 @@ if __name__ == "__main__":
                 fn=check_vocab_and_dataset,
                 inputs=[out_path, train_csv],
                 outputs=[vocab_info_display]
+            )
+            
+            # Fine-tuning tab checkpoint manager handlers
+            def refresh_training_checkpoints(output_path):
+                """Refresh and display checkpoints from training folder"""
+                try:
+                    run_dir, checkpoints = checkpoint_manager.get_latest_training_run_checkpoints(output_path)
+                    
+                    if not checkpoints:
+                        return {
+                            train_checkpoint_display: "❌ No checkpoints found.\n\nComplete a training run first, or checkpoints will appear here after training starts.",
+                            train_checkpoint_selector: gr.CheckboxGroup(choices=[], value=[])
+                        }
+                    
+                    # Get recommendation
+                    recommended = checkpoint_manager.recommend_best_checkpoint(checkpoints)
+                    
+                    # Build display text
+                    lines = []
+                    lines.append("📦 **Training Checkpoints**")
+                    lines.append("=" * 70)
+                    lines.append("")
+                    
+                    if run_dir:
+                        lines.append(f"Training Run: {run_dir.name}")
+                        lines.append("")
+                    
+                    if recommended:
+                        lines.append(f"🏆 **BEST CHECKPOINT**: {recommended.display_name()}")
+                        lines.append(f"   Reason: {'Lowest eval loss' if recommended.eval_loss else 'Early checkpoint (avoids overfitting)'}")
+                        lines.append("")
+                    
+                    lines.append(f"**Total Checkpoints**: {len(checkpoints)}")
+                    lines.append("")
+                    
+                    # Group by status
+                    early = [c for c in checkpoints if c.epoch is not None and c.epoch <= 5]
+                    mid = [c for c in checkpoints if c.epoch is not None and 5 < c.epoch <= 20]
+                    late = [c for c in checkpoints if c.epoch is not None and c.epoch > 20]
+                    
+                    if early:
+                        lines.append(f"✅ **Early Checkpoints** (Epoch 0-5): {len(early)} - Recommended")
+                    if mid:
+                        lines.append(f"⚠️ **Mid Checkpoints** (Epoch 6-20): {len(mid)} - Use with caution")
+                    if late:
+                        lines.append(f"❌ **Late Checkpoints** (Epoch 21+): {len(late)} - Likely overfitted")
+                    
+                    lines.append("")
+                    lines.append("**All Checkpoints:**")
+                    lines.append("")
+                    
+                    for i, ckpt in enumerate(checkpoints, 1):
+                        prefix = "  ➡" if ckpt == recommended else "   "
+                        lines.append(f"{prefix} {i}. {ckpt.display_name()}")
+                    
+                    lines.append("")
+                    lines.append("=" * 70)
+                    lines.append("💡 **Actions**: Use buttons above to analyze, cleanup, or manage checkpoints")
+                    
+                    display_text = "\n".join(lines)
+                    
+                    # Generate checkbox choices (display_name, path)
+                    checkbox_choices = [(ckpt.display_name(), ckpt.path) for ckpt in checkpoints]
+                    
+                    return {
+                        train_checkpoint_display: display_text,
+                        train_checkpoint_selector: gr.CheckboxGroup(choices=checkbox_choices, value=[])
+                    }
+                    
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return {
+                        train_checkpoint_display: f"❌ Error loading checkpoints: {str(e)}",
+                        train_checkpoint_selector: gr.CheckboxGroup(choices=[], value=[])
+                    }
+            
+            def analyze_training_checkpoints(output_path):
+                """Analyze checkpoints for overfitting"""
+                try:
+                    run_dir, checkpoints = checkpoint_manager.get_latest_training_run_checkpoints(output_path)
+                    
+                    if not checkpoints:
+                        return "❌ No checkpoints available for analysis."
+                    
+                    analysis = checkpoint_manager.analyze_checkpoints_for_overfitting(checkpoints)
+                    
+                    lines = []
+                    lines.append("📊 **Training Analysis Report**")
+                    lines.append("=" * 70)
+                    lines.append("")
+                    
+                    lines.append("**Overfitting Status:**")
+                    lines.append(analysis["warning_message"])
+                    lines.append("")
+                    
+                    if analysis["eval_loss_trend"]:
+                        lines.append("**Evaluation Loss Progression:**")
+                        lines.append("")
+                        for item in analysis["eval_loss_trend"]:
+                            epoch = item.get('epoch', '?')
+                            step = item.get('step', '?')
+                            loss = item.get('eval_loss', 0)
+                            lines.append(f"  Epoch {epoch:2} | Step {step:5} | Loss: {loss:.4f}")
+                        lines.append("")
+                    
+                    if analysis["safe_checkpoint"]:
+                        lines.append("**Recommended Safe Checkpoint:**")
+                        lines.append(f"  🏆 {analysis['safe_checkpoint'].display_name()}")
+                        lines.append("")
+                    
+                    lines.append("**Training Statistics:**")
+                    lines.append(f"  Total Checkpoints: {len(checkpoints)}")
+                    checkpoints_with_loss = [c for c in checkpoints if c.eval_loss is not None]
+                    if checkpoints_with_loss:
+                        lines.append(f"  With Eval Loss: {len(checkpoints_with_loss)}")
+                        lines.append(f"  Best Loss: {min(c.eval_loss for c in checkpoints_with_loss):.4f}")
+                        lines.append(f"  Worst Loss: {max(c.eval_loss for c in checkpoints_with_loss):.4f}")
+                    
+                    lines.append("")
+                    lines.append("=" * 70)
+                    lines.append("💡 **Recommendation**: Use the checkpoint manager in the Inference tab to test and select the best checkpoint")
+                    
+                    return "\n".join(lines)
+                    
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return f"❌ Error analyzing checkpoints: {str(e)}"
+            
+            def cleanup_old_checkpoints(output_path):
+                """Remove checkpoints from late epochs (likely overfitted)"""
+                try:
+                    run_dir, checkpoints = checkpoint_manager.get_latest_training_run_checkpoints(output_path)
+                    
+                    if not checkpoints:
+                        return {
+                            train_checkpoint_display: "❌ No checkpoints found to cleanup.",
+                            train_checkpoint_selector: gr.CheckboxGroup(choices=[], value=[])
+                        }
+                    
+                    # Find checkpoints to remove (epoch > 20 or high loss)
+                    to_remove = []
+                    for ckpt in checkpoints:
+                        # Keep if best model
+                        if ckpt.is_best:
+                            continue
+                        # Remove if late epoch
+                        if ckpt.epoch is not None and ckpt.epoch > 20:
+                            to_remove.append(ckpt)
+                            continue
+                        # Remove if eval loss is high compared to min
+                        checkpoints_with_loss = [c for c in checkpoints if c.eval_loss is not None]
+                        if checkpoints_with_loss and ckpt.eval_loss:
+                            min_loss = min(c.eval_loss for c in checkpoints_with_loss)
+                            if ckpt.eval_loss > min_loss * 1.5:  # 50% worse than best
+                                to_remove.append(ckpt)
+                    
+                    if not to_remove:
+                        return {
+                            train_checkpoint_display: "✅ No cleanup needed!\n\nAll checkpoints are from early epochs or have good evaluation loss.\nYour training looks healthy!",
+                            train_checkpoint_selector: gr.CheckboxGroup(choices=[(c.display_name(), c.path) for c in checkpoints], value=[])
+                        }
+                    
+                    # Delete the checkpoints
+                    deleted = []
+                    failed = []
+                    for ckpt in to_remove:
+                        try:
+                            import os
+                            os.remove(ckpt.path)
+                            deleted.append(ckpt)
+                        except Exception as e:
+                            failed.append((ckpt, str(e)))
+                    
+                    # Build result message
+                    lines = []
+                    lines.append("🧹 **Cleanup Complete**")
+                    lines.append("=" * 70)
+                    lines.append("")
+                    
+                    if deleted:
+                        lines.append(f"✅ **Deleted {len(deleted)} checkpoint(s):**")
+                        for ckpt in deleted:
+                            lines.append(f"  ❌ {ckpt.display_name()}")
+                        lines.append("")
+                    
+                    if failed:
+                        lines.append(f"❌ **Failed to delete {len(failed)} checkpoint(s):**")
+                        for ckpt, err in failed:
+                            lines.append(f"  ⚠️ {ckpt.display_name()} - {err}")
+                        lines.append("")
+                    
+                    # Refresh remaining checkpoints
+                    _, remaining = checkpoint_manager.get_latest_training_run_checkpoints(output_path)
+                    lines.append(f"**Remaining Checkpoints**: {len(remaining)}")
+                    lines.append("")
+                    
+                    for ckpt in remaining:
+                        lines.append(f"  ✅ {ckpt.display_name()}")
+                    
+                    lines.append("")
+                    lines.append("=" * 70)
+                    lines.append("💡 **Tip**: Click 'Refresh Checkpoints' to update the list")
+                    
+                    display_text = "\n".join(lines)
+                    checkbox_choices = [(c.display_name(), c.path) for c in remaining]
+                    
+                    return {
+                        train_checkpoint_display: display_text,
+                        train_checkpoint_selector: gr.CheckboxGroup(choices=checkbox_choices, value=[])
+                    }
+                    
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return {
+                        train_checkpoint_display: f"❌ Error during cleanup: {str(e)}",
+                        train_checkpoint_selector: gr.CheckboxGroup(choices=[], value=[])
+                    }
+            
+            def delete_selected_checkpoints(selected_paths, output_path):
+                """Delete user-selected checkpoints"""
+                try:
+                    if not selected_paths:
+                        return "❌ No checkpoints selected. Please select checkpoints to delete."
+                    
+                    deleted = []
+                    failed = []
+                    
+                    for path in selected_paths:
+                        try:
+                            import os
+                            os.remove(path)
+                            deleted.append(os.path.basename(path))
+                        except Exception as e:
+                            failed.append((os.path.basename(path), str(e)))
+                    
+                    lines = []
+                    if deleted:
+                        lines.append(f"✅ Successfully deleted {len(deleted)} checkpoint(s):")
+                        for name in deleted:
+                            lines.append(f"  ❌ {name}")
+                    
+                    if failed:
+                        lines.append(f"\n❌ Failed to delete {len(failed)} checkpoint(s):")
+                        for name, err in failed:
+                            lines.append(f"  ⚠️ {name}: {err}")
+                    
+                    lines.append("\n💡 Click 'Refresh Checkpoints' to update the list")
+                    return "\n".join(lines)
+                    
+                except Exception as e:
+                    return f"❌ Error: {str(e)}"
+            
+            def copy_best_checkpoint_to_ready(output_path):
+                """Copy the best checkpoint to ready folder"""
+                try:
+                    run_dir, checkpoints = checkpoint_manager.get_latest_training_run_checkpoints(output_path)
+                    
+                    if not checkpoints:
+                        return "❌ No checkpoints available."
+                    
+                    recommended = checkpoint_manager.recommend_best_checkpoint(checkpoints)
+                    
+                    if not recommended:
+                        return "❌ Could not determine best checkpoint."
+                    
+                    success, message = checkpoint_manager.copy_checkpoint_to_ready(
+                        checkpoint_path=recommended.path,
+                        output_path=output_path,
+                        as_name="model.pth"
+                    )
+                    
+                    if success:
+                        return f"✅ Best checkpoint copied to ready/model.pth!\n\n{recommended.display_name()}\n\n{message}\n\n💡 Go to Inference tab to load and test it!"
+                    else:
+                        return message
+                    
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return f"❌ Error: {str(e)}"
+            
+            def export_checkpoint_analysis(output_path):
+                """Export checkpoint analysis to file"""
+                try:
+                    run_dir, checkpoints = checkpoint_manager.get_latest_training_run_checkpoints(output_path)
+                    
+                    if not checkpoints:
+                        return "❌ No checkpoints to export."
+                    
+                    # Generate report
+                    import json
+                    from datetime import datetime
+                    
+                    report = {
+                        "export_date": datetime.now().isoformat(),
+                        "training_run": str(run_dir) if run_dir else "Unknown",
+                        "total_checkpoints": len(checkpoints),
+                        "checkpoints": [ckpt.to_dict() for ckpt in checkpoints]
+                    }
+                    
+                    # Add analysis
+                    analysis = checkpoint_manager.analyze_checkpoints_for_overfitting(checkpoints)
+                    report["analysis"] = {
+                        "overfitting_detected": analysis["overfitting_detected"],
+                        "warning_message": analysis["warning_message"],
+                        "eval_loss_trend": analysis["eval_loss_trend"]
+                    }
+                    
+                    # Save to file
+                    export_path = os.path.join(output_path, "checkpoint_analysis_report.json")
+                    with open(export_path, 'w', encoding='utf-8') as f:
+                        json.dump(report, f, indent=2, ensure_ascii=False)
+                    
+                    return f"✅ Analysis exported!\n\nSaved to: {export_path}\n\nYou can open this file to see detailed checkpoint information."
+                    
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return f"❌ Export failed: {str(e)}"
+            
+            # Wire up Fine-tuning tab checkpoint manager handlers
+            refresh_train_checkpoints_btn.click(
+                fn=refresh_training_checkpoints,
+                inputs=[out_path],
+                outputs=[train_checkpoint_display, train_checkpoint_selector]
+            )
+            
+            analyze_train_overfitting_btn.click(
+                fn=analyze_training_checkpoints,
+                inputs=[out_path],
+                outputs=[train_checkpoint_display]
+            )
+            
+            cleanup_checkpoints_btn.click(
+                fn=cleanup_old_checkpoints,
+                inputs=[out_path],
+                outputs=[train_checkpoint_display, train_checkpoint_selector]
+            )
+            
+            delete_selected_btn.click(
+                fn=delete_selected_checkpoints,
+                inputs=[train_checkpoint_selector, out_path],
+                outputs=[checkpoint_action_status]
+            )
+            
+            copy_to_ready_btn.click(
+                fn=copy_best_checkpoint_to_ready,
+                inputs=[out_path],
+                outputs=[checkpoint_action_status]
+            )
+            
+            export_analysis_btn.click(
+                fn=export_checkpoint_analysis,
+                inputs=[out_path],
+                outputs=[checkpoint_action_status]
             )
 
 

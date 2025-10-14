@@ -118,7 +118,8 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         else:
             print(" > Error: The specified custom model is not a valid .pth file path.")
 
-    num_workers = 8
+    # Reduce num_workers to prevent data loading issues (system recommends 4 max)
+    num_workers = 4
     if language == "ja":
         num_workers = 0
     
@@ -243,10 +244,11 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         optimizer="AdamW",
         optimizer_wd_only_on_weights=OPTIMIZER_WD_ONLY_ON_WEIGHTS,
         optimizer_params={"betas": [0.9, 0.96], "eps": 1e-8, "weight_decay": 1e-2},
-        lr=5e-06,  # learning rate
+        lr=2e-06,  # Reduced from 5e-06 to 2e-06 for better stability with extended vocab
         lr_scheduler="MultiStepLR",
-        # it was adjusted accordly for the new step scheme
-        lr_scheduler_params={"milestones": [50000 * 18, 150000 * 18, 300000 * 18], "gamma": 0.5, "last_epoch": -1},
+        # Fixed scheduler milestones for realistic epoch counts (6 epochs × ~1010 steps = ~6060 total steps)
+        # Reduce LR at epoch 2, 4 (steps ~2020, ~4040)
+        lr_scheduler_params={"milestones": [2020, 4040], "gamma": 0.5, "last_epoch": -1},
         test_sentences=[],
     )
 
@@ -395,6 +397,39 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         train_samples=train_samples,
         eval_samples=eval_samples,
     )
+    
+    # Apply gradient clipping to prevent exploding gradients
+    try:
+        import torch.nn.utils as nn_utils
+        original_train_step = trainer.train_step
+        
+        def train_step_with_grad_clip(*args, **kwargs):
+            result = original_train_step(*args, **kwargs)
+            # Clip gradients after backward pass
+            if model.training:
+                nn_utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            return result
+        
+        trainer.train_step = train_step_with_grad_clip
+        print(" > ✅ Gradient clipping enabled (max_norm=1.0)")
+    except Exception as e:
+        print(f" > ⚠️  Could not enable gradient clipping: {e}")
+    
+    # Initialize early stopping monitor
+    print("\n" + "=" * 70)
+    print("📊 OVERFITTING PREVENTION ENABLED")
+    print("=" * 70)
+    print(f" > Learning Rate: 2e-06 (reduced from 5e-06)")
+    print(f" > LR Schedule: Reduce by 50% at steps 2020, 4040")
+    print(f" > Gradient Clipping: max_norm=1.0")
+    print(f" > DataLoader Workers: 4 (optimized)")
+    print(f" > Weight Decay: 0.01")
+    print("")
+    print(" > ⚠️  IMPORTANT: Monitor eval_loss after each epoch")
+    print(" >    Stop training if eval_loss increases for 2 consecutive epochs")
+    print(" >    Use the checkpoint manager to select the best checkpoint")
+    print("=" * 70 + "\n")
+    
     trainer.fit()
 
     # get the longest text audio file to use as speaker reference

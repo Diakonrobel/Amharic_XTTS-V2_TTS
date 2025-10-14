@@ -24,7 +24,7 @@ import traceback
 from utils.formatter import format_audio_list,find_latest_best_model, list_audios
 from utils.gpt_train import train_gpt
 from utils import srt_processor
-from utils import youtube_downloader, srt_processor, audio_slicer, dataset_tracker, batch_processor, dataset_statistics
+from utils import youtube_downloader, srt_processor, audio_slicer, dataset_tracker, batch_processor, dataset_statistics, checkpoint_manager
 from utils import audio_slicer
 
 from faster_whisper import WhisperModel
@@ -1798,6 +1798,76 @@ if __name__ == "__main__":
                         xtts_speaker = gr.Textbox(label="Speaker Path", placeholder="Auto-filled")
                         progress_load = gr.Label(label="Status", value="Not Loaded")
                         load_btn = gr.Button(value="▶️ Step 3 - Load Model", variant="primary", size="lg")
+                    
+                    with gr.Group():
+                        gr.Markdown("### 🔄 **Checkpoint Selection** (Advanced)")
+                        gr.Markdown("_Select a specific training checkpoint instead of using the default best model_")
+                        with gr.Row():
+                            refresh_checkpoints_btn = gr.Button(value="🔍 Scan Checkpoints", variant="secondary", scale=1, size="sm")
+                            analyze_overfitting_btn = gr.Button(value="📊 Analyze Overfitting", variant="secondary", scale=1, size="sm")
+                        
+                        checkpoint_selector = gr.Dropdown(
+                            label="Available Checkpoints",
+                            choices=[("Click 'Scan Checkpoints' to load", "")],
+                            value="",
+                            interactive=True,
+                            info="Choose a checkpoint from your latest training run"
+                        )
+                        
+                        checkpoint_info_display = gr.Textbox(
+                            label="Checkpoint Information",
+                            lines=15,
+                            interactive=False,
+                            placeholder="Click 'Scan Checkpoints' to see available checkpoints from your latest training",
+                            show_label=False
+                        )
+                        
+                        use_selected_checkpoint_btn = gr.Button(
+                            value="✅ Use Selected Checkpoint",
+                            variant="primary",
+                            size="lg"
+                        )
+                        
+                        gr.Markdown("---")
+                        gr.Markdown("### 🎤 **Quick Inference Test** (Compare Checkpoints)")
+                        gr.Markdown("_Test speech generation directly from any checkpoint without loading_")
+                        
+                        checkpoint_test_text = gr.Textbox(
+                            label="Test Text",
+                            placeholder="Enter text to test with selected checkpoint...",
+                            lines=2,
+                            value="This is a test of the checkpoint."
+                        )
+                        
+                        with gr.Row():
+                            checkpoint_test_language = gr.Dropdown(
+                                label="Language",
+                                value="en",
+                                choices=["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh", "hu", "ko", "ja", "am", "amh"],
+                                scale=1
+                            )
+                            checkpoint_use_g2p = gr.Checkbox(
+                                label="🇪🇹 Use G2P (Amharic)",
+                                value=True,
+                                scale=1
+                            )
+                        
+                        test_checkpoint_btn = gr.Button(
+                            value="🎙️ Test Selected Checkpoint",
+                            variant="secondary",
+                            size="lg"
+                        )
+                        
+                        checkpoint_test_output = gr.Audio(
+                            label="Checkpoint Test Output",
+                            type="filepath"
+                        )
+                        
+                        checkpoint_test_status = gr.Textbox(
+                            label="Test Status",
+                            lines=3,
+                            interactive=False
+                        )
 
                 with gr.Column(scale=1):
                     with gr.Group():
@@ -2049,6 +2119,298 @@ if __name__ == "__main__":
                 fn=get_dataset_zip,
                 inputs=[out_path],
                 outputs=[dataset_zip_file]
+            )
+            
+            # Checkpoint selection handlers
+            def scan_and_list_checkpoints(output_path):
+                """Scan for available checkpoints and display info"""
+                try:
+                    run_dir, checkpoints = checkpoint_manager.get_latest_training_run_checkpoints(output_path)
+                    
+                    if not checkpoints:
+                        return {
+                            checkpoint_selector: gr.Dropdown(choices=[("No checkpoints found", "")], value=""),
+                            checkpoint_info_display: "❌ No checkpoints found.\n\nPlease complete a training run first."
+                        }
+                    
+                    # Get recommendation
+                    recommended = checkpoint_manager.recommend_best_checkpoint(checkpoints)
+                    
+                    # Format display
+                    display_text = checkpoint_manager.format_checkpoint_list_for_display(checkpoints, recommended)
+                    
+                    # Generate dropdown choices
+                    choices = checkpoint_manager.get_checkpoint_dropdown_choices(checkpoints)
+                    
+                    # Set recommended as default value
+                    default_value = recommended.path if recommended else (choices[0][1] if choices else "")
+                    
+                    return {
+                        checkpoint_selector: gr.Dropdown(choices=choices, value=default_value),
+                        checkpoint_info_display: display_text
+                    }
+                    
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return {
+                        checkpoint_selector: gr.Dropdown(choices=[("Error scanning", "")], value=""),
+                        checkpoint_info_display: f"❌ Error scanning checkpoints: {str(e)}"
+                    }
+            
+            def analyze_checkpoint_overfitting(output_path):
+                """Analyze checkpoints for overfitting patterns"""
+                try:
+                    run_dir, checkpoints = checkpoint_manager.get_latest_training_run_checkpoints(output_path)
+                    
+                    if not checkpoints:
+                        return "❌ No checkpoints found for analysis."
+                    
+                    analysis = checkpoint_manager.analyze_checkpoints_for_overfitting(checkpoints)
+                    
+                    # Format analysis display
+                    lines = []
+                    lines.append("📊 **Overfitting Analysis Report**")
+                    lines.append("=" * 70)
+                    lines.append("")
+                    lines.append(analysis["warning_message"])
+                    lines.append("")
+                    
+                    if analysis["eval_loss_trend"]:
+                        lines.append("**Evaluation Loss Trend:**")
+                        lines.append("")
+                        for item in analysis["eval_loss_trend"]:
+                            lines.append(f"  Epoch {item['epoch']:2d} | Step {item['step']:5d} | Loss: {item['eval_loss']:.4f}")
+                        lines.append("")
+                    
+                    if analysis["safe_checkpoint"]:
+                        lines.append("**Recommended Safe Checkpoint:**")
+                        lines.append(f"  {analysis['safe_checkpoint'].display_name()}")
+                    
+                    lines.append("")
+                    lines.append("=" * 70)
+                    
+                    return "\n".join(lines)
+                    
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return f"❌ Error analyzing checkpoints: {str(e)}"
+            
+            def use_selected_checkpoint(selected_checkpoint_path, output_path, xtts_config_path, xtts_vocab_path, xtts_speaker_path):
+                """Copy selected checkpoint to ready folder and update paths"""
+                try:
+                    if not selected_checkpoint_path or selected_checkpoint_path == "":
+                        return {
+                            progress_load: "❌ No checkpoint selected. Please select a checkpoint first.",
+                            xtts_checkpoint: xtts_checkpoint,
+                        }
+                    
+                    # Copy checkpoint to ready folder
+                    success, message = checkpoint_manager.copy_checkpoint_to_ready(
+                        checkpoint_path=selected_checkpoint_path,
+                        output_path=output_path,
+                        as_name="model.pth"
+                    )
+                    
+                    if not success:
+                        return {
+                            progress_load: message,
+                            xtts_checkpoint: xtts_checkpoint,
+                        }
+                    
+                    # Update checkpoint path
+                    from pathlib import Path
+                    new_checkpoint_path = str(Path(output_path) / "ready" / "model.pth")
+                    
+                    status_message = (
+                        f"✅ Checkpoint Selected Successfully!\n\n"
+                        f"{message}\n\n"
+                        f"📍 New checkpoint path: {new_checkpoint_path}\n\n"
+                        f"💡 Next: Click 'Step 3 - Load Model' to load this checkpoint"
+                    )
+                    
+                    return {
+                        progress_load: status_message,
+                        xtts_checkpoint: new_checkpoint_path,
+                    }
+                    
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return {
+                        progress_load: f"❌ Error using checkpoint: {str(e)}",
+                        xtts_checkpoint: xtts_checkpoint,
+                    }
+            
+            # Wire up checkpoint selection handlers
+            refresh_checkpoints_btn.click(
+                fn=scan_and_list_checkpoints,
+                inputs=[out_path],
+                outputs=[checkpoint_selector, checkpoint_info_display]
+            )
+            
+            analyze_overfitting_btn.click(
+                fn=analyze_checkpoint_overfitting,
+                inputs=[out_path],
+                outputs=[checkpoint_info_display]
+            )
+            
+            use_selected_checkpoint_btn.click(
+                fn=use_selected_checkpoint,
+                inputs=[checkpoint_selector, out_path, xtts_config, xtts_vocab, xtts_speaker],
+                outputs=[progress_load, xtts_checkpoint]
+            )
+            
+            def test_checkpoint_inference(selected_checkpoint_path, test_text, test_lang, use_g2p, 
+                                         out_path, speaker_ref_path):
+                """Generate speech directly from a checkpoint without loading it globally"""
+                try:
+                    if not selected_checkpoint_path or selected_checkpoint_path == "":
+                        return None, "❌ No checkpoint selected. Please select a checkpoint first."
+                    
+                    if not test_text or test_text.strip() == "":
+                        return None, "❌ Please enter test text."
+                    
+                    import tempfile
+                    from pathlib import Path
+                    
+                    print(f"\n🎙️ Testing checkpoint: {selected_checkpoint_path}")
+                    print(f"📝 Test text: {test_text}")
+                    print(f"🌍 Language: {test_lang}")
+                    
+                    # Canonicalize language
+                    test_lang = normalize_xtts_lang(test_lang)
+                    
+                    # Get paths from ready folder (vocab, config, speaker)
+                    ready_dir = Path(out_path) / "ready"
+                    
+                    # Find vocab - prefer extended for Amharic
+                    vocab_extended_amharic = ready_dir / "vocab_extended_amharic.json"
+                    vocab_extended = ready_dir / "vocab_extended.json"
+                    vocab_standard = ready_dir / "vocab.json"
+                    
+                    if vocab_extended_amharic.exists():
+                        vocab_path = str(vocab_extended_amharic)
+                    elif vocab_extended.exists():
+                        vocab_path = str(vocab_extended)
+                    else:
+                        vocab_path = str(vocab_standard)
+                    
+                    config_path = str(ready_dir / "config.json")
+                    speaker_path = str(ready_dir / "speakers_xtts.pth")
+                    
+                    # Use provided speaker reference or find one
+                    if not speaker_ref_path or not os.path.exists(speaker_ref_path):
+                        ref_path = ready_dir / "reference.wav"
+                        if ref_path.exists():
+                            speaker_ref_path = str(ref_path)
+                        else:
+                            return None, "❌ No speaker reference found. Please load model parameters first."
+                    
+                    # Load config
+                    config = XttsConfig()
+                    config.load_json(config_path)
+                    
+                    # Initialize model
+                    print(" > Initializing model...")
+                    test_model = Xtts.init_from_config(config)
+                    
+                    # Load checkpoint
+                    print(f" > Loading checkpoint: {os.path.basename(selected_checkpoint_path)}")
+                    test_model.load_checkpoint(
+                        config,
+                        checkpoint_path=selected_checkpoint_path,
+                        vocab_path=vocab_path,
+                        speaker_file_path=speaker_path,
+                        use_deepspeed=False,
+                        eval=True
+                    )
+                    
+                    if torch.cuda.is_available():
+                        test_model.cuda()
+                    
+                    # Apply G2P if needed
+                    original_text = test_text
+                    if use_g2p and test_lang in ["am", "amh"]:
+                        try:
+                            from amharic_tts.tokenizer.xtts_tokenizer_wrapper import create_xtts_tokenizer
+                            print(" > 🇪🇹 Applying Amharic G2P...")
+                            tokenizer = create_xtts_tokenizer(use_phonemes=True, g2p_backend="rule_based")
+                            test_text = tokenizer.preprocess_text(test_text, lang='am')
+                            print(f" > Converted: {original_text[:50]}... → {test_text[:50]}...")
+                        except Exception as e:
+                            print(f" > ⚠️ G2P failed: {e}, using original text")
+                    
+                    # Get conditioning latents
+                    print(" > Extracting speaker embedding...")
+                    gpt_cond_latent, speaker_embedding = test_model.get_conditioning_latents(
+                        audio_path=speaker_ref_path,
+                        gpt_cond_len=test_model.config.gpt_cond_len,
+                        max_ref_length=test_model.config.max_ref_len,
+                        sound_norm_refs=test_model.config.sound_norm_refs
+                    )
+                    
+                    # Generate speech
+                    print(" > Generating speech...")
+                    _inference_lang = 'am' if test_lang in ('am', 'amh') else test_lang
+                    
+                    out = test_model.inference(
+                        text=test_text,
+                        language=_inference_lang,
+                        gpt_cond_latent=gpt_cond_latent,
+                        speaker_embedding=speaker_embedding,
+                        temperature=0.75,
+                        length_penalty=1.0,
+                        repetition_penalty=5.0,
+                        top_k=50,
+                        top_p=0.85,
+                        enable_text_splitting=True
+                    )
+                    
+                    # Save output
+                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as fp:
+                        out["wav"] = torch.tensor(out["wav"]).unsqueeze(0)
+                        out_path_audio = fp.name
+                        torchaudio.save(out_path_audio, out["wav"], 24000)
+                    
+                    # Cleanup
+                    del test_model
+                    clear_gpu_cache()
+                    
+                    checkpoint_name = os.path.basename(selected_checkpoint_path)
+                    status = (
+                        f"✅ Test Complete!\n\n"
+                        f"Checkpoint: {checkpoint_name}\n"
+                        f"Text: {original_text[:50]}{'...' if len(original_text) > 50 else ''}\n"
+                        f"Language: {test_lang}\n"
+                        f"G2P: {'Enabled' if use_g2p and test_lang in ['am', 'amh'] else 'Disabled'}"
+                    )
+                    
+                    print(" > ✅ Inference complete!")
+                    return out_path_audio, status
+                    
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    error_msg = (
+                        f"❌ Error testing checkpoint:\n\n"
+                        f"{str(e)}\n\n"
+                        f"Tip: Make sure you've loaded parameters (vocab, config, speaker) first."
+                    )
+                    return None, error_msg
+            
+            test_checkpoint_btn.click(
+                fn=test_checkpoint_inference,
+                inputs=[
+                    checkpoint_selector,
+                    checkpoint_test_text,
+                    checkpoint_test_language,
+                    checkpoint_use_g2p,
+                    out_path,
+                    speaker_reference_audio
+                ],
+                outputs=[checkpoint_test_output, checkpoint_test_status]
             )
 
     demo.launch(

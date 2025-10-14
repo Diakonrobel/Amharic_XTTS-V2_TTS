@@ -164,3 +164,26 @@ finetune_models
 /test_model
 /datasets
 /tmp
+
+# Checkpoints and model artifacts
+*.pth
+*.pt
+*.ckpt
+*.bin
+*.safetensors
+
+# Logs and runs
+logs/
+*.log
+lightning_logs/
+runs/
+wandb/
+tensorboard/
+*.events*
+
+# Misc artifacts and caches
+*.npy
+*.npz
+*.onnx
+profile-*.json
+*.prof

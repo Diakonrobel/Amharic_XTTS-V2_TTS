@@ -26,6 +26,34 @@ Core training pipeline supports any XTTS-compatible language:
 - Language selection via ISO 639-3 codes
 - Special handling documented and isolated (e.g., Japanese `num_workers=0`)
 
+#### Amharic Language Support (First-Class Requirement)
+**Amharic must work seamlessly across all pipeline stages:**
+
+**Dataset Creation:**
+- Ethiopic script (U+1200-U+137F) properly handled in transcriptions
+- UTF-8 encoding enforced throughout
+- Character normalization applied (ሥ→ስ, ዕ→እ, ሀ→ሃ, ዓ→አ)
+- Language code `amh` (ISO 639-3) consistently used
+
+**Text Preprocessing:**
+- Multi-backend G2P system (Transphone → Epitran → Rule-based)
+- Quality validation on G2P output (vowel ratio, IPA presence)
+- Graceful fallback to rule-based if external backends unavailable
+- Text normalization before G2P (character variants, punctuation)
+
+**Training:**
+- Vocabulary extension with Ethiopic characters + IPA phonemes (~7500 vs 6152 standard)
+- On-the-fly or pre-processed G2P conversion
+- Dataset detection (Ethiopic script vs IPA phonemes)
+- Language code switching (amh → en after G2P conversion)
+- No "UNK token" errors during training
+
+**Inference:**
+- Automatic Amharic detection from input text
+- G2P preprocessing applied transparently
+- Vocabulary size mismatch handling (extended vocab models)
+- Language code normalization (am/AM/Amharic → amh)
+
 ### IV. File-Based State Management
 State persisted to filesystem, not in-memory:
 - Training progress in checkpoint files
@@ -127,4 +155,208 @@ When in doubt, prioritize:
 2. Robustness (fallbacks, error recovery)
 3. Simplicity (avoid over-engineering)
 
-**Version**: 1.0.0 | **Ratified**: 2025-01-07 | **Last Amended**: 2025-01-07
+## Amharic Development Guidelines
+
+### Language Code Consistency
+**CRITICAL**: Use ISO 639-3 code `amh` throughout pipeline:
+- **Dataset creation**: `lang.txt` contains `amh`
+- **Training config**: `BaseDatasetConfig(language="amh")` or `"en"` (if phonemes)
+- **Inference**: User input `am`/`AM`/`Amharic` → normalized to `amh`
+- **WebUI**: Display "Amharic (amh)" in dropdowns
+
+**Normalization Function**: `utils/lang_norm.py::canonical_lang()`
+- Accepts: `am`, `amh`, `am-ET`, `AM`, `Amharic`, `አማርኛ`
+- Returns: `amh` (for Coqui/training/dataset)
+
+### G2P Pipeline Requirements
+
+**Backend Selection Priority**:
+1. **Transphone** (primary): ML-based, 95%+ accuracy, requires `pip install transphone`
+2. **Epitran** (secondary): Rule-based, 85-90% accuracy, requires `pip install epitran`
+3. **Rule-based** (fallback): Always available, 80-85% accuracy, no dependencies
+
+**Implementation**: `amharic_tts/g2p/amharic_g2p_enhanced.py::EnhancedAmharicG2P`
+
+**Quality Validation Thresholds**:
+- Minimum vowel ratio: 25% (Amharic is vowel-rich)
+- Maximum Ethiopic char ratio in output: 10% (should be converted)
+- Minimum IPA char presence: 50% (output should use IPA)
+- Minimum length ratio: 50% (output shouldn't collapse)
+
+**Usage in Pipeline**:
+```python
+# Option A: Pre-training preprocessing
+python preprocess_amharic_dataset.py \
+    --input-train metadata_train.csv \
+    --input-eval metadata_eval.csv \
+    --g2p-backend transphone
+
+# Option B: On-the-fly during training
+train_gpt(..., use_amharic_g2p=True, ...)
+# Automatically applies G2P in amharic_g2p_dataset_wrapper.py
+```
+
+### Vocabulary Extension Requirements
+
+**When to Extend**:
+- **ALWAYS** when training with Amharic (either script or phonemes)
+- Extends from 6152 tokens → ~7500 tokens (+22%)
+
+**What Gets Added**:
+1. **Ethiopic characters**: 384 chars (U+1200-U+137F, U+1380-U+139F)
+2. **Amharic IPA phonemes**: 45 phonemes (tʼ, kʼ, pʼ, kʷ, gʷ, qʷ, ʕ, ʔ, ɨ, ə)
+3. **Common subword units**: 77 units (səl, lam, amɨ, kʼɨ, etc.)
+4. **Dataset-specific tokens**: Top 500 frequent n-grams (min_freq=5)
+
+**Implementation**: `utils/vocab_extension.py::create_extended_vocab_for_training()`
+
+**File Location**: `output/ready/vocab_extended_amharic.json`
+
+### Character Normalization Rules
+
+**Applied in**: `amharic_tts/preprocessing/text_normalizer.py::AmharicTextNormalizer`
+
+**Normalization Table**:
+| Input | Output | Reason |
+|-------|--------|--------|
+| ሥ | ስ | Variant of sin |
+| ዕ | እ | Variant of glottal |
+| ህ | ሕ | Variant of he |
+| ዝ | ክ | Variant of ke |
+| ሐ | ሃ | Variant of ha |
+| ዓ | አ | Variant of a |
+| ኣ | አ | Tigrinya variant |
+| ተ | ፕ | Rare variant |
+
+**Punctuation Handling**:
+- Ethiopic word space (፡) → space
+- Ethiopic punctuation (።፣፤፥፦፧) preserved by default
+- Optional conversion to ASCII punctuation (disabled)
+
+### Dataset Detection Logic
+
+**Function**: `utils/amharic_g2p_dataset_wrapper.py::is_dataset_already_preprocessed()`
+
+**Algorithm**:
+1. Sample first 10 rows of CSV
+2. Check text column for Ethiopic script (U+1200-U+137F)
+3. Calculate Ethiopic character ratio
+4. If ratio > 50% → dataset needs preprocessing
+5. If ratio < 50% → dataset already preprocessed (phonemes)
+
+**Impact on Training**:
+- Ethiopic script detected → apply G2P, use `language="amh"`
+- Phonemes detected → skip G2P, use `language="en"`
+
+### Training Pipeline Integration Points
+
+**`gpt_train.py` Flow**:
+```python
+1. Normalize language code: am/AM/Amharic → amh
+2. Check if G2P enabled: use_amharic_g2p=True
+3. Detect dataset state: Ethiopic script vs phonemes
+4. If Ethiopic:
+   a. Extend vocabulary (Ethiopic + IPA tokens)
+   b. Load training samples
+   c. Apply G2P on-the-fly (amharic_g2p_dataset_wrapper)
+   d. Switch language code: amh → en
+5. If phonemes:
+   a. Extend vocabulary (IPA tokens only)
+   b. Load samples as-is
+   c. Use language code: en
+6. Initialize GPTTrainer with extended vocab
+7. Train (no UNK token errors)
+```
+
+### Inference Pipeline Requirements
+
+**`xtts_demo.py::run_tts()` Flow**:
+```python
+1. Detect language: is_amharic(text) → check for Ethiopic chars
+2. Normalize code: am/AM → amh
+3. Load model:
+   a. Check vocab size: checkpoint vs vocab.json
+   b. If mismatch: find matching vocab or expand embeddings
+4. Preprocess text:
+   a. If Amharic detected: apply G2P conversion
+   b. Text: ሰላም ዓልም → salam ʕaləm
+5. Generate speech:
+   a. Use phoneme text as input
+   b. Language code: en (phonemes are Latin)
+6. Return audio
+```
+
+### Model Vocabulary Mismatch Handling
+
+**Problem**: Extended vocab training creates 7536-token models, but base vocab has 6152 tokens
+
+**Solution in `xtts_demo.py::load_model()`**:
+1. Load checkpoint, check `gpt.text_embedding.weight.shape[0]`
+2. Load vocab.json, check `len(vocab['model']['vocab'])`
+3. If mismatch:
+   - Search `ready/` directory for matching vocab file
+   - If found: use that vocab
+   - If not found: manually expand embedding layers
+     - Copy existing weights [0:checkpoint_size]
+     - Random init new weights [checkpoint_size:vocab_size]
+4. Load model with correct vocab
+
+### Testing Requirements for Amharic Changes
+
+**Minimum Test Coverage**:
+1. ✅ Text normalization: `tests/test_language_normalization_fix.py`
+2. ✅ G2P conversion (all backends): `tests/test_amharic_g2p_comprehensive.py`
+3. ✅ Quality validation: Check thresholds in G2P output
+4. ✅ Vocabulary extension: Verify ~7500 tokens created
+5. ✅ Dataset detection: Ethiopic vs phonemes
+6. ✅ Training integration: No UNK errors
+7. ✅ Inference: Amharic input → audio output
+
+**Manual Testing Checklist**:
+- [ ] Upload Amharic audio → transcription in Ethiopic script
+- [ ] Enable "Amharic G2P" in training → training completes
+- [ ] Check `ready/vocab_extended_amharic.json` exists (~7500 tokens)
+- [ ] Load trained model → no vocab size errors
+- [ ] Input Amharic text → generates speech
+- [ ] Check logs: language code consistency (amh or en)
+
+### Common Pitfalls & Solutions
+
+**Pitfall 1**: Training fails with "AssertionError: assert not torch.any(tokens == 1)"
+- **Cause**: Tokenizer encounters unknown Ethiopic characters
+- **Solution**: Enable Amharic G2P (`use_amharic_g2p=True`) or pre-preprocess dataset
+
+**Pitfall 2**: Vocab size mismatch error during inference
+- **Cause**: Model trained with extended vocab (7536), loading with standard vocab (6152)
+- **Solution**: Use `vocab_extended_amharic.json` or enable auto-expansion in `load_model()`
+
+**Pitfall 3**: Language code inconsistency (am vs amh vs en)
+- **Cause**: Different parts of pipeline use different codes
+- **Solution**: Always use `canonical_lang()` from `utils/lang_norm.py`
+
+**Pitfall 4**: Poor G2P quality (gibberish output)
+- **Cause**: Backend failing quality checks
+- **Solution**: Check G2P backend installation, try different backend, verify input text normalization
+
+**Pitfall 5**: Dataset detected as "already preprocessed" when it's not
+- **Cause**: Mixed Ethiopic + Latin text in dataset (e.g., names, numbers)
+- **Solution**: Increase Ethiopic ratio threshold or manually preprocess
+
+### Documentation Requirements
+
+**When Adding Amharic Features**:
+1. Update `README.md` with user-facing changes
+2. Update `WARP.md` with technical details
+3. Document in `amharic_tts/` module docstrings
+4. Add examples to relevant test files
+5. Update `.warp/rules/constitution.md` if architectural changes
+
+**When Modifying G2P Pipeline**:
+1. Update `docs/G2P_BACKENDS_EXPLAINED.md`
+2. Document quality threshold changes
+3. Add test cases for edge cases
+4. Update `amharic_tts/config/amharic_config.py` if config changes
+
+---
+
+**Version**: 2.0.0 | **Ratified**: 2025-01-13 | **Last Amended**: 2025-01-13 (Amharic Guidelines Added)

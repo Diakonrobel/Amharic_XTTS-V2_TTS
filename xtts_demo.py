@@ -24,7 +24,7 @@ import traceback
 from utils.formatter import format_audio_list,find_latest_best_model, list_audios
 from utils.gpt_train import train_gpt
 from utils import srt_processor
-from utils import youtube_downloader, srt_processor, audio_slicer, dataset_tracker, batch_processor
+from utils import youtube_downloader, srt_processor, audio_slicer, dataset_tracker, batch_processor, dataset_statistics
 from utils import audio_slicer
 
 from faster_whisper import WhisperModel
@@ -877,8 +877,31 @@ if __name__ == "__main__":
                 gr.Markdown("### 🚀 **Create Dataset**")
                 progress_data = gr.Label(label="Status", value="Ready")
                 prompt_compute_btn = gr.Button(value="▶️ Step 1 - Create Dataset", variant="primary", size="lg")
+            
+            with gr.Group():
+                gr.Markdown("### 📊 **Dataset Statistics**")
+                with gr.Row():
+                    calculate_stats_btn = gr.Button(value="📈 Calculate Dataset Statistics", variant="secondary", size="lg")
+                dataset_stats_display = gr.Textbox(
+                    label="Statistics",
+                    lines=20,
+                    interactive=False,
+                    max_lines=25,
+                    show_label=False,
+                    placeholder="Click 'Calculate Dataset Statistics' to see your dataset info (segments, duration, quality checks, etc.)"
+                )
         
             # Advanced processing functions
+            def show_dataset_statistics(out_path):
+                """Calculate and display dataset statistics"""
+                try:
+                    dataset_path = os.path.join(out_path, "dataset")
+                    stats = dataset_statistics.calculate_dataset_statistics(dataset_path)
+                    display = dataset_statistics.format_statistics_display(stats)
+                    return display
+                except Exception as e:
+                    traceback.print_exc()
+                    return f"❌ Error calculating statistics: {str(e)}"
             def show_dataset_history(out_path):
                 """Display dataset processing history"""
                 try:
@@ -1916,6 +1939,13 @@ if __name__ == "__main__":
                 fn=clear_dataset_history,
                 inputs=[out_path],
                 outputs=[history_display],
+            )
+            
+            # Dataset statistics handler
+            calculate_stats_btn.click(
+                fn=show_dataset_statistics,
+                inputs=[out_path],
+                outputs=[dataset_stats_display],
             )
 
 

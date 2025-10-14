@@ -243,12 +243,11 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         # Optimizer values like tortoise, pytorch implementation with modifications to not apply WD to non-weight parameters.
         optimizer="AdamW",
         optimizer_wd_only_on_weights=OPTIMIZER_WD_ONLY_ON_WEIGHTS,
-        optimizer_params={"betas": [0.9, 0.96], "eps": 1e-8, "weight_decay": 1e-2},
-        lr=2e-06,  # Reduced from 5e-06 to 2e-06 for better stability with extended vocab
+        optimizer_params={"betas": [0.9, 0.96], "eps": 1e-8, "weight_decay": 0.05},  # Increased from 0.01 to 0.05 for stronger regularization
+        lr=1e-06,  # Further reduced from 2e-06 to 1e-06 for gentler mel learning with extended vocab
         lr_scheduler="MultiStepLR",
-        # Fixed scheduler milestones for realistic epoch counts (6 epochs × ~1010 steps = ~6060 total steps)
-        # Reduce LR at epoch 2, 4 (steps ~2020, ~4040)
-        lr_scheduler_params={"milestones": [2020, 4040], "gamma": 0.5, "last_epoch": -1},
+        # More aggressive LR reduction schedule: Reduce at epochs 1, 2, 3 (steps ~1010, ~2020, ~3030)
+        lr_scheduler_params={"milestones": [1010, 2020, 3030], "gamma": 0.5, "last_epoch": -1},
         test_sentences=[],
     )
 
@@ -417,17 +416,22 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     
     # Initialize early stopping monitor
     print("\n" + "=" * 70)
-    print("📊 OVERFITTING PREVENTION ENABLED")
+    print("🔥 AGGRESSIVE OVERFITTING PREVENTION - V2")
     print("=" * 70)
-    print(f" > Learning Rate: 2e-06 (reduced from 5e-06)")
-    print(f" > LR Schedule: Reduce by 50% at steps 2020, 4040")
+    print(f" > Learning Rate: 1e-06 (REDUCED: 5e-06 → 2e-06 → 1e-06)")
+    print(f" > LR Schedule: Reduce by 50% at epochs 1, 2, 3")
+    print(f" >   - Epoch 0: LR = 1e-06")
+    print(f" >   - Epoch 1: LR = 5e-07 (50% reduction)")
+    print(f" >   - Epoch 2: LR = 2.5e-07 (50% reduction)")
+    print(f" >   - Epoch 3+: LR = 1.25e-07 (50% reduction)")
     print(f" > Gradient Clipping: max_norm=1.0")
     print(f" > DataLoader Workers: 4 (optimized)")
-    print(f" > Weight Decay: 0.01")
+    print(f" > Weight Decay: 0.05 (INCREASED for stronger regularization)")
     print("")
+    print(" > 🎯 TARGET: Eval loss < 3.5 after epoch 1")
     print(" > ⚠️  IMPORTANT: Monitor eval_loss after each epoch")
-    print(" >    Stop training if eval_loss increases for 2 consecutive epochs")
-    print(" >    Use the checkpoint manager to select the best checkpoint")
+    print(" >    Stop training if eval_loss > 4.0 after 2 epochs")
+    print(" >    Expected: eval_loss should decrease by 20-30% per epoch")
     print("=" * 70 + "\n")
     
     trainer.fit()

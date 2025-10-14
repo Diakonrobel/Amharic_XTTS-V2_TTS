@@ -1,8 +1,11 @@
-# 🎯 Overfitting Fix - Training Improvements Applied
+# 🎯 Overfitting Fix - Training Improvements Applied (V2 - AGGRESSIVE)
 
 **Date**: October 14, 2025  
-**Status**: ✅ FIXED  
-**Training Run**: GPT_XTTS_FT-October-14-2025_07+49PM-14d399e
+**Status**: ✅ V2 APPLIED - AGGRESSIVE REGULARIZATION  
+**Version**: V2 (Further reduced LR, increased weight decay, aggressive scheduler)  
+**Previous Runs**: 
+- V0: GPT_XTTS_FT-October-14-2025_07+49PM-14d399e (eval: 5.577 - FAILED)
+- V1: GPT_XTTS_FT-October-14-2025_08+40PM-9b15020 (eval: 5.117 - IMPROVED BUT INSUFFICIENT)
 
 ---
 

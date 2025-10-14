@@ -709,6 +709,25 @@ if __name__ == "__main__":
                             scale=1
                         )
                     
+                    with gr.Row():
+                        srt_incremental_mode = gr.Checkbox(
+                            label="➕ Incremental Mode",
+                            value=False,
+                            info="Add to existing dataset (no overwrite)",
+                            scale=1
+                        )
+                        srt_check_duplicates = gr.Checkbox(
+                            label="🔍 Skip Duplicates",
+                            value=True,
+                            info="Auto-detect and skip duplicate audio files",
+                            scale=1
+                        )
+                    
+                    gr.Markdown("""
+                    💡 **Tip**: Use *Incremental Mode* to grow your dataset over time by adding new SRT+media files without losing existing data.
+                    Perfect for uploading batches of locally prepared subtitle files!
+                    """)
+                    
                     with gr.Accordion("⚙️ VAD Settings", open=False):
                         with gr.Row():
                             vad_threshold = gr.Slider(
@@ -876,12 +895,13 @@ if __name__ == "__main__":
                     return result
                 except Exception as e:
                     return f"❌ Error clearing history: {str(e)}"
-            def process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, progress):
+            def process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, incremental, check_duplicates, progress):
                 """Handle batch processing of multiple SRT+media pairs"""
                 try:
                     # Canonicalize language for dataset artifacts
                     language = normalize_xtts_lang(language)
-                    progress(0, desc=f"Initializing batch processing for {len(srt_files_list)} pairs...")
+                    mode_desc = "INCREMENTAL (adding to existing)" if incremental else "STANDARD (new dataset)"
+                    progress(0, desc=f"Initializing batch processing ({mode_desc}) for {len(srt_files_list)} pairs...")
                     
                     # Process all pairs
                     train_csv, eval_csv, file_infos = batch_processor.process_srt_media_batch(
@@ -890,7 +910,9 @@ if __name__ == "__main__":
                         language=language,
                         out_path=out_path,
                         srt_processor=srt_processor,
-                        progress_callback=lambda p, desc: progress(p, desc=desc)
+                        progress_callback=lambda p, desc: progress(p, desc=desc),
+                        incremental=incremental,
+                        check_duplicates=check_duplicates
                     )
                     
                     # Count total segments
@@ -916,6 +938,8 @@ if __name__ == "__main__":
                     
                     # Format summary
                     summary = batch_processor.format_srt_batch_summary(file_infos, total_segments)
+                    if incremental:
+                        summary += "\n\n✅ INCREMENTAL MODE: New data added to existing dataset!"
                     summary += "\n\nℹ This batch dataset has been saved to history."
                     
                     progress(1.0, desc="Batch processing complete!")
@@ -936,6 +960,8 @@ if __name__ == "__main__":
                 vad_min_speech_ms=250,
                 vad_min_silence_ms=300,
                 vad_pad_ms=30,
+                incremental=False,
+                check_duplicates=True,
                 progress=gr.Progress(track_tqdm=True)
             ):
                 """Process SRT subtitle file(s) with corresponding media file(s)"""
@@ -963,7 +989,7 @@ if __name__ == "__main__":
                     
                     # Check if batch mode and multiple files
                     if batch_mode and (len(srt_files_list) > 1 or len(media_files_list) > 1):
-                        return process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, progress)
+                        return process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, incremental, check_duplicates, progress)
                     
                     # Single file processing
                     srt_file_path = srt_files_list[0]
@@ -1843,6 +1869,8 @@ if __name__ == "__main__":
                     vad_min_speech_duration,  # Min speech duration
                     vad_min_silence_duration,  # Min silence duration
                     vad_speech_pad,  # Speech padding
+                    srt_incremental_mode,  # Incremental mode
+                    srt_check_duplicates,  # Skip duplicates
                 ],
                 outputs=[srt_status],
             )

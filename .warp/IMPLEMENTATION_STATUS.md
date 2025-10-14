@@ -33,6 +33,15 @@
 - ✅ Implemented Training Metrics Monitor
 - ✅ Tested configuration module successfully
 
+### 5. Dataset Management Features
+- ✅ **SRT Upload Incremental Mode Implemented** (2025-10-14)
+  - Added incremental mode checkbox to SRT processing tab
+  - Added duplicate detection checkbox to SRT processing tab
+  - Backend already supported incremental merging
+  - UI now consistent with YouTube tab workflow
+  - Created implementation guide: `.warp/SRT_INCREMENTAL_MODE_IMPLEMENTATION.md`
+  - Ready to use on Lightning AI for dataset expansion
+
 ---
 
 ## ⏳ Next Steps - Integration Required

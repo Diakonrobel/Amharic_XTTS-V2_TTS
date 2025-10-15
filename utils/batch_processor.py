@@ -178,7 +178,11 @@ def process_youtube_batch(
     srt_processor,
     progress_callback=None,
     incremental: bool = False,
-    check_duplicates: bool = True
+    check_duplicates: bool = True,
+    cookies_path: Optional[str] = None,
+    cookies_from_browser: Optional[str] = None,
+    proxy: Optional[str] = None,
+    user_agent: Optional[str] = None,
 ) -> Tuple[str, str, List[Dict]]:
     """
     Process multiple YouTube URLs and merge into single dataset.
@@ -192,6 +196,10 @@ def process_youtube_batch(
         progress_callback: Optional progress callback function
         incremental: If True, add to existing dataset; if False, create new dataset
         check_duplicates: If True, skip duplicate audio files (only for incremental mode)
+        cookies_path: Path to cookies file (Netscape format)
+        cookies_from_browser: Browser name for cookies import (chrome|firefox|edge)
+        proxy: Proxy URL (http(s)://user:pass@host:port)
+        user_agent: Custom User-Agent string
         
     Returns:
         Tuple of (train_csv, eval_csv, list of video info dicts)
@@ -220,7 +228,11 @@ def process_youtube_batch(
                 language=transcript_lang,
                 audio_only=True,
                 download_subtitles=True,
-                auto_update=False  # Don't update for each video
+                auto_update=False,  # Don't update for each video
+                cookies_path=cookies_path,
+                cookies_from_browser=cookies_from_browser,
+                proxy=proxy,
+                user_agent=user_agent,
             )
             
             if not audio_path or not srt_path:

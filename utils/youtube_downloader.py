@@ -12,6 +12,13 @@ from pathlib import Path
 from typing import Optional, Tuple, List, Dict
 import yt_dlp
 
+# Default (rotatable) User-Agent
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
+
 
 def update_ytdlp():
     """
@@ -31,12 +38,22 @@ def update_ytdlp():
         return False
 
 
-def get_video_info(url: str) -> Dict:
+def get_video_info(
+    url: str,
+    cookies_path: Optional[str] = None,
+    cookies_from_browser: Optional[str] = None,
+    proxy: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> Dict:
     """
     Get video information without downloading.
     
     Args:
         url: YouTube video URL
+        cookies_path: Path to cookies file in Netscape format
+        cookies_from_browser: Browser name to import cookies from (e.g., 'chrome', 'firefox', 'edge')
+        proxy: Optional proxy URL (e.g., http://user:pass@host:port)
+        user_agent: Optional user-agent string
         
     Returns:
         Dictionary with video metadata
@@ -45,7 +62,26 @@ def get_video_info(url: str) -> Dict:
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
+        'http_headers': {
+            'User-Agent': user_agent or DEFAULT_USER_AGENT,
+        },
+        # Encourage mobile web client and avoid manifests
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['mweb']
+            }
+        },
+        'youtube_include_dash_manifest': False,
+        'youtube_include_hls_manifest': False,
     }
+
+    if proxy:
+        ydl_opts['proxy'] = proxy
+    if cookies_path:
+        ydl_opts['cookiefile'] = cookies_path
+    elif cookies_from_browser:
+        # cookiesfrombrowser tuple: (browser[, profile[, keyring[, container]]])
+        ydl_opts['cookiesfrombrowser'] = (cookies_from_browser, None, None, None)
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
@@ -180,14 +216,18 @@ def download_subtitles_robust(
     sanitized_title: str,
     language: str,
     result: dict,
-    max_retries: int = 3
+    max_retries: int = 3,
+    cookies_path: Optional[str] = None,
+    cookies_from_browser: Optional[str] = None,
+    proxy: Optional[str] = None,
+    user_agent: Optional[str] = None,
 ) -> Optional[str]:
     """
     Robustly download subtitles with multiple fallback strategies to bypass rate limiting.
     
     Strategies:
     1. Direct API extraction from result metadata (fastest, no extra request)
-    2. yt-dlp with cookies and browser impersonation
+    2. yt-dlp with cookies and browser impersonation (mweb client, optional proxy)
     3. Exponential backoff retry with random delays
     4. Alternative subtitle formats and languages
     
@@ -248,7 +288,7 @@ def download_subtitles_robust(
             req = urllib.request.Request(
                 subtitle_url,
                 headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+'User-Agent': user_agent or DEFAULT_USER_AGENT,
                     'Accept': '*/*',
                     'Accept-Language': 'en-US,en;q=0.9',
                     'Accept-Encoding': 'gzip, deflate',
@@ -344,16 +384,30 @@ def download_subtitles_robust(
                 'retries': 3,
                 'sleep_interval': 2,
                 'max_sleep_interval': 5,
-                # Use cookies to appear as logged-in user (helps with rate limits)
-                'cookiefile': None,  # Can be set to browser cookies file
-                # Headers to appear more like a browser
+                # Networking and headers
                 'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'User-Agent': user_agent or DEFAULT_USER_AGENT,
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                     'Accept-Language': 'en-us,en;q=0.5',
                     'Sec-Fetch-Mode': 'navigate',
-                }
+                },
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['mweb']
+                    }
+                },
+                'youtube_include_dash_manifest': False,
+                'youtube_include_hls_manifest': False,
+                'concurrent_fragment_downloads': 1,
             }
+
+            # Apply optional auth/networking
+            if proxy:
+                subtitle_opts['proxy'] = proxy
+            if cookies_path:
+                subtitle_opts['cookiefile'] = cookies_path
+            elif cookies_from_browser:
+                subtitle_opts['cookiesfrombrowser'] = (cookies_from_browser, None, None, None)
             
             with yt_dlp.YoutubeDL(subtitle_opts) as ydl:
                 print(f"  Attempt {attempt + 1}/{max_retries}: Downloading subtitles...")
@@ -536,7 +590,11 @@ def download_youtube_video(
     language: str = 'en',
     audio_only: bool = True,
     download_subtitles: bool = True,
-    auto_update: bool = True
+    auto_update: bool = True,
+    cookies_path: Optional[str] = None,
+    cookies_from_browser: Optional[str] = None,
+    proxy: Optional[str] = None,
+    user_agent: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str], Dict]:
     """
     Download YouTube video/audio and subtitles.
@@ -554,6 +612,16 @@ def download_youtube_video(
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    # Env fallbacks if not provided
+    if cookies_path is None:
+        cookies_path = os.getenv("YTDLP_COOKIES")
+    if cookies_from_browser is None:
+        cookies_from_browser = os.getenv("YTDLP_COOKIES_FROM_BROWSER")
+    if proxy is None:
+        proxy = os.getenv("YTDLP_PROXY")
+    if user_agent is None:
+        user_agent = os.getenv("YTDLP_UA")
     
     # Auto-update yt-dlp
     if auto_update:
@@ -562,7 +630,13 @@ def download_youtube_video(
     # Get video info first
     print(f"Fetching video information from {url}...")
     try:
-        info = get_video_info(url)
+        info = get_video_info(
+            url,
+            cookies_path=cookies_path,
+            cookies_from_browser=cookies_from_browser,
+            proxy=proxy,
+            user_agent=user_agent,
+        )
         print(f"  Title: {info['title']}")
         print(f"  Duration: {info['duration']}s")
         print(f"  Has manual subtitles: {info['has_subtitles']}")
@@ -596,7 +670,27 @@ def download_youtube_video(
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }] if audio_only else [],
+        # Make requests look like a real browser session
+        'http_headers': {
+            'User-Agent': user_agent or DEFAULT_USER_AGENT,
+        },
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['mweb']
+            }
+        },
+        'youtube_include_dash_manifest': False,
+        'youtube_include_hls_manifest': False,
+        'concurrent_fragment_downloads': 1,
     }
+
+    # Optional auth/networking
+    if proxy:
+        ydl_opts['proxy'] = proxy
+    if cookies_path:
+        ydl_opts['cookiefile'] = cookies_path
+    elif cookies_from_browser:
+        ydl_opts['cookiesfrombrowser'] = (cookies_from_browser, None, None, None)
     
     # Add subtitle options - make them optional with error handling
     if download_subtitles:
@@ -654,7 +748,11 @@ def download_youtube_video(
                 output_path=output_path,
                 sanitized_title=sanitized_title,
                 language=language,
-                result=result
+                result=result,
+                cookies_path=cookies_path,
+                cookies_from_browser=cookies_from_browser,
+                proxy=proxy,
+                user_agent=user_agent,
             )
     
     except Exception as e:
@@ -671,7 +769,11 @@ def download_and_process_youtube(
     output_dir: str,
     language: str = 'en',
     use_whisper_if_no_srt: bool = True,
-    auto_update: bool = True
+    auto_update: bool = True,
+    cookies_path: Optional[str] = None,
+    cookies_from_browser: Optional[str] = None,
+    proxy: Optional[str] = None,
+    user_agent: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str], Dict]:
     """
     Download YouTube video and prepare for dataset creation.
@@ -694,7 +796,11 @@ def download_and_process_youtube(
         language=language,
         audio_only=True,
         download_subtitles=True,
-        auto_update=auto_update
+        auto_update=auto_update,
+        cookies_path=cookies_path,
+        cookies_from_browser=cookies_from_browser,
+        proxy=proxy,
+        user_agent=user_agent,
     )
     
     if not audio_path:
@@ -768,30 +874,37 @@ def transcribe_with_whisper(
 
 
 if __name__ == "__main__":
-    # Test usage
-    import sys
-    
-    if len(sys.argv) < 2:
-        print("Usage: python youtube_downloader.py <youtube_url> [output_dir] [language]")
-        sys.exit(1)
-    
-    url = sys.argv[1]
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else "./youtube_downloads"
-    language = sys.argv[3] if len(sys.argv) > 3 else "en"
-    
+    # CLI usage
+    import argparse
+
+    parser = argparse.ArgumentParser(description="YouTube audio+subtitle downloader")
+    parser.add_argument("url", help="YouTube URL")
+    parser.add_argument("output_dir", nargs="?", default="./youtube_downloads", help="Output directory")
+    parser.add_argument("language", nargs="?", default="en", help="Subtitle language (ISO 639-1)")
+    parser.add_argument("--cookies", dest="cookies_path", default=os.getenv("YTDLP_COOKIES"), help="Path to cookies file (Netscape format)")
+    parser.add_argument("--from-browser", dest="cookies_from_browser", default=os.getenv("YTDLP_COOKIES_FROM_BROWSER"), help="Import cookies from browser (chrome|firefox|edge)")
+    parser.add_argument("--proxy", dest="proxy", default=os.getenv("YTDLP_PROXY"), help="Proxy URL, e.g. http://user:pass@host:port")
+    parser.add_argument("--ua", dest="user_agent", default=os.getenv("YTDLP_UA"), help="Custom User-Agent")
+
+    args = parser.parse_args()
+
     try:
         audio, srt, info = download_and_process_youtube(
-            url=url,
-            output_dir=output_dir,
-            language=language,
-            use_whisper_if_no_srt=True
+            url=args.url,
+            output_dir=args.output_dir,
+            language=args.language,
+            use_whisper_if_no_srt=True,
+            cookies_path=args.cookies_path,
+            cookies_from_browser=args.cookies_from_browser,
+            proxy=args.proxy,
+            user_agent=args.user_agent,
         )
-        
+
         print(f"\n✓ Download complete!")
         print(f"  Audio: {audio}")
         print(f"  Subtitles: {srt}")
         print(f"  Title: {info.get('title', 'N/A')}")
-        
+
     except Exception as e:
         print(f"\n✗ Error: {e}")
-        sys.exit(1)
+        raise

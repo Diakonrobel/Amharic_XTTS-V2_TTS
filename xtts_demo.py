@@ -803,6 +803,47 @@ if __name__ == "__main__":
                     Perfect for building large datasets across multiple sessions!
                     """)
                     
+                    with gr.Accordion("🔐 YouTube Authentication & Bypass (Optional)", open=False):
+                        gr.Markdown("""
+                        **Fix YouTube bot detection / sign-in requirements:**
+                        - Export browser cookies or use browser cookie import
+                        - Uses mobile web client (mweb) to bypass restrictions
+                        """)
+                        with gr.Row():
+                            youtube_cookies_file = gr.Textbox(
+                                label="🍪 Cookies File Path",
+                                placeholder="C:\\path\\to\\cookies.txt (Netscape format)",
+                                info="Export cookies from YouTube using browser extension",
+                                scale=2
+                            )
+                            youtube_cookies_browser = gr.Dropdown(
+                                label="📱 Import from Browser",
+                                choices=["", "chrome", "firefox", "edge", "brave", "opera"],
+                                value="",
+                                info="Auto-import cookies from browser",
+                                scale=1
+                            )
+                        with gr.Row():
+                            youtube_proxy = gr.Textbox(
+                                label="🌐 Proxy URL (Optional)",
+                                placeholder="http://user:pass@host:port or socks5://host:port",
+                                info="Optional proxy for IP rotation",
+                                scale=2
+                            )
+                            youtube_user_agent = gr.Textbox(
+                                label="🤖 Custom User-Agent (Optional)",
+                                placeholder="Leave empty for default",
+                                info="Custom browser user-agent string",
+                                scale=2
+                            )
+                        gr.Markdown("""
+                        **💡 How to export cookies:**
+                        1. Install a browser extension like "Get cookies.txt LOCALLY" (Chrome/Firefox)
+                        2. Visit youtube.com and sign in
+                        3. Export cookies as Netscape format (.txt)
+                        4. Paste the file path above OR use browser import
+                        """)
+                    
                     download_youtube_btn = gr.Button(value="▶️ Download & Process", variant="primary", size="lg")
                     youtube_status = gr.Textbox(label="Status", interactive=False, lines=6, show_label=False)
                 
@@ -1089,11 +1130,17 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error processing SRT: {str(e)}"
             
-            def process_youtube_batch_urls(urls, transcript_lang, out_path, incremental, check_duplicates, progress):
+            def process_youtube_batch_urls(urls, transcript_lang, out_path, incremental, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, progress):
                 """Process multiple YouTube URLs in batch mode"""
                 try:
                     mode_desc = "INCREMENTAL (adding to existing)" if incremental else "STANDARD (new dataset)"
                     progress(0, desc=f"Initializing batch processing ({mode_desc}) for {len(urls)} videos...")
+                    
+                    # Prepare auth parameters (empty strings -> None)
+                    cookies_file = cookies_path.strip() if cookies_path and cookies_path.strip() else None
+                    cookies_browser = cookies_from_browser.strip() if cookies_from_browser and cookies_from_browser.strip() else None
+                    proxy_url = proxy.strip() if proxy and proxy.strip() else None
+                    ua = user_agent.strip() if user_agent and user_agent.strip() else None
                     
                     # Process all videos
                     train_csv, eval_csv, video_infos = batch_processor.process_youtube_batch(
@@ -1104,7 +1151,11 @@ if __name__ == "__main__":
                         srt_processor=srt_processor,
                         progress_callback=lambda p, desc: progress(p, desc=desc),
                         incremental=incremental,
-                        check_duplicates=check_duplicates
+                        check_duplicates=check_duplicates,
+                        cookies_path=cookies_file,
+                        cookies_from_browser=cookies_browser,
+                        proxy=proxy_url,
+                        user_agent=ua,
                     )
                     
                     # Count total segments
@@ -1146,7 +1197,7 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error in batch processing: {str(e)}"
             
-            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, incremental_mode, check_duplicates, progress=gr.Progress(track_tqdm=True)):
+            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, incremental_mode, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, progress=gr.Progress(track_tqdm=True)):
                 """Download YouTube video(s) and extract transcripts"""
                 try:
                     if not url:
@@ -1158,9 +1209,15 @@ if __name__ == "__main__":
                     if not urls:
                         return "❌ No valid YouTube URLs found. Please check your input."
                     
+                    # Prepare auth parameters (empty strings -> None)
+                    cookies_file = cookies_path.strip() if cookies_path and cookies_path.strip() else None
+                    cookies_browser = cookies_from_browser.strip() if cookies_from_browser and cookies_from_browser.strip() else None
+                    proxy_url = proxy.strip() if proxy and proxy.strip() else None
+                    ua = user_agent.strip() if user_agent and user_agent.strip() else None
+                    
                     # Check if batch mode and multiple URLs
                     if batch_mode and len(urls) > 1:
-                        return process_youtube_batch_urls(urls, transcript_lang, out_path, incremental_mode, check_duplicates, progress)
+                        return process_youtube_batch_urls(urls, transcript_lang, out_path, incremental_mode, check_duplicates, cookies_file, cookies_browser, proxy_url, ua, progress)
                     
                     # Single URL processing (existing logic)
                     url = urls[0]  # Use first URL
@@ -1189,7 +1246,11 @@ if __name__ == "__main__":
                         language=transcript_lang,
                         audio_only=True,
                         download_subtitles=True,
-                        auto_update=True
+                        auto_update=True,
+                        cookies_path=cookies_file,
+                        cookies_from_browser=cookies_browser,
+                        proxy=proxy_url,
+                        user_agent=ua,
                     )
                     
                     if not audio_path:
@@ -2016,6 +2077,10 @@ if __name__ == "__main__":
                     youtube_batch_mode,
                     youtube_incremental_mode,  # Incremental mode
                     youtube_check_duplicates,  # Skip duplicates
+                    youtube_cookies_file,  # Cookies file path
+                    youtube_cookies_browser,  # Browser for cookie import
+                    youtube_proxy,  # Proxy URL
+                    youtube_user_agent,  # Custom User-Agent
                 ],
                 outputs=[youtube_status],
             )

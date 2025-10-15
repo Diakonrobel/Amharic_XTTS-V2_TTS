@@ -367,6 +367,96 @@ Edit in `utils/gpt_train.py`:
 - `max_text_length` (default: 200 characters)
 - Learning rate: `lr=5e-06`
 
+### Training with Small Datasets (<3000 samples)
+
+**Problem:** XTTS v2 (520M parameters) easily overfits on small datasets (1-3 hours / 1000-3000 samples).
+
+**Solution:** Use optimized configuration from `utils/xtts_small_dataset_config.py`:
+
+```python
+from utils.xtts_small_dataset_config import XTTSSmallDatasetConfig, EarlyStoppingCallback
+
+# Print configuration summary
+XTTSSmallDatasetConfig.print_config_summary()
+
+# Apply to training
+config = GPTTrainerConfig(
+    epochs=XTTSSmallDatasetConfig.MAX_EPOCHS,  # 2 epochs only
+    batch_size=XTTSSmallDatasetConfig.BATCH_SIZE,  # 1
+    lr=XTTSSmallDatasetConfig.LEARNING_RATE,  # 5e-7
+    optimizer_params={"weight_decay": XTTSSmallDatasetConfig.WEIGHT_DECAY},  # 0.1
+    ...
+)
+
+# Apply layer freezing (train only ~5-10% of parameters)
+model = GPTTrainer.init_from_config(config)
+total, trainable = XTTSSmallDatasetConfig.apply_layer_freezing(model)
+
+# Setup early stopping
+early_stopping = EarlyStoppingCallback(patience=1, min_delta=0.01)
+
+# Training loop with early stopping
+for epoch in range(config.epochs):
+    train_loss = trainer.train_epoch()
+    val_loss = trainer.eval_epoch()
+    
+    if early_stopping(val_loss, epoch):
+        print("🛑 Early stopping - preventing overfitting")
+        break
+```
+
+**Key Techniques:**
+
+1. **Layer Freezing** (Most Important)
+   - Freeze encoder and first 28 of 30 GPT layers
+   - Only train text embeddings, last 2 GPT layers, and output head
+   - Reduces trainable params from 520M → ~50M (90% frozen)
+
+2. **Very Low Learning Rate**
+   - Use 5e-7 (10x lower than default)
+   - Small datasets need gentle updates
+
+3. **Minimal Epochs**
+   - Only 2 epochs for <2000 samples
+   - More epochs = memorization not learning
+
+4. **Early Stopping**
+   - Automatically stops when validation loss increases
+   - Prevents wasting compute on overfitting
+
+5. **Small Batch + High Gradient Accumulation**
+   - Batch size = 1, Gradient accumulation = 16
+   - Effective batch size = 16
+   - Better gradients for limited data
+
+6. **High Regularization**
+   - Weight decay = 0.1 (stronger L2 regularization)
+   - Gradient clipping = 0.5
+
+7. **Audio Augmentation** (Optional)
+   ```python
+   from utils.audio_augmentation import SimpleAudioAugmenter
+   
+   augmenter = SimpleAudioAugmenter(noise_prob=0.3)
+   waveform = augmenter.augment(waveform)
+   ```
+
+**Expected Results:**
+```
+Bad (Overfitting):
+  Epoch 0: val_loss = 3.412 ✅
+  Epoch 1: val_loss = 3.427 ⚠️  (+0.015)
+  Epoch 2: val_loss = 3.607 🚨 (+0.180)
+
+Good (With Anti-Overfitting):
+  Epoch 0: val_loss = 3.412 ✅
+  Epoch 1: val_loss = 3.350 ✅ (-0.062)
+  Epoch 2: val_loss = 3.380 ⚠️  → Early Stop
+  Best model: Epoch 1
+```
+
+**See:** `docs/SMALL_DATASET_TRAINING.md` for complete guide
+
 ### Optimize Model for Deployment
 After training:
 1. Go to Tab 2.5 in Web UI

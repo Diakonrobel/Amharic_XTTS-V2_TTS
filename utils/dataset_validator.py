@@ -3,11 +3,18 @@
 Automatic Dataset Validator and Fixer
 
 Runs before training to:
-- Validate CSV format
-- Fix common issues (paths, language codes)
-- Check audio file existence
-- Validate dataset quality
+- Validate CSV format (3 columns, pipe-delimited)
+- Fix common path issues (wavs/* -> finetune_models/dataset/wavs/*)
+- Fix language codes ('speaker' -> 'am')
+- Remove ALL rows with missing audio files (unlimited - handles 1, 10, 100, 1000+ missing files)
+- Check text content quality
+- Validate dataset size (stops if too small after removals)
+- Create automatic backups before modifications
 - Give clear feedback on issues found and fixed
+
+IMPORTANT: This validator processes EVERY row and removes ALL rows with missing
+audio files automatically. There is NO LIMIT on how many rows can be removed.
+Only logging output is limited to first few samples for readability.
 """
 
 import csv
@@ -169,7 +176,16 @@ class DatasetValidator:
             return False
     
     def _check_audio_paths(self, csv_path: str, csv_type: str) -> bool:
-        """Check and fix audio file paths"""
+        """
+        Check and fix audio file paths
+        
+        IMPORTANT: This method processes ALL rows and will:
+        - Fix any fixable path issues (unlimited)
+        - Remove ALL rows with missing audio files (unlimited)
+        - No limits on how many rows can be removed
+        
+        Only the logging is limited to first 3 samples for readability.
+        """
         try:
             # Read CSV
             rows = []
@@ -182,6 +198,7 @@ class DatasetValidator:
             fixed_paths = 0
             removed_rows = 0
             
+            # Process EVERY row - no limits on how many can be fixed/removed
             for row_num, row in enumerate(rows, 1):
                 if len(row) != 3:
                     fixed_rows.append(row)
@@ -233,7 +250,7 @@ class DatasetValidator:
                         logger.info(f"✅ {fix_msg}")
                     
                     if removed_rows > 0:
-                        fix_msg = f"{csv_type}: Removed {removed_rows} rows with missing audio files"
+                        fix_msg = f"{csv_type}: Removed {removed_rows} rows with missing audio files (ALL missing files cleaned)"
                         self.issues_fixed.append(fix_msg)
                         logger.info(f"✅ {fix_msg}")
                         
@@ -241,6 +258,11 @@ class DatasetValidator:
                         original_count = len(rows)
                         new_count = len(fixed_rows)
                         logger.info(f"  ℹ️  Dataset size: {original_count} → {new_count} samples")
+                        
+                        # Show percentage removed if significant
+                        removal_pct = (removed_rows / original_count * 100) if original_count > 0 else 0
+                        if removal_pct > 10:
+                            logger.warning(f"  ⚠️  Removed {removal_pct:.1f}% of dataset - consider investigating missing files")
                 else:
                     if fixed_paths > 0:
                         issue = f"{csv_type}: {fixed_paths} audio paths need fixing"

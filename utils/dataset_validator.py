@@ -341,7 +341,14 @@ class DatasetValidator:
         csv_type: str,
         expected_language: str
     ) -> bool:
-        """Check and fix language codes"""
+        """
+        Check and fix column 3 (speaker name)
+        
+        IMPORTANT: The coqui formatter expects column 3 to be SPEAKER NAME, not language!
+        Language is set in BaseDatasetConfig separately.
+        
+        This function converts any language codes (am, amh, en) to 'speaker'.
+        """
         try:
             # Read CSV
             rows = []
@@ -359,10 +366,13 @@ class DatasetValidator:
                 
                 audio_path, text, lang = row
                 
-                # Fix common wrong language codes
-                if lang.strip().lower() in ['speaker', 'unknown', '']:
+                # FIX: The third column should be SPEAKER NAME, not language code!
+                # The coqui formatter expects: path|text|speaker_name
+                # Language is set in BaseDatasetConfig, not in CSV
+                # So we replace language codes with 'speaker'
+                if lang.strip().lower() in ['am', 'amh', 'en', 'speaker', 'unknown', '']:
                     wrong_lang_codes += 1
-                    lang = expected_language
+                    lang = 'speaker'  # Use generic speaker name
                 
                 fixed_rows.append([audio_path, text, lang])
             
@@ -370,11 +380,11 @@ class DatasetValidator:
             if wrong_lang_codes > 0:
                 if self.auto_fix:
                     self._backup_and_write_csv(csv_path, fixed_rows)
-                    fix_msg = f"{csv_type}: Fixed {wrong_lang_codes} language codes to '{expected_language}'"
+                    fix_msg = f"{csv_type}: Fixed {wrong_lang_codes} entries to use 'speaker' in column 3 (coqui format)"
                     self.issues_fixed.append(fix_msg)
                     logger.info(f"✅ {fix_msg}")
                 else:
-                    issue = f"{csv_type}: {wrong_lang_codes} incorrect language codes"
+                    issue = f"{csv_type}: {wrong_lang_codes} incorrect speaker names in column 3"
                     self.issues_found.append(issue)
                     logger.warning(f"⚠️  {issue}")
             

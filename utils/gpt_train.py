@@ -353,6 +353,16 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         print(f" > Will convert Amharic text → IPA phonemes")
         try:
             from utils.amharic_g2p_dataset_wrapper import apply_g2p_to_training_data
+            from utils.g2p_backend_selector import select_g2p_backend
+            
+            # Dynamically select best available G2P backend
+            # NO HARDCODED SELECTION - auto-detects and falls back intelligently
+            selected_backend, reason = select_g2p_backend(
+                preferred=None,  # Auto-select best available
+                fallback=True,
+                verbose=False
+            )
+            print(f" > Selected G2P backend: {selected_backend} ({reason})")
             
             # Preprocess samples and get effective language
             train_samples, eval_samples, new_language = apply_g2p_to_training_data(
@@ -361,7 +371,7 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
                 train_csv_path=train_csv,
                 eval_csv_path=eval_csv,
                 language=language,
-                g2p_backend="rule_based"  # Use rule_based for reliability
+                g2p_backend=selected_backend  # Use dynamically selected backend
             )
             
             # Update effective language

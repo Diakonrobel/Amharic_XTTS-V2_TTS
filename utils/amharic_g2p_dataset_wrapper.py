@@ -193,17 +193,19 @@ def apply_g2p_to_training_data(
         logger.warning(f"  Eval CSV preprocessed: {eval_preprocessed}")
         logger.warning("  Will attempt to preprocess both to ensure consistency")
     
-    # Load G2P tokenizer
+    # Load G2P tokenizer with dynamic backend
     logger.info(f"Loading Amharic G2P tokenizer (backend: {g2p_backend})...")
     
     try:
-        from amharic_tts.tokenizer.xtts_tokenizer_wrapper import XTTSAmharicTokenizer
+        from amharic_tts.tokenizer.xtts_tokenizer_wrapper import create_xtts_tokenizer
         
-        tokenizer = XTTSAmharicTokenizer(
+        # Create tokenizer with specified backend (NOT hardcoded!)
+        tokenizer = create_xtts_tokenizer(
             vocab_file=None,
-            use_phonemes=True
+            use_phonemes=True,
+            g2p_backend=g2p_backend  # Pass backend to tokenizer
         )
-        logger.info("✓ Amharic G2P tokenizer loaded successfully")
+        logger.info(f"✓ Amharic G2P tokenizer loaded successfully (backend: {g2p_backend})")
         
     except ImportError as e:
         logger.error(f"✗ Failed to load Amharic G2P tokenizer: {e}")

@@ -55,26 +55,59 @@ print("TTS FORMATTER SIMULATION:")
 print("-" * 70)
 try:
     from TTS.tts.datasets.formatters import coqui
+    import inspect
     
     root_path = os.path.dirname(csv_path)
     meta_file = os.path.basename(csv_path)
     
     print(f"root_path: {root_path}")
     print(f"meta_file: {meta_file}")
+    print(f"Full CSV path: {os.path.join(root_path, meta_file)}")
+    print()
+    
+    # Show what coqui formatter expects
+    print("Coqui formatter signature:")
+    print(f"  {inspect.signature(coqui)}")
     print()
     
     try:
+        # Read CSV manually to see what formatter will see
+        csv_full_path = os.path.join(root_path, meta_file)
+        print(f"Reading CSV from: {csv_full_path}")
+        print(f"CSV exists: {os.path.exists(csv_full_path)}")
+        print()
+        
         metadata = coqui(root_path, meta_file)
         print(f"✅ TTS formatter succeeded!")
         print(f"   Returned {len(metadata)} samples")
-        print(f"   First sample keys: {metadata[0].keys() if metadata else 'N/A'}")
+        print(f"   First sample type: {type(metadata[0])}")
+        print(f"   First sample keys: {metadata[0].keys() if hasattr(metadata[0], 'keys') else 'Not a dict'}")
         if metadata:
             print(f"   First sample:")
-            for key, value in list(metadata[0].items())[:5]:
-                print(f"      {key}: {str(value)[:60]}")
+            if hasattr(metadata[0], 'items'):
+                for key, value in list(metadata[0].items())[:5]:
+                    print(f"      {key}: {str(value)[:60]}")
+            else:
+                print(f"      {metadata[0]}")
     except Exception as e:
         print(f"❌ TTS formatter failed: {e}")
         print(f"   This is why training fails!")
+        print()
+        
+        # Try to debug what went wrong
+        try:
+            import csv as csv_lib
+            csv_full_path = os.path.join(root_path, meta_file)
+            print("Manual CSV read test:")
+            with open(csv_full_path, 'r', encoding='utf-8') as f:
+                reader = csv_lib.reader(f, delimiter='|')
+                first_row = next(reader)
+                print(f"  First row: {first_row}")
+                print(f"  Columns: {len(first_row)}")
+        except Exception as debug_e:
+            print(f"  Manual read also failed: {debug_e}")
+        
+        print()
         import traceback
         traceback.print_exc()
         

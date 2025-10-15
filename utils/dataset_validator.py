@@ -180,6 +180,7 @@ class DatasetValidator:
             fixed_rows = []
             missing_files = 0
             fixed_paths = 0
+            removed_rows = 0
             
             for row_num, row in enumerate(rows, 1):
                 if len(row) != 3:
@@ -202,27 +203,57 @@ class DatasetValidator:
                         
                         if self.verbose and fixed_paths <= 3:
                             logger.info(f"  ✅ Fixed path: {original_path} → {audio_path}")
+                        
+                        # Add the fixed row
+                        fixed_rows.append([audio_path, text, lang])
                     else:
-                        # Path couldn't be fixed
-                        if missing_files <= 3:  # Only log first few
-                            logger.warning(f"  ⚠️  Audio file not found: {audio_path}")
-                
-                fixed_rows.append([audio_path, text, lang])
+                        # Path couldn't be fixed - REMOVE this row if auto_fix enabled
+                        if self.auto_fix:
+                            removed_rows += 1
+                            if removed_rows <= 3:  # Only log first few
+                                logger.warning(f"  🗑️  Removing row with missing file: {audio_path}")
+                            # Don't append this row - effectively removing it
+                        else:
+                            # Not auto-fixing, keep the row but warn
+                            if missing_files <= 3:
+                                logger.warning(f"  ⚠️  Audio file not found: {audio_path}")
+                            fixed_rows.append([audio_path, text, lang])
+                else:
+                    # File exists, keep the row
+                    fixed_rows.append([audio_path, text, lang])
             
             # Write fixes if needed
-            if fixed_paths > 0:
+            if fixed_paths > 0 or removed_rows > 0:
                 if self.auto_fix:
                     self._backup_and_write_csv(csv_path, fixed_rows)
-                    fix_msg = f"{csv_type}: Fixed {fixed_paths} audio paths"
-                    self.issues_fixed.append(fix_msg)
-                    logger.info(f"✅ {fix_msg}")
+                    
+                    if fixed_paths > 0:
+                        fix_msg = f"{csv_type}: Fixed {fixed_paths} audio paths"
+                        self.issues_fixed.append(fix_msg)
+                        logger.info(f"✅ {fix_msg}")
+                    
+                    if removed_rows > 0:
+                        fix_msg = f"{csv_type}: Removed {removed_rows} rows with missing audio files"
+                        self.issues_fixed.append(fix_msg)
+                        logger.info(f"✅ {fix_msg}")
+                        
+                        # Update dataset size info
+                        original_count = len(rows)
+                        new_count = len(fixed_rows)
+                        logger.info(f"  ℹ️  Dataset size: {original_count} → {new_count} samples")
                 else:
-                    issue = f"{csv_type}: {fixed_paths} audio paths need fixing"
-                    self.issues_found.append(issue)
-                    logger.warning(f"⚠️  {issue}")
+                    if fixed_paths > 0:
+                        issue = f"{csv_type}: {fixed_paths} audio paths need fixing"
+                        self.issues_found.append(issue)
+                        logger.warning(f"⚠️  {issue}")
+                    
+                    if removed_rows > 0:
+                        issue = f"{csv_type}: {removed_rows} rows with missing files"
+                        self.issues_found.append(issue)
+                        logger.warning(f"⚠️  {issue}")
             
-            # Report missing files
-            if missing_files > 0:
+            # Report remaining missing files (if auto_fix disabled)
+            if not self.auto_fix and missing_files > 0:
                 warning = f"{csv_type}: {missing_files} audio files not found"
                 self.warnings.append(warning)
                 logger.warning(f"⚠️  {warning}")
@@ -354,21 +385,33 @@ class DatasetValidator:
                 rows = [row for row in reader if len(row) == 3]
             
             if len(rows) == 0:
-                issue = f"{csv_type}: No valid rows found"
+                issue = f"{csv_type}: No valid rows found after validation"
                 self.issues_found.append(issue)
                 logger.error(f"❌ {issue}")
                 return False
             
             # Check minimum dataset size
-            if csv_type == "TRAIN" and len(rows) < 50:
-                warning = f"{csv_type}: Very small dataset ({len(rows)} samples). Recommend at least 50 samples."
-                self.warnings.append(warning)
-                logger.warning(f"⚠️  {warning}")
+            if csv_type == "TRAIN":
+                if len(rows) < 20:
+                    issue = f"{csv_type}: Dataset too small ({len(rows)} samples). Need at least 20 samples for training."
+                    self.issues_found.append(issue)
+                    logger.error(f"❌ {issue}")
+                    return False
+                elif len(rows) < 50:
+                    warning = f"{csv_type}: Small dataset ({len(rows)} samples). Recommend at least 50 samples for good results."
+                    self.warnings.append(warning)
+                    logger.warning(f"⚠️  {warning}")
             
-            if csv_type == "VALIDATION" and len(rows) < 5:
-                warning = f"{csv_type}: Very small validation set ({len(rows)} samples). Recommend at least 5 samples."
-                self.warnings.append(warning)
-                logger.warning(f"⚠️  {warning}")
+            if csv_type == "VALIDATION":
+                if len(rows) < 3:
+                    issue = f"{csv_type}: Validation set too small ({len(rows)} samples). Need at least 3 samples."
+                    self.issues_found.append(issue)
+                    logger.error(f"❌ {issue}")
+                    return False
+                elif len(rows) < 5:
+                    warning = f"{csv_type}: Small validation set ({len(rows)} samples). Recommend at least 5 samples."
+                    self.warnings.append(warning)
+                    logger.warning(f"⚠️  {warning}")
             
             if self.verbose:
                 logger.info(f"  ℹ️  {csv_type}: {len(rows)} valid samples")

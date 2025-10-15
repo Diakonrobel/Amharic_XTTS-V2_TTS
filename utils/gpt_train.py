@@ -27,6 +27,14 @@ except ImportError:
     print(" > Warning: Training optimizations module not available")
     OPTIMIZATIONS_AVAILABLE = False
 
+# Import dataset validator
+try:
+    from utils.dataset_validator import validate_dataset_before_training, DatasetValidationError
+    DATASET_VALIDATOR_AVAILABLE = True
+except ImportError:
+    print(" > Warning: Dataset validator not available")
+    DATASET_VALIDATOR_AVAILABLE = False
+
 
 def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, save_step=1000, save_n_checkpoints=1, use_amharic_g2p=False, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False):
     #  Logging parameters
@@ -34,6 +42,32 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     PROJECT_NAME = "XTTS_trainer"
     DASHBOARD_LOGGER = "tensorboard"
     LOGGER_URI = None
+    
+    # ===================================================================
+    # AUTOMATIC DATASET VALIDATION AND FIXING
+    # ===================================================================
+    # Validate and auto-fix dataset CSV files before training starts
+    if DATASET_VALIDATOR_AVAILABLE:
+        try:
+            print(" > Running automatic dataset validation...")
+            validate_dataset_before_training(
+                train_csv=train_csv,
+                eval_csv=eval_csv,
+                expected_language=language,
+                auto_fix=True  # Automatically fix common issues
+            )
+            print(" > ✅ Dataset validation complete!")
+        except DatasetValidationError as e:
+            print(f" > ❌ CRITICAL: Dataset validation failed!")
+            print(f" > Error: {e}")
+            print(f" > Please fix the dataset issues before training.")
+            raise  # Re-raise to stop training
+        except Exception as e:
+            print(f" > ⚠️  Warning: Dataset validation encountered an error: {e}")
+            print(f" > Training will continue, but there may be issues...")
+    else:
+        print(" > ⚠️  Dataset validator not available - skipping validation")
+    # ===================================================================
 
     # print(f"XTTS version = {version}")
 

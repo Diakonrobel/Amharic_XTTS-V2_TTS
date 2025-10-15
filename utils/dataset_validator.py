@@ -182,11 +182,15 @@ class DatasetValidator:
         IMPORTANT: This method processes ALL rows and will:
         - Fix any fixable path issues (unlimited)
         - Remove ALL rows with missing audio files (unlimited)
+        - Ensure paths are RELATIVE to CSV directory (TTS formatter requirement)
         - No limits on how many rows can be removed
         
         Only the logging is limited to first 3 samples for readability.
         """
         try:
+            # Get CSV directory for making paths relative
+            csv_dir = os.path.dirname(os.path.abspath(csv_path))
+            
             # Read CSV
             rows = []
             with open(csv_path, 'r', encoding='utf-8') as f:
@@ -207,22 +211,34 @@ class DatasetValidator:
                 audio_path, text, lang = row
                 original_path = audio_path
                 
+                # Convert to absolute path for checking
+                if not os.path.isabs(audio_path):
+                    abs_audio_path = os.path.join(csv_dir, audio_path)
+                else:
+                    abs_audio_path = audio_path
+                
                 # Check if file exists
-                if not os.path.exists(audio_path):
+                if not os.path.exists(abs_audio_path):
                     missing_files += 1
                     
                     # Try to fix path
-                    fixed_path = self._try_fix_audio_path(audio_path)
+                    fixed_abs_path = self._try_fix_audio_path(abs_audio_path)
                     
-                    if fixed_path and os.path.exists(fixed_path):
-                        audio_path = fixed_path
-                        fixed_paths += 1
-                        
-                        if self.verbose and fixed_paths <= 3:
-                            logger.info(f"  ✅ Fixed path: {original_path} → {audio_path}")
-                        
-                        # Add the fixed row
-                        fixed_rows.append([audio_path, text, lang])
+                    if fixed_abs_path and os.path.exists(fixed_abs_path):
+                        # Convert fixed absolute path to relative path (relative to CSV dir)
+                        try:
+                            relative_path = os.path.relpath(fixed_abs_path, csv_dir)
+                            fixed_paths += 1
+                            
+                            if self.verbose and fixed_paths <= 3:
+                                logger.info(f"  ✅ Fixed path: {original_path} → {relative_path}")
+                            
+                            # Add the fixed row with RELATIVE path
+                            fixed_rows.append([relative_path, text, lang])
+                        except ValueError:
+                            # Can't make relative path (different drives on Windows?)
+                            # Use absolute path as fallback
+                            fixed_rows.append([fixed_abs_path, text, lang])
                     else:
                         # Path couldn't be fixed - REMOVE this row if auto_fix enabled
                         if self.auto_fix:
@@ -236,8 +252,13 @@ class DatasetValidator:
                                 logger.warning(f"  ⚠️  Audio file not found: {audio_path}")
                             fixed_rows.append([audio_path, text, lang])
                 else:
-                    # File exists, keep the row
-                    fixed_rows.append([audio_path, text, lang])
+                    # File exists - convert to relative path and keep the row
+                    try:
+                        relative_path = os.path.relpath(abs_audio_path, csv_dir)
+                        fixed_rows.append([relative_path, text, lang])
+                    except ValueError:
+                        # Can't make relative path, keep as-is
+                        fixed_rows.append([audio_path, text, lang])
             
             # Write fixes if needed
             if fixed_paths > 0 or removed_rows > 0:

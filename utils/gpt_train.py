@@ -35,6 +35,14 @@ except ImportError:
     print(" > Warning: Dataset validator not available")
     DATASET_VALIDATOR_AVAILABLE = False
 
+# Import small dataset configuration
+try:
+    from utils.xtts_small_dataset_config import XTTSSmallDatasetConfig, EarlyStoppingCallback
+    SMALL_DATASET_CONFIG_AVAILABLE = True
+except ImportError:
+    print(" > Warning: Small dataset config not available")
+    SMALL_DATASET_CONFIG_AVAILABLE = False
+
 
 def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, save_step=1000, save_n_checkpoints=1, use_amharic_g2p=False, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False):
     #  Logging parameters
@@ -74,11 +82,52 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     # Set here the path that the checkpoints will be saved. Default: ./run/training/
     OUT_PATH = os.path.join(output_path, "run", "training")
 
+    # ===================================================================
+    # SMALL DATASET DETECTION AND OPTIMIZATION
+    # ===================================================================
+    # Detect dataset size and apply optimal configuration
+    use_small_dataset_config = False
+    
+    if SMALL_DATASET_CONFIG_AVAILABLE:
+        # Count samples in training CSV
+        try:
+            import csv
+            with open(train_csv, 'r', encoding='utf-8') as f:
+                reader = csv.reader(f, delimiter='|')
+                train_sample_count = sum(1 for row in reader)
+                # Subtract 1 if header present
+                if train_sample_count > 0:
+                    with open(train_csv, 'r', encoding='utf-8') as f:
+                        first_line = f.readline()
+                        if 'audio_file' in first_line.lower():
+                            train_sample_count -= 1
+            
+            # Apply small dataset config if <3000 samples
+            if train_sample_count < 3000:
+                use_small_dataset_config = True
+                print("\n" + "="*70)
+                print(f"📊 SMALL DATASET DETECTED: {train_sample_count} samples")
+                print("="*70)
+                print(" > Applying anti-overfitting configuration automatically")
+                print(" > This prevents memorization and improves generalization")
+                print("="*70 + "\n")
+                
+                # Override parameters with small dataset config
+                BATCH_SIZE = XTTSSmallDatasetConfig.BATCH_SIZE
+                GRAD_ACUMM_STEPS = XTTSSmallDatasetConfig.GRAD_ACCUM_STEPS
+                num_epochs = XTTSSmallDatasetConfig.MAX_EPOCHS
+                
+                # Print configuration
+                XTTSSmallDatasetConfig.print_config_summary()
+        except Exception as e:
+            print(f" > Could not detect dataset size: {e}")
+            print(" > Using provided configuration")
+    
     # Training Parameters
     OPTIMIZER_WD_ONLY_ON_WEIGHTS = True  # for multi-gpu training please make it False
     START_WITH_EVAL = False  # if True it will star with evaluation
-    BATCH_SIZE = batch_size  # set here the batch size
-    GRAD_ACUMM_STEPS = grad_acumm  # set here the grad accumulation steps
+    BATCH_SIZE = batch_size if not use_small_dataset_config else BATCH_SIZE  # set here the batch size
+    GRAD_ACUMM_STEPS = grad_acumm if not use_small_dataset_config else GRAD_ACUMM_STEPS  # set here the grad accumulation steps
 
 
     # Dataset config will be created after G2P preprocessing (if enabled)
@@ -249,41 +298,79 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     # define audio config
     audio_config = XttsAudioConfig(sample_rate=22050, dvae_sample_rate=22050, output_sample_rate=24000)
     # training parameters config
-    config = GPTTrainerConfig(
-        epochs=num_epochs,
-        output_path=OUT_PATH,
-        model_args=model_args,
-        run_name=RUN_NAME,
-        project_name=PROJECT_NAME,
-        run_description="""
-            GPT XTTS training
-            """,
-        dashboard_logger=DASHBOARD_LOGGER,
-        logger_uri=LOGGER_URI,
-        audio=audio_config,
-        batch_size=BATCH_SIZE,
-        batch_group_size=48,
-        eval_batch_size=BATCH_SIZE,
-        num_loader_workers=num_workers,
-        eval_split_max_size=256,
-        print_step=50,
-        plot_step=100,
-        log_model_step=100,
-        save_step=save_step,
-        save_n_checkpoints=save_n_checkpoints,
-        save_checkpoints=True,
-        # target_loss="loss",
-        print_eval=False,
-        # Optimizer values like tortoise, pytorch implementation with modifications to not apply WD to non-weight parameters.
-        optimizer="AdamW",
-        optimizer_wd_only_on_weights=OPTIMIZER_WD_ONLY_ON_WEIGHTS,
-        optimizer_params={"betas": [0.9, 0.96], "eps": 1e-8, "weight_decay": 0.05},  # Increased from 0.01 to 0.05 for stronger regularization
-        lr=1e-06,  # Further reduced from 2e-06 to 1e-06 for gentler mel learning with extended vocab
-        lr_scheduler="MultiStepLR",
-        # More aggressive LR reduction schedule: Reduce at epochs 1, 2, 3 (steps ~1010, ~2020, ~3030)
-        lr_scheduler_params={"milestones": [1010, 2020, 3030], "gamma": 0.5, "last_epoch": -1},
-        test_sentences=[],
-    )
+    # Use small dataset config if applicable
+    if use_small_dataset_config:
+        optimizer_config = XTTSSmallDatasetConfig.get_optimizer_config()
+        scheduler_config = XTTSSmallDatasetConfig.get_scheduler_config()
+        
+        config = GPTTrainerConfig(
+            epochs=num_epochs,
+            output_path=OUT_PATH,
+            model_args=model_args,
+            run_name=RUN_NAME,
+            project_name=PROJECT_NAME,
+            run_description="""
+                GPT XTTS training with small dataset optimization
+                """,
+            dashboard_logger=DASHBOARD_LOGGER,
+            logger_uri=LOGGER_URI,
+            audio=audio_config,
+            batch_size=BATCH_SIZE,
+            batch_group_size=48,
+            eval_batch_size=BATCH_SIZE,
+            num_loader_workers=num_workers,
+            eval_split_max_size=256,
+            print_step=XTTSSmallDatasetConfig.PRINT_STEP,
+            plot_step=100,
+            log_model_step=100,
+            save_step=XTTSSmallDatasetConfig.SAVE_STEP,
+            save_n_checkpoints=XTTSSmallDatasetConfig.SAVE_N_CHECKPOINTS,
+            save_checkpoints=True,
+            print_eval=False,
+            optimizer=optimizer_config["optimizer"],
+            optimizer_wd_only_on_weights=OPTIMIZER_WD_ONLY_ON_WEIGHTS,
+            optimizer_params=optimizer_config["optimizer_params"],
+            lr=optimizer_config["lr"],
+            lr_scheduler=scheduler_config["lr_scheduler"],
+            lr_scheduler_params=scheduler_config["lr_scheduler_params"],
+            test_sentences=[],
+        )
+    else:
+        config = GPTTrainerConfig(
+            epochs=num_epochs,
+            output_path=OUT_PATH,
+            model_args=model_args,
+            run_name=RUN_NAME,
+            project_name=PROJECT_NAME,
+            run_description="""
+                GPT XTTS training
+                """,
+            dashboard_logger=DASHBOARD_LOGGER,
+            logger_uri=LOGGER_URI,
+            audio=audio_config,
+            batch_size=BATCH_SIZE,
+            batch_group_size=48,
+            eval_batch_size=BATCH_SIZE,
+            num_loader_workers=num_workers,
+            eval_split_max_size=256,
+            print_step=50,
+            plot_step=100,
+            log_model_step=100,
+            save_step=save_step,
+            save_n_checkpoints=save_n_checkpoints,
+            save_checkpoints=True,
+            # target_loss="loss",
+            print_eval=False,
+            # Optimizer values like tortoise, pytorch implementation with modifications to not apply WD to non-weight parameters.
+            optimizer="AdamW",
+            optimizer_wd_only_on_weights=OPTIMIZER_WD_ONLY_ON_WEIGHTS,
+            optimizer_params={"betas": [0.9, 0.96], "eps": 1e-8, "weight_decay": 0.05},  # Increased from 0.01 to 0.05 for stronger regularization
+            lr=1e-06,  # Further reduced from 2e-06 to 1e-06 for gentler mel learning with extended vocab
+            lr_scheduler="MultiStepLR",
+            # More aggressive LR reduction schedule: Reduce at epochs 1, 2, 3 (steps ~1010, ~2020, ~3030)
+            lr_scheduler_params={"milestones": [1010, 2020, 3030], "gamma": 0.5, "last_epoch": -1},
+            test_sentences=[],
+        )
 
     # Handle extended vocabulary - temporarily disable checkpoint loading, then reload manually
     checkpoint_to_load = None
@@ -310,6 +397,14 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     
     # init the model from config (without checkpoint if extended vocab)
     model = GPTTrainer.init_from_config(config)
+    
+    # Apply layer freezing for small datasets
+    if use_small_dataset_config:
+        print("\n" + "="*70)
+        print("🔒 APPLYING LAYER FREEZING FOR SMALL DATASET")
+        print("="*70)
+        total_params, trainable_params = XTTSSmallDatasetConfig.apply_layer_freezing(model)
+        print("="*70 + "\n")
     
     # Apply optimizations to model AFTER initialization
     if OPTIMIZATIONS_AVAILABLE and (enable_grad_checkpoint or enable_sdpa or enable_mixed_precision):
@@ -442,6 +537,7 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     )
     
     # Apply gradient clipping to prevent exploding gradients
+    grad_clip_norm = XTTSSmallDatasetConfig.GRAD_CLIP_NORM if use_small_dataset_config else 1.0
     try:
         import torch.nn.utils as nn_utils
         original_train_step = trainer.train_step
@@ -450,35 +546,83 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
             result = original_train_step(*args, **kwargs)
             # Clip gradients after backward pass
             if model.training:
-                nn_utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                nn_utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
             return result
         
         trainer.train_step = train_step_with_grad_clip
-        print(" > ✅ Gradient clipping enabled (max_norm=1.0)")
+        print(f" > ✅ Gradient clipping enabled (max_norm={grad_clip_norm})")
     except Exception as e:
         print(f" > ⚠️  Could not enable gradient clipping: {e}")
     
-    # Initialize early stopping monitor
-    print("\n" + "=" * 70)
-    print("🔥 AGGRESSIVE OVERFITTING PREVENTION - V2")
-    print("=" * 70)
-    print(f" > Learning Rate: 1e-06 (REDUCED: 5e-06 → 2e-06 → 1e-06)")
-    print(f" > LR Schedule: Reduce by 50% at epochs 1, 2, 3")
-    print(f" >   - Epoch 0: LR = 1e-06")
-    print(f" >   - Epoch 1: LR = 5e-07 (50% reduction)")
-    print(f" >   - Epoch 2: LR = 2.5e-07 (50% reduction)")
-    print(f" >   - Epoch 3+: LR = 1.25e-07 (50% reduction)")
-    print(f" > Gradient Clipping: max_norm=1.0")
-    print(f" > DataLoader Workers: 4 (optimized)")
-    print(f" > Weight Decay: 0.05 (INCREASED for stronger regularization)")
-    print("")
-    print(" > 🎯 TARGET: Eval loss < 3.5 after epoch 1")
-    print(" > ⚠️  IMPORTANT: Monitor eval_loss after each epoch")
-    print(" >    Stop training if eval_loss > 4.0 after 2 epochs")
-    print(" >    Expected: eval_loss should decrease by 20-30% per epoch")
-    print("=" * 70 + "\n")
+    # Setup early stopping for small datasets
+    early_stopping = None
+    if use_small_dataset_config:
+        early_stopping = EarlyStoppingCallback(
+            patience=XTTSSmallDatasetConfig.EARLY_STOP_PATIENCE,
+            min_delta=XTTSSmallDatasetConfig.EARLY_STOP_MIN_DELTA,
+            verbose=True
+        )
+        print("\n" + "=" * 70)
+        print("🎯 EARLY STOPPING ENABLED")
+        print("=" * 70)
+        print(f" > Patience: {XTTSSmallDatasetConfig.EARLY_STOP_PATIENCE} epoch(s)")
+        print(f" > Min Delta: {XTTSSmallDatasetConfig.EARLY_STOP_MIN_DELTA}")
+        print(" > Will stop automatically if validation loss increases")
+        print("=" * 70 + "\n")
     
-    trainer.fit()
+    # Training info banner
+    if not use_small_dataset_config:
+        print("\n" + "=" * 70)
+        print("🔥 AGGRESSIVE OVERFITTING PREVENTION - V2")
+        print("=" * 70)
+        print(f" > Learning Rate: 1e-06 (REDUCED: 5e-06 → 2e-06 → 1e-06)")
+        print(f" > LR Schedule: Reduce by 50% at epochs 1, 2, 3")
+        print(f" >   - Epoch 0: LR = 1e-06")
+        print(f" >   - Epoch 1: LR = 5e-07 (50% reduction)")
+        print(f" >   - Epoch 2: LR = 2.5e-07 (50% reduction)")
+        print(f" >   - Epoch 3+: LR = 1.25e-07 (50% reduction)")
+        print(f" > Gradient Clipping: max_norm=1.0")
+        print(f" > DataLoader Workers: 4 (optimized)")
+        print(f" > Weight Decay: 0.05 (INCREASED for stronger regularization)")
+        print("")
+        print(" > 🎯 TARGET: Eval loss < 3.5 after epoch 1")
+        print(" > ⚠️  IMPORTANT: Monitor eval_loss after each epoch")
+        print(" >    Stop training if eval_loss > 4.0 after 2 epochs")
+        print(" >    Expected: eval_loss should decrease by 20-30% per epoch")
+        print("=" * 70 + "\n")
+    
+    # Run training with early stopping if enabled
+    if early_stopping:
+        # Custom training loop with early stopping
+        print(" > Starting training with early stopping...\n")
+        for epoch in range(config.epochs):
+            print(f"\n{'='*70}")
+            print(f"EPOCH {epoch}/{config.epochs - 1}")
+            print(f"{'='*70}\n")
+            
+            # Train epoch
+            trainer.train_epoch()
+            
+            # Evaluate
+            eval_metrics = trainer.eval_epoch()
+            
+            # Get validation loss
+            if hasattr(trainer, 'keep_avg_eval') and 'avg_loss' in trainer.keep_avg_eval:
+                val_loss = trainer.keep_avg_eval['avg_loss'][-1]
+                
+                # Check early stopping
+                if early_stopping(val_loss, epoch):
+                    print("\n" + "="*70)
+                    print("🛑 EARLY STOPPING TRIGGERED - Training stopped")
+                    print("="*70)
+                    print(f" > Best validation loss: {early_stopping.best_loss:.4f}")
+                    print(f" > Current epoch: {epoch}")
+                    print(f" > Stopped to prevent overfitting")
+                    print("="*70 + "\n")
+                    break
+    else:
+        # Standard training
+        trainer.fit()
 
     # get the longest text audio file to use as speaker reference
     samples_len = [len(item["text"].split(" ")) for item in train_samples]

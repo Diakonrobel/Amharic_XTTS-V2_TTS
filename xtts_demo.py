@@ -730,6 +730,19 @@ if __name__ == "__main__":
                     
                     with gr.Accordion("⚙️ VAD Settings", open=False):
                         with gr.Row():
+                            use_enhanced_vad_option = gr.Checkbox(
+                                label="✨ Enhanced VAD",
+                                value=False,
+                                info="Advanced VAD with quality metrics & adaptive threshold",
+                                scale=1
+                            )
+                            amharic_mode_option = gr.Checkbox(
+                                label="🇪🇹 Amharic Mode",
+                                value=False,
+                                info="Optimize for Amharic ejective consonants (auto for 'am' language)",
+                                scale=1
+                            )
+                        with gr.Row():
                             vad_threshold = gr.Slider(
                                 label="Sensitivity",
                                 minimum=0.1, maximum=0.9, step=0.05, value=0.5,
@@ -748,6 +761,10 @@ if __name__ == "__main__":
                                 label="Padding (ms)",
                                 minimum=0, maximum=200, step=10, value=30
                             )
+                        gr.Markdown("""
+                        💡 **Enhanced VAD**: Better quality with adaptive threshold, SNR estimation, speech prob metrics.  
+                        🇪🇹 **Amharic Mode**: Tuned for Amharic ejectives (ጥ, ጭ, ቅ) with extra padding. Auto-enabled for Amharic language.
+                        """)
                     
                     process_srt_btn = gr.Button(value="▶️ Process SRT + Media", variant="primary", size="lg")
                     srt_status = gr.Textbox(label="Status", interactive=False, lines=6, show_label=False)
@@ -1024,6 +1041,8 @@ if __name__ == "__main__":
                 vad_min_speech_ms=250,
                 vad_min_silence_ms=300,
                 vad_pad_ms=30,
+                use_enhanced_vad=False,
+                amharic_mode=False,
                 incremental=False,
                 check_duplicates=True,
                 progress=gr.Progress(track_tqdm=True)
@@ -1079,9 +1098,12 @@ if __name__ == "__main__":
                     if use_vad:
                         from utils import srt_processor_vad
                         
-                        mode_desc = "VAD-enhanced"
-                        progress(0, desc=f"Initializing {mode_desc} SRT processor...")
+                        mode_desc = "Enhanced VAD" if use_enhanced_vad else "VAD"
+                        lang_str = " (Amharic)" if amharic_mode else ""
+                        progress(0, desc=f"Initializing {mode_desc} SRT processor{lang_str}...")
                         progress(0.2, desc="Loading VAD model...")
+                        if use_enhanced_vad:
+                            progress(0.25, desc="Enhanced VAD with quality metrics...")
                         progress(0.3, desc="Processing SRT with VAD refinement...")
                         
                         train_csv, eval_csv, duration = srt_processor_vad.process_srt_with_media_vad(
@@ -1091,6 +1113,9 @@ if __name__ == "__main__":
                             language=language,
                             use_vad_refinement=True,
                             vad_threshold=vad_threshold_val,
+                            use_enhanced_vad=use_enhanced_vad,
+                            amharic_mode=amharic_mode,
+                            adaptive_threshold=True,
                             gradio_progress=progress
                         )
                     else:
@@ -1123,8 +1148,16 @@ if __name__ == "__main__":
                     )
                     
                     progress(1.0, desc="SRT processing complete!")
-                    vad_info = f" (VAD-enhanced)" if use_vad else ""
-                    return f"✓ SRT Processing Complete{vad_info}!\nProcessed {num_segments} segments\nTotal audio: {duration:.1f}s\nDataset created at: {output_path}\nMode: {mode_desc.capitalize()}\n\nℹ This dataset has been saved to history and won't be reprocessed."
+                    vad_info_str = ""
+                    if use_vad:
+                        if use_enhanced_vad:
+                            vad_info_str = " (✨ Enhanced VAD"
+                            if amharic_mode:
+                                vad_info_str += " + 🇪🇹 Amharic Mode"
+                            vad_info_str += ")"
+                        else:
+                            vad_info_str = " (Standard VAD)"
+                    return f"✓ SRT Processing Complete{vad_info_str}!\nProcessed {num_segments} segments\nTotal audio: {duration:.1f}s\nDataset created at: {output_path}\nMode: {mode_desc.capitalize()}\n\nℹ This dataset has been saved to history and won't be reprocessed."
                     
                 except Exception as e:
                     traceback.print_exc()
@@ -2061,6 +2094,8 @@ if __name__ == "__main__":
                     vad_min_speech_duration,  # Min speech duration
                     vad_min_silence_duration,  # Min silence duration
                     vad_speech_pad,  # Speech padding
+                    use_enhanced_vad_option,  # Enhanced VAD with quality metrics
+                    amharic_mode_option,  # Amharic-specific optimizations
                     srt_incremental_mode,  # Incremental mode
                     srt_check_duplicates,  # Skip duplicates
                 ],

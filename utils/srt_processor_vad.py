@@ -26,6 +26,10 @@ def extract_segments_with_vad(
     max_duration: float = 15.0,
     use_vad_refinement: bool = True,
     vad_threshold: float = 0.5,
+    # Enhanced VAD options
+    use_enhanced_vad: bool = False,
+    amharic_mode: bool = False,
+    adaptive_threshold: bool = True,
     gradio_progress=None
 ) -> Tuple[str, str]:
     """
@@ -47,6 +51,9 @@ def extract_segments_with_vad(
         max_duration: Maximum segment duration in seconds
         use_vad_refinement: Enable VAD-based refinement
         vad_threshold: VAD confidence threshold
+        use_enhanced_vad: Use enhanced Silero VAD with quality metrics
+        amharic_mode: Enable Amharic-specific optimizations
+        adaptive_threshold: Enable adaptive threshold adjustment
         gradio_progress: Optional Gradio progress tracker
         
     Returns:
@@ -77,9 +84,14 @@ def extract_segments_with_vad(
                 sample_rate=sr,
                 min_segment_duration=min_duration,
                 max_segment_duration=max_duration,
-                vad_threshold=vad_threshold
+                vad_threshold=vad_threshold,
+                use_enhanced_vad=use_enhanced_vad,
+                amharic_mode=amharic_mode,
+                adaptive_threshold=adaptive_threshold
             )
-            print("✓ VAD refinement enabled")
+            mode_str = "Enhanced" if use_enhanced_vad else "Standard"
+            lang_str = " (🇪🇹 Amharic mode)" if amharic_mode else ""
+            print(f"✓ {mode_str} VAD refinement enabled{lang_str}")
         except Exception as e:
             print(f"⚠ VAD initialization failed: {e}")
             print("  Falling back to standard SRT extraction")
@@ -299,6 +311,10 @@ def process_srt_with_media_vad(
     max_duration: float = 15.0,
     use_vad_refinement: bool = True,
     vad_threshold: float = 0.5,
+    # Enhanced VAD options
+    use_enhanced_vad: bool = False,
+    amharic_mode: bool = False,
+    adaptive_threshold: bool = True,
     gradio_progress=None
 ) -> Tuple[str, str, float]:
     """
@@ -314,6 +330,9 @@ def process_srt_with_media_vad(
         max_duration: Maximum segment duration
         use_vad_refinement: Enable VAD refinement
         vad_threshold: VAD confidence threshold
+        use_enhanced_vad: Use enhanced Silero VAD with quality metrics
+        amharic_mode: Enable Amharic-specific optimizations
+        adaptive_threshold: Enable adaptive threshold adjustment
         gradio_progress: Optional Gradio progress tracker
         
     Returns:
@@ -354,9 +373,16 @@ def process_srt_with_media_vad(
     
     # Canonicalize language for dataset artifacts
     language = canonical_lang(language)
+    
+    # Auto-enable Amharic mode if language is Amharic
+    if language.lower() in ['am', 'amh', 'amharic'] and not amharic_mode:
+        print("🇪🇹 Detected Amharic language, enabling Amharic mode")
+        amharic_mode = True
+    
     # Extract segments with VAD
-    mode_str = "VAD-enhanced" if use_vad_refinement else "standard"
-    print(f"Step 3: Extracting audio segments ({mode_str})...")
+    mode_str = "Enhanced VAD" if use_enhanced_vad else ("VAD" if use_vad_refinement else "standard")
+    lang_str = " (Amharic)" if amharic_mode else ""
+    print(f"Step 3: Extracting audio segments ({mode_str}{lang_str})...")
     
     train_csv, eval_csv = extract_segments_with_vad(
         audio_path=audio_path,
@@ -368,6 +394,9 @@ def process_srt_with_media_vad(
         max_duration=max_duration,
         use_vad_refinement=use_vad_refinement,
         vad_threshold=vad_threshold,
+        use_enhanced_vad=use_enhanced_vad,
+        amharic_mode=amharic_mode,
+        adaptive_threshold=adaptive_threshold,
         gradio_progress=gradio_progress
     )
     

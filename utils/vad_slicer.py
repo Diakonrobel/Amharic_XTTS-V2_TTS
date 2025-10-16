@@ -43,7 +43,12 @@ class VADSlicer:
         vad_threshold: float = 0.5,
         max_segment_duration: float = 15.0,
         min_segment_duration: float = 1.0,
-        use_onnx: bool = False
+        use_onnx: bool = False,
+        # Enhanced VAD options
+        use_enhanced_vad: bool = False,
+        amharic_mode: bool = False,
+        adaptive_threshold: bool = True,
+        device: Optional[str] = None
     ):
         """
         Initialize VAD-based slicer.
@@ -57,6 +62,10 @@ class VADSlicer:
             max_segment_duration: Maximum segment duration (seconds)
             min_segment_duration: Minimum segment duration (seconds)
             use_onnx: Use ONNX runtime for faster inference
+            use_enhanced_vad: Use enhanced Silero VAD with quality metrics
+            amharic_mode: Enable Amharic-specific optimizations
+            adaptive_threshold: Enable adaptive threshold adjustment
+            device: 'cpu', 'cuda', or None (auto-detect)
         """
         self.sample_rate = sample_rate
         self.min_speech_duration_ms = min_speech_duration_ms
@@ -66,16 +75,47 @@ class VADSlicer:
         self.max_segment_duration = max_segment_duration
         self.min_segment_duration = min_segment_duration
         self.use_onnx = use_onnx
+        self.use_enhanced_vad = use_enhanced_vad
+        self.amharic_mode = amharic_mode
+        self.adaptive_threshold = adaptive_threshold
+        self.device = device
         
-        # Load VAD model
+        # Load VAD model (enhanced or standard)
         self.vad_model = None
+        self.enhanced_vad = None
         self._load_vad_model()
     
     def _load_vad_model(self):
-        """Load Silero VAD model"""
+        """Load Silero VAD model (enhanced or standard)"""
         try:
             import torch
             
+            # Use enhanced VAD if requested
+            if self.use_enhanced_vad:
+                try:
+                    from utils.silero_vad_enhanced import SileroVADEnhanced
+                    
+                    self.enhanced_vad = SileroVADEnhanced(
+                        sample_rate=self.sample_rate if self.sample_rate == 16000 else 16000,
+                        threshold=self.vad_threshold,
+                        min_speech_duration_ms=self.min_speech_duration_ms,
+                        min_silence_duration_ms=self.min_silence_duration_ms,
+                        speech_pad_ms=self.speech_pad_ms,
+                        use_onnx=self.use_onnx,
+                        device=self.device,
+                        amharic_mode=self.amharic_mode,
+                        adaptive_threshold=self.adaptive_threshold
+                    )
+                    print("✓ Loaded Enhanced Silero VAD")
+                    if self.amharic_mode:
+                        print("  🇪🇹 Amharic mode enabled")
+                    return  # Enhanced VAD loaded successfully
+                except Exception as enhanced_error:
+                    print(f"⚠ Enhanced VAD load failed: {enhanced_error}")
+                    print("  Falling back to standard Silero VAD")
+                    self.use_enhanced_vad = False
+            
+            # Load standard Silero VAD
             if self.use_onnx:
                 # Try ONNX runtime first (faster)
                 try:
@@ -123,10 +163,83 @@ class VADSlicer:
         Returns:
             List of dictionaries with 'start', 'end' (in seconds), and 'confidence'
         """
+        # Use enhanced VAD if available
+        if self.enhanced_vad is not None:
+            return self._detect_with_enhanced_vad(audio)
+        
         if self.vad_model is None:
             # Fallback to energy-based detection
             return self._energy_based_detection(audio)
         
+        # This method now delegates to _detect_with_standard_vad
+        return self._detect_with_standard_vad(audio)
+    
+    def _detect_with_enhanced_vad(self, audio: np.ndarray) -> List[Dict]:
+        """
+        Detect speech using enhanced Silero VAD.
+        
+        Args:
+            audio: Audio waveform
+            
+        Returns:
+            List of speech segments with quality metrics
+        """
+        try:
+            # Convert numpy to torch if needed
+            if isinstance(audio, np.ndarray):
+                audio_tensor = torch.from_numpy(audio).float()
+            else:
+                audio_tensor = audio
+            
+            # Resample if needed
+            if self.sample_rate != 16000:
+                resampler = torchaudio.transforms.Resample(
+                    orig_freq=self.sample_rate,
+                    new_freq=16000
+                )
+                audio_16k = resampler(audio_tensor)
+            else:
+                audio_16k = audio_tensor
+            
+            # Detect with enhanced VAD
+            vad_segments = self.enhanced_vad.detect_speech_timestamps(audio_16k)
+            
+            # Convert VADSegment objects to dict format
+            segments = []
+            for seg in vad_segments:
+                # Scale back to original sample rate
+                start = seg.start * (self.sample_rate / 16000)
+                end = seg.end * (self.sample_rate / 16000)
+                
+                segments.append({
+                    'start': start,
+                    'end': end,
+                    'confidence': seg.confidence,
+                    'snr_estimate': seg.snr_estimate,
+                    'speech_prob_mean': seg.speech_prob_mean
+                })
+            
+            return segments
+            
+        except Exception as e:
+            print(f"⚠ Enhanced VAD detection failed: {e}")
+            print("  Falling back to standard VAD or energy-based")
+            # Try standard VAD as fallback
+            if self.vad_model is not None:
+                return self._detect_with_standard_vad(audio)
+            else:
+                return self._energy_based_detection(audio)
+    
+    def _detect_with_standard_vad(self, audio: np.ndarray) -> List[Dict]:
+        """
+        Detect speech using standard Silero VAD (extracted from detect_speech_segments).
+        
+        Args:
+            audio: Audio waveform
+            
+        Returns:
+            List of speech segments
+        """
         try:
             # Ensure audio is torch tensor
             if isinstance(audio, np.ndarray):
@@ -174,7 +287,7 @@ class VADSlicer:
             return segments
             
         except Exception as e:
-            print(f"⚠ VAD detection failed: {e}, falling back to energy-based")
+            print(f"⚠ Standard VAD detection failed: {e}")
             return self._energy_based_detection(audio)
     
     def _energy_based_detection(self, audio: np.ndarray) -> List[Dict]:
@@ -565,7 +678,11 @@ def slice_audio_with_vad(
     max_segment_duration: float = 15.0,
     vad_threshold: float = 0.5,
     word_timestamps: Optional[List[Dict]] = None,
-    srt_segments: Optional[List[Tuple[float, float, str]]] = None
+    srt_segments: Optional[List[Tuple[float, float, str]]] = None,
+    # Enhanced VAD options
+    use_enhanced_vad: bool = False,
+    amharic_mode: bool = False,
+    adaptive_threshold: bool = True
 ) -> List[str]:
     """
     Convenience function to slice audio file with VAD.
@@ -579,6 +696,9 @@ def slice_audio_with_vad(
         vad_threshold: VAD confidence threshold
         word_timestamps: Optional word-level timestamps
         srt_segments: Optional SRT segments
+        use_enhanced_vad: Use enhanced Silero VAD with quality metrics
+        amharic_mode: Enable Amharic-specific optimizations
+        adaptive_threshold: Enable adaptive threshold adjustment
         
     Returns:
         List of output file paths
@@ -598,7 +718,10 @@ def slice_audio_with_vad(
         sample_rate=sample_rate,
         min_segment_duration=min_segment_duration,
         max_segment_duration=max_segment_duration,
-        vad_threshold=vad_threshold
+        vad_threshold=vad_threshold,
+        use_enhanced_vad=use_enhanced_vad,
+        amharic_mode=amharic_mode,
+        adaptive_threshold=adaptive_threshold
     )
     
     # Slice audio

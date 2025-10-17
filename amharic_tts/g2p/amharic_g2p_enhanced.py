@@ -84,9 +84,18 @@ class EnhancedAmharicG2P:
         self._backends_initialized = False
         self.transphone_g2p = None
         self.epitran_g2p = None
+        self._backend_init_errors = {}  # Track initialization errors
         
         self._load_phonological_rules()
         self._load_comprehensive_g2p_table()
+        
+        # EAGER initialization: Initialize backends immediately to detect issues early
+        # This helps users know if backends are working without waiting for first conversion
+        try:
+            self._initialize_backends()
+        except Exception as e:
+            logger.warning(f"Backend initialization during __init__ encountered issues: {e}")
+            # Not fatal - backends will be re-attempted on first use
     
     def _get_fallback_config(self):
         """Create basic config if config module not available"""
@@ -105,47 +114,80 @@ class EnhancedAmharicG2P:
         return FallbackConfig()
     
     def _initialize_backends(self):
-        """Lazy initialization of external G2P backends"""
+        """Initialize external G2P backends with detailed error tracking"""
         if self._backends_initialized:
             return
         
         backend_order = self.config.g2p.backend_order if hasattr(self.config, 'g2p') else []
         
+        logger.info("=" * 70)
+        logger.info("Initializing G2P Backends")
+        logger.info("=" * 70)
+        logger.info(f"Backend order: {[str(b) for b in backend_order]}")
+        
         # Initialize Transphone if in backend order
         if G2PBackend.TRANSPHONE in backend_order:
+            logger.info("Attempting to load Transphone backend...")
             try:
                 from transphone import read_g2p
+                logger.info("  ✅ Transphone module imported successfully")
                 
                 # Try multiple language codes for Amharic
                 transphone_codes = ['amh', 'am', 'AM', 'AMH']
                 transphone_loaded = False
+                last_error = None
                 
                 for code in transphone_codes:
                     try:
+                        logger.info(f"  Trying language code: '{code}'...")
                         self.transphone_g2p = read_g2p(code)
+                        
+                        # VERIFY: Test with a simple conversion
+                        test_result = self.transphone_g2p('ሰላም')
+                        logger.info(f"  ✅ Test conversion successful: ሰላም → {test_result}")
+                        
                         transphone_loaded = True
-                        logger.info(f"✅ Transphone backend initialized (code: '{code}')")
-                        print(f" > ✅ Transphone G2P loaded successfully (language code: '{code}')")
+                        logger.info(f"✅ Transphone backend initialized successfully (code: '{code}')")
+                        print(f" > ✅ Transphone G2P loaded and verified (language code: '{code}')")
                         break
                     except Exception as code_err:
-                        logger.debug(f"Code '{code}' failed: {code_err}")
+                        last_error = code_err
+                        logger.debug(f"  ❌ Code '{code}' failed: {type(code_err).__name__}: {code_err}")
                         continue
                 
                 if not transphone_loaded:
-                    raise RuntimeError(f"Could not load Transphone with any of these codes: {transphone_codes}")
+                    error_msg = f"Could not load Transphone with any language code. Last error: {last_error}"
+                    logger.error(f"❌ {error_msg}")
+                    self._backend_init_errors['transphone'] = error_msg
+                    raise RuntimeError(error_msg)
                     
-            except ImportError:
-                logger.warning("⚠️  Transphone not available (not installed)")
-                print(" > ⚠️  Transphone module not found - falling back to rule-based G2P")
+            except ImportError as e:
+                error_msg = f"Transphone not installed: {e}"
+                logger.warning(f"⚠️  {error_msg}")
+                print(f" > ⚠️  Transphone module not found - falling back to rule-based G2P")
+                self._backend_init_errors['transphone'] = error_msg
                 self.transphone_g2p = None
-                # Offer to install Transphone (recommended)
                 self._offer_transphone_installation()
             except Exception as e:
-                logger.warning(f"⚠️  Transphone init failed: {type(e).__name__}: {e}")
-                print(f" > ⚠️  Transphone initialization error: {type(e).__name__}: {e}")
+                error_msg = f"{type(e).__name__}: {e}"
+                logger.error(f"❌ Transphone initialization failed: {error_msg}")
+                print(f" > ❌ Transphone initialization error: {error_msg}")
                 print(" > Falling back to rule-based G2P")
+                print("\n" + "=" * 70)
+                print("🔍 DEBUGGING INFORMATION:")
+                print("=" * 70)
                 import traceback
-                traceback.print_exc()  # Print full stack trace for debugging
+                traceback.print_exc()
+                print("=" * 70)
+                print("\n💡 If Transphone is installed, this error suggests:")
+                print("   1. Transphone module is broken or has missing dependencies")
+                print("   2. Language data files are missing or corrupted")
+                print("   3. Version incompatibility with Python or dependencies")
+                print("\n🔧 Try reinstalling:")
+                print("   pip uninstall -y transphone")
+                print("   pip install --no-cache-dir transphone")
+                print("=" * 70 + "\n")
+                self._backend_init_errors['transphone'] = error_msg
                 self.transphone_g2p = None
         
         # Initialize Epitran if in backend order
@@ -183,6 +225,48 @@ class EnhancedAmharicG2P:
         except ImportError:
             # Dependency installer not available, just show message
             logger.info("💡 Tip: Install Transphone for best G2P quality: pip install transphone")
+    
+    def get_backend_status(self) -> dict:
+        """Get detailed status of all G2P backends
+        
+        Returns:
+            Dictionary with backend status information
+        """
+        status = {
+            'transphone': {
+                'available': self.transphone_g2p is not None,
+                'error': self._backend_init_errors.get('transphone'),
+                'priority': 1
+            },
+            'epitran': {
+                'available': self.epitran_g2p is not None,
+                'error': self._backend_init_errors.get('epitran'),
+                'priority': 2
+            },
+            'rule_based': {
+                'available': True,  # Always available
+                'error': None,
+                'priority': 3
+            }
+        }
+        return status
+    
+    def print_backend_status(self):
+        """Print detailed backend status for debugging"""
+        print("\n" + "=" * 70)
+        print("🔍 G2P Backend Status Report")
+        print("=" * 70)
+        
+        status = self.get_backend_status()
+        for backend_name, info in sorted(status.items(), key=lambda x: x[1]['priority']):
+            if info['available']:
+                print(f"\n✅ {backend_name.upper()}: Available")
+            else:
+                print(f"\n❌ {backend_name.upper()}: Not Available")
+                if info['error']:
+                    print(f"   Error: {info['error']}")
+        
+        print("\n" + "=" * 70 + "\n")
     
     def _validate_g2p_quality(self, input_text: str, output_text: str) -> Tuple[bool, float, str]:
         """
@@ -430,9 +514,12 @@ class EnhancedAmharicG2P:
         return ''.join(result)
     
     def _preprocess(self, text: str) -> str:
-        """Normalize Amharic text"""
+        """Normalize Amharic text and expand numbers"""
         # Normalize whitespace
         text = re.sub(r'\s+', ' ', text)
+        
+        # Expand numbers to Amharic words BEFORE character normalization
+        text = self._expand_numbers(text)
         
         # Normalize character variants
         replacements = {
@@ -444,6 +531,43 @@ class EnhancedAmharicG2P:
             text = text.replace(old, new)
         
         return text.strip()
+    
+    def _expand_numbers(self, text: str) -> str:
+        """Expand numbers to Amharic words"""
+        try:
+            from ..preprocessing.number_expander import AmharicNumberExpander
+            expander = AmharicNumberExpander()
+            
+            # Match integers and decimals
+            def replace_number(match):
+                number_str = match.group(0)
+                
+                # Handle decimals (e.g., 55.5 → "55 ነጥብ 5")
+                if '.' in number_str:
+                    parts = number_str.split('.')
+                    try:
+                        integer_part = expander.expand(int(parts[0]))
+                        decimal_part = ' '.join([expander.expand(int(d)) for d in parts[1]])
+                        return f"{integer_part} ነጥብ {decimal_part}"
+                    except:
+                        return number_str
+                else:
+                    # Simple integer
+                    try:
+                        return expander.expand(number_str)
+                    except:
+                        return number_str
+            
+            # Replace all numbers (integers and decimals)
+            text = re.sub(r'\d+\.?\d*', replace_number, text)
+            return text
+            
+        except ImportError:
+            logger.warning("Number expander not available, skipping number expansion")
+            return text
+        except Exception as e:
+            logger.warning(f"Number expansion failed: {e}")
+            return text
     
     def _apply_labiovelar_rules(self, text: str) -> str:
         """Apply labiovelar consonant mappings"""

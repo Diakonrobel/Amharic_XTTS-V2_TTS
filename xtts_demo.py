@@ -1788,9 +1788,19 @@ if __name__ == "__main__":
                     if not training_dir.exists():
                         return []
                     
-                    # Find all checkpoint files
-                    checkpoints = list(training_dir.glob("checkpoint_*.pth"))
-                    checkpoints += list(training_dir.glob("best_model.pth"))
+                    # Find all checkpoint files RECURSIVELY in subdirectories
+                    checkpoints = list(training_dir.rglob("checkpoint_*.pth"))
+                    checkpoints += list(training_dir.rglob("best_model*.pth"))  # best_model*.pth to match best_model_4141.pth etc
+                    
+                    if not checkpoints:
+                        print(f"No checkpoints found in {training_dir}")
+                        # Debug: list what's actually there
+                        for subdir in training_dir.glob("*"):
+                            if subdir.is_dir():
+                                print(f"  Found training run: {subdir.name}")
+                                ckpts_in_subdir = list(subdir.glob("*.pth"))
+                                print(f"    Checkpoints: {[c.name for c in ckpts_in_subdir]}")
+                        return []
                     
                     # Sort by modification time (newest first)
                     checkpoints.sort(key=lambda x: x.stat().st_mtime, reverse=True)
@@ -1799,6 +1809,8 @@ if __name__ == "__main__":
                     return [str(cp.relative_to(Path(output_path))) for cp in checkpoints]
                 except Exception as e:
                     print(f"Error loading checkpoints: {e}")
+                    import traceback
+                    traceback.print_exc()
                     return []
             
             def refresh_checkpoint_list(output_path):

@@ -728,7 +728,20 @@ if __name__ == "__main__":
                     Perfect for uploading batches of locally prepared subtitle files!
                     """)
                     
-                    with gr.Accordion("⚙️ VAD Settings", open=False):
+                    with gr.Accordion("⚙️ Segmentation Settings", open=True):
+                        srt_buffer_padding = gr.Slider(
+                            label="Audio Padding (seconds)",
+                            minimum=0.1, maximum=1.0, step=0.05, value=0.4,
+                            info="Extra audio before/after each segment to prevent cutoffs. Higher = safer (0.4s recommended)"
+                        )
+                        gr.Markdown("""
+                        💡 **Audio Padding**: Adds extra audio around each segment to prevent speech cutoffs.  
+                        - **0.2-0.3s**: Minimal padding (risk of cutoffs)  
+                        - **0.4-0.5s**: Recommended (safe, prevents cutoffs)  
+                        - **0.6-1.0s**: Maximum safety (may include extra silence)
+                        """)
+                    
+                    with gr.Accordion("⚙️ VAD Settings (Advanced)", open=False):
                         with gr.Row():
                             use_enhanced_vad_option = gr.Checkbox(
                                 label="✨ Enhanced VAD",
@@ -819,6 +832,19 @@ if __name__ == "__main__":
                     💡 **Tip**: Use *Incremental Mode* to grow your dataset over time by adding new videos without losing existing data.
                     Perfect for building large datasets across multiple sessions!
                     """)
+                    
+                    with gr.Accordion("⚙️ Segmentation Settings", open=True):
+                        youtube_buffer_padding = gr.Slider(
+                            label="Audio Padding (seconds)",
+                            minimum=0.1, maximum=1.0, step=0.05, value=0.4,
+                            info="Extra audio before/after each segment to prevent cutoffs. Higher = safer (0.4s recommended)"
+                        )
+                        gr.Markdown("""
+                        💡 **Audio Padding**: Adds extra audio around each segment to prevent speech cutoffs.  
+                        - **0.2-0.3s**: Minimal padding (risk of cutoffs)  
+                        - **0.4-0.5s**: Recommended (safe, prevents cutoffs)  
+                        - **0.6-1.0s**: Maximum safety (may include extra silence)
+                        """)
                     
                     with gr.Row():
                         youtube_use_vad = gr.Checkbox(
@@ -1055,7 +1081,7 @@ if __name__ == "__main__":
                     return result
                 except Exception as e:
                     return f"❌ Error clearing history: {str(e)}"
-            def process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, incremental, check_duplicates, progress):
+            def process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, buffer_padding, incremental, check_duplicates, progress):
                 """Handle batch processing of multiple SRT+media pairs"""
                 try:
                     # Canonicalize language for dataset artifacts
@@ -1072,7 +1098,8 @@ if __name__ == "__main__":
                         srt_processor=srt_processor,
                         progress_callback=lambda p, desc: progress(p, desc=desc),
                         incremental=incremental,
-                        check_duplicates=check_duplicates
+                        check_duplicates=check_duplicates,
+                        buffer=buffer_padding
                     )
                     
                     # Count total segments
@@ -1116,6 +1143,7 @@ if __name__ == "__main__":
                 out_path, 
                 batch_mode, 
                 use_vad, 
+                buffer_padding=0.4,
                 vad_threshold_val=0.5,
                 vad_min_speech_ms=250,
                 vad_min_silence_ms=300,
@@ -1151,7 +1179,7 @@ if __name__ == "__main__":
                     
                     # Check if batch mode and multiple files
                     if batch_mode and (len(srt_files_list) > 1 or len(media_files_list) > 1):
-                        return process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, incremental, check_duplicates, progress)
+                        return process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, buffer_padding, incremental, check_duplicates, progress)
                     
                     # Single file processing
                     srt_file_path = srt_files_list[0]
@@ -1188,6 +1216,7 @@ if __name__ == "__main__":
                         media_path=media_file_path,
                         output_dir=output_path,
                         language=language,
+                        buffer=buffer_padding,
                         gradio_progress=progress
                     )
                     
@@ -1217,7 +1246,7 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error processing SRT: {str(e)}"
             
-            def process_youtube_batch_urls(urls, transcript_lang, out_path, incremental, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, remove_bg, bg_quality, bg_model, progress):
+            def process_youtube_batch_urls(urls, transcript_lang, out_path, incremental, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, buffer_padding, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, remove_bg, bg_quality, bg_model, progress):
                 """Process multiple YouTube URLs in batch mode"""
                 try:
                     mode_desc = "INCREMENTAL (adding to existing)" if incremental else "STANDARD (new dataset)"
@@ -1244,6 +1273,7 @@ if __name__ == "__main__":
                         cookies_from_browser=cookies_browser,
                         proxy=proxy_url,
                         user_agent=ua,
+                        buffer=buffer_padding,
                         use_vad=use_vad,
                         vad_threshold=vad_threshold,
                         vad_min_speech_ms=int(vad_min_speech),
@@ -1296,7 +1326,7 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error in batch processing: {str(e)}"
             
-            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, incremental_mode, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, remove_bg, bg_quality, bg_model, progress=gr.Progress(track_tqdm=True)):
+            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, incremental_mode, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, buffer_padding, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, remove_bg, bg_quality, bg_model, progress=gr.Progress(track_tqdm=True)):
                 """Download YouTube video(s) and extract transcripts"""
                 try:
                     if not url:
@@ -1316,7 +1346,7 @@ if __name__ == "__main__":
                     
                     # Check if batch mode and multiple URLs
                     if batch_mode and len(urls) > 1:
-                        return process_youtube_batch_urls(urls, transcript_lang, out_path, incremental_mode, check_duplicates, cookies_file, cookies_browser, proxy_url, ua, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, remove_bg, bg_quality, bg_model, progress)
+                        return process_youtube_batch_urls(urls, transcript_lang, out_path, incremental_mode, check_duplicates, cookies_file, cookies_browser, proxy_url, ua, buffer_padding, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, remove_bg, bg_quality, bg_model, progress)
                     
                     # Single URL processing (existing logic)
                     url = urls[0]  # Use first URL
@@ -1382,6 +1412,7 @@ if __name__ == "__main__":
                         media_path=audio_path,
                         output_dir=output_path,
                         language=dataset_language,
+                        buffer=buffer_padding,  # Use user-configured padding
                         gradio_progress=progress
                     )
                     
@@ -2253,6 +2284,7 @@ if __name__ == "__main__":
                     out_path,
                     srt_batch_mode,
                     use_vad_refinement,  # VAD enable/disable
+                    srt_buffer_padding,  # Audio padding (seconds) to prevent cutoffs
                     vad_threshold,  # VAD threshold
                     vad_min_speech_duration,  # Min speech duration
                     vad_min_silence_duration,  # Min silence duration
@@ -2279,6 +2311,7 @@ if __name__ == "__main__":
                     youtube_cookies_browser,  # Browser for cookie import
                     youtube_proxy,  # Proxy URL
                     youtube_user_agent,  # Custom User-Agent
+                    youtube_buffer_padding,  # Audio padding (seconds) to prevent cutoffs
                     youtube_use_vad,  # VAD enable/disable
                     youtube_vad_threshold,  # VAD threshold
                     youtube_vad_min_speech,  # Min speech duration

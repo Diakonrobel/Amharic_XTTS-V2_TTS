@@ -39,7 +39,7 @@ class VADSlicer:
         sample_rate: int = 22050,
         min_speech_duration_ms: int = 250,
         min_silence_duration_ms: int = 300,
-        speech_pad_ms: int = 30,
+        speech_pad_ms: int = 150,  # Increased from 30ms to 150ms to prevent cutoffs
         vad_threshold: float = 0.5,
         max_segment_duration: float = 15.0,
         min_segment_duration: float = 1.0,

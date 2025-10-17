@@ -187,7 +187,7 @@ def extract_segments_from_audio(
     language: str = "en",
     min_duration: float = 1.0,
     max_duration: float = 20.0,
-    buffer: float = 0.2,
+    buffer: float = 0.4,  # Increased from 0.2s to 0.4s to prevent cutoffs
     gradio_progress=None
 ) -> Tuple[str, str]:
     """
@@ -342,7 +342,7 @@ def process_srt_with_media(
     language: str = "en",
     min_duration: float = 1.0,
     max_duration: float = 20.0,
-    buffer: float = 0.2,
+    buffer: float = 0.4,  # Increased from 0.2s to 0.4s to prevent cutoffs
     gradio_progress=None
 ) -> Tuple[str, str, float]:
     """

@@ -185,6 +185,8 @@ def process_youtube_batch(
     user_agent: Optional[str] = None,
     po_token: Optional[str] = None,
     visitor_data: Optional[str] = None,
+    # Segmentation parameters
+    buffer: float = 0.4,
     # VAD parameters
     use_vad: bool = False,
     vad_threshold: float = 0.5,
@@ -285,7 +287,8 @@ def process_youtube_batch(
                 srt_path=srt_path,
                 media_path=audio_path,
                 output_dir=temp_dataset_dir,
-                language=canonical_lang(transcript_lang)
+                language=canonical_lang(transcript_lang),
+                buffer=buffer
             )
             
             temp_datasets.append(temp_dataset_dir)
@@ -383,7 +386,8 @@ def process_srt_media_batch(
     srt_processor,
     progress_callback=None,
     incremental: bool = False,
-    check_duplicates: bool = True
+    check_duplicates: bool = True,
+    buffer: float = 0.4
 ) -> Tuple[str, str, List[Dict]]:
     """
     Process multiple SRT+media file pairs in batch mode and merge into single dataset.
@@ -428,7 +432,8 @@ def process_srt_media_batch(
                 srt_path=srt_path,
                 media_path=media_path,
                 output_dir=temp_dataset_dir,
-                language=canonical_lang(language)
+                language=canonical_lang(language),
+                buffer=buffer
             )
             
             temp_datasets.append(temp_dataset_dir)

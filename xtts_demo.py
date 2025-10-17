@@ -695,19 +695,11 @@ if __name__ == "__main__":
                             scale=1
                         )
                     
-                    with gr.Row():
-                        srt_batch_mode = gr.Checkbox(
-                            label="🎬 Batch Mode",
-                            value=False,
-                            info="Process multiple file pairs as one dataset",
-                            scale=1
-                        )
-                        use_vad_refinement = gr.Checkbox(
-                            label="🎤 VAD Enhancement",
-                            value=False,
-                            info="AI-powered speech detection (+20% time)",
-                            scale=1
-                        )
+                    srt_batch_mode = gr.Checkbox(
+                        label="🎬 Batch Mode",
+                        value=False,
+                        info="Process multiple file pairs as one dataset",
+                    )
                     
                     with gr.Row():
                         srt_incremental_mode = gr.Checkbox(
@@ -727,44 +719,6 @@ if __name__ == "__main__":
                     💡 **Tip**: Use *Incremental Mode* to grow your dataset over time by adding new SRT+media files without losing existing data.
                     Perfect for uploading batches of locally prepared subtitle files!
                     """)
-                    
-                    with gr.Accordion("⚙️ VAD Settings", open=False):
-                        with gr.Row():
-                            use_enhanced_vad_option = gr.Checkbox(
-                                label="✨ Enhanced VAD",
-                                value=False,
-                                info="Advanced VAD with quality metrics & adaptive threshold",
-                                scale=1
-                            )
-                            amharic_mode_option = gr.Checkbox(
-                                label="🇪🇹 Amharic Mode",
-                                value=False,
-                                info="Optimize for Amharic ejective consonants (auto for 'am' language)",
-                                scale=1
-                            )
-                        with gr.Row():
-                            vad_threshold = gr.Slider(
-                                label="Sensitivity",
-                                minimum=0.1, maximum=0.9, step=0.05, value=0.5,
-                                info="Higher = stricter"
-                            )
-                            vad_min_speech_duration = gr.Slider(
-                                label="Min Speech (ms)",
-                                minimum=100, maximum=1000, step=50, value=250
-                            )
-                        with gr.Row():
-                            vad_min_silence_duration = gr.Slider(
-                                label="Min Silence (ms)",
-                                minimum=100, maximum=1000, step=50, value=300
-                            )
-                            vad_speech_pad = gr.Slider(
-                                label="Padding (ms)",
-                                minimum=0, maximum=200, step=10, value=30
-                            )
-                        gr.Markdown("""
-                        💡 **Enhanced VAD**: Better quality with adaptive threshold, SNR estimation, speech prob metrics.  
-                        🇪🇹 **Amharic Mode**: Tuned for Amharic ejectives (ጥ, ጭ, ቅ) with extra padding. Auto-enabled for Amharic language.
-                        """)
                     
                     process_srt_btn = gr.Button(value="▶️ Process SRT + Media", variant="primary", size="lg")
                     srt_status = gr.Textbox(label="Status", interactive=False, lines=6, show_label=False)
@@ -819,52 +773,6 @@ if __name__ == "__main__":
                     💡 **Tip**: Use *Incremental Mode* to grow your dataset over time by adding new videos without losing existing data.
                     Perfect for building large datasets across multiple sessions!
                     """)
-                    
-                    with gr.Row():
-                        youtube_use_vad = gr.Checkbox(
-                            label="🎤 VAD Enhancement",
-                            value=False,
-                            info="AI-powered speech detection (+20% time per video)",
-                            scale=1
-                        )
-                    
-                    with gr.Accordion("⚙️ VAD Settings", open=False):
-                        with gr.Row():
-                            youtube_use_enhanced_vad = gr.Checkbox(
-                                label="✨ Enhanced VAD",
-                                value=False,
-                                info="Advanced VAD with quality metrics",
-                                scale=1
-                            )
-                            youtube_amharic_mode = gr.Checkbox(
-                                label="🇪🇹 Amharic Mode",
-                                value=False,
-                                info="Optimize for Amharic ejectives (auto for 'am' language)",
-                                scale=1
-                            )
-                        with gr.Row():
-                            youtube_vad_threshold = gr.Slider(
-                                label="Sensitivity",
-                                minimum=0.1, maximum=0.9, step=0.05, value=0.5,
-                                info="Higher = stricter"
-                            )
-                            youtube_vad_min_speech = gr.Slider(
-                                label="Min Speech (ms)",
-                                minimum=100, maximum=1000, step=50, value=250
-                            )
-                        with gr.Row():
-                            youtube_vad_min_silence = gr.Slider(
-                                label="Min Silence (ms)",
-                                minimum=100, maximum=1000, step=50, value=300
-                            )
-                            youtube_vad_speech_pad = gr.Slider(
-                                label="Padding (ms)",
-                                minimum=0, maximum=200, step=10, value=30
-                            )
-                        gr.Markdown("""
-                        💡 **Enhanced VAD**: Better quality with adaptive threshold, SNR estimation.  
-                        🇪🇹 **Amharic Mode**: Tuned for Amharic ejectives (ጥ, ጭ, ቅ) with extra padding.
-                        """)
                     
                     with gr.Accordion("🔐 YouTube Authentication & Bypass (Optional)", open=False):
                         gr.Markdown("""
@@ -1082,13 +990,6 @@ if __name__ == "__main__":
                 language, 
                 out_path, 
                 batch_mode, 
-                use_vad, 
-                vad_threshold_val=0.5,
-                vad_min_speech_ms=250,
-                vad_min_silence_ms=300,
-                vad_pad_ms=30,
-                use_enhanced_vad=False,
-                amharic_mode=False,
                 incremental=False,
                 check_duplicates=True,
                 progress=gr.Progress(track_tqdm=True)
@@ -1140,42 +1041,18 @@ if __name__ == "__main__":
                     output_path = os.path.join(out_path, "dataset")
                     os.makedirs(output_path, exist_ok=True)
                     
-                    # Choose processor based on VAD setting
-                    if use_vad:
-                        from utils import srt_processor_vad
-                        
-                        mode_desc = "Enhanced VAD" if use_enhanced_vad else "VAD"
-                        lang_str = " (Amharic)" if amharic_mode else ""
-                        progress(0, desc=f"Initializing {mode_desc} SRT processor{lang_str}...")
-                        progress(0.2, desc="Loading VAD model...")
-                        if use_enhanced_vad:
-                            progress(0.25, desc="Enhanced VAD with quality metrics...")
-                        progress(0.3, desc="Processing SRT with VAD refinement...")
-                        
-                        train_csv, eval_csv, duration = srt_processor_vad.process_srt_with_media_vad(
-                            srt_path=srt_file_path,
-                            media_path=media_file_path,
-                            output_dir=output_path,
-                            language=language,
-                            use_vad_refinement=True,
-                            vad_threshold=vad_threshold_val,
-                            use_enhanced_vad=use_enhanced_vad,
-                            amharic_mode=amharic_mode,
-                            adaptive_threshold=True,
-                            gradio_progress=progress
-                        )
-                    else:
-                        mode_desc = "standard"
-                        progress(0, desc=f"Initializing {mode_desc} SRT processor...")
-                        progress(0.3, desc="Processing SRT and extracting audio segments...")
-                        
-                        train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
-                            srt_path=srt_file_path,
-                            media_path=media_file_path,
-                            output_dir=output_path,
-                            language=language,
-                            gradio_progress=progress
-                        )
+                    # Use standard SRT processor (VAD removed)
+                    mode_desc = "standard"
+                    progress(0, desc=f"Initializing {mode_desc} SRT processor...")
+                    progress(0.3, desc="Processing SRT and extracting audio segments...")
+                    
+                    train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+                        srt_path=srt_file_path,
+                        media_path=media_file_path,
+                        output_dir=output_path,
+                        language=language,
+                        gradio_progress=progress
+                    )
                     
                     # Count segments from train CSV
                     import pandas as pd
@@ -1194,27 +1071,17 @@ if __name__ == "__main__":
                     )
                     
                     progress(1.0, desc="SRT processing complete!")
-                    vad_info_str = ""
-                    if use_vad:
-                        if use_enhanced_vad:
-                            vad_info_str = " (✨ Enhanced VAD"
-                            if amharic_mode:
-                                vad_info_str += " + 🇪🇹 Amharic Mode"
-                            vad_info_str += ")"
-                        else:
-                            vad_info_str = " (Standard VAD)"
-                    return f"✓ SRT Processing Complete{vad_info_str}!\nProcessed {num_segments} segments\nTotal audio: {duration:.1f}s\nDataset created at: {output_path}\nMode: {mode_desc.capitalize()}\n\nℹ This dataset has been saved to history and won't be reprocessed."
+                    return f"✓ SRT Processing Complete!\nProcessed {num_segments} segments\nTotal audio: {duration:.1f}s\nDataset created at: {output_path}\nMode: {mode_desc.capitalize()}\n\nℹ This dataset has been saved to history and won't be reprocessed."
                     
                 except Exception as e:
                     traceback.print_exc()
                     return f"❌ Error processing SRT: {str(e)}"
             
-            def process_youtube_batch_urls(urls, transcript_lang, out_path, incremental, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, progress):
+            def process_youtube_batch_urls(urls, transcript_lang, out_path, incremental, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, progress):
                 """Process multiple YouTube URLs in batch mode"""
                 try:
                     mode_desc = "INCREMENTAL (adding to existing)" if incremental else "STANDARD (new dataset)"
-                    vad_desc = " + VAD" if use_vad else ""
-                    progress(0, desc=f"Initializing batch processing ({mode_desc}{vad_desc}) for {len(urls)} videos...")
+                    progress(0, desc=f"Initializing batch processing ({mode_desc}) for {len(urls)} videos...")
                     
                     # Prepare auth parameters (empty strings -> None)
                     cookies_file = cookies_path.strip() if cookies_path and cookies_path.strip() else None
@@ -1236,13 +1103,6 @@ if __name__ == "__main__":
                         cookies_from_browser=cookies_browser,
                         proxy=proxy_url,
                         user_agent=ua,
-                        use_vad=use_vad,
-                        vad_threshold=vad_threshold,
-                        vad_min_speech_ms=int(vad_min_speech),
-                        vad_min_silence_ms=int(vad_min_silence),
-                        vad_pad_ms=int(vad_pad),
-                        use_enhanced_vad=use_enhanced_vad,
-                        amharic_mode=amharic_mode,
                     )
                     
                     # Count total segments
@@ -1284,7 +1144,7 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error in batch processing: {str(e)}"
             
-            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, incremental_mode, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, progress=gr.Progress(track_tqdm=True)):
+            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, incremental_mode, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, progress=gr.Progress(track_tqdm=True)):
                 """Download YouTube video(s) and extract transcripts"""
                 try:
                     if not url:
@@ -1304,7 +1164,7 @@ if __name__ == "__main__":
                     
                     # Check if batch mode and multiple URLs
                     if batch_mode and len(urls) > 1:
-                        return process_youtube_batch_urls(urls, transcript_lang, out_path, incremental_mode, check_duplicates, cookies_file, cookies_browser, proxy_url, ua, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, progress)
+                        return process_youtube_batch_urls(urls, transcript_lang, out_path, incremental_mode, check_duplicates, cookies_file, cookies_browser, proxy_url, ua, progress)
                     
                     # Single URL processing (existing logic)
                     url = urls[0]  # Use first URL
@@ -1354,37 +1214,14 @@ if __name__ == "__main__":
                     dataset_language = normalize_xtts_lang(transcript_lang)
                     print(f"Setting dataset language to '{dataset_language}' (from YouTube transcript language)")
                     
-                    # Use VAD processor if enabled
-                    if use_vad:
-                        from utils import srt_processor_vad
-                        
-                        mode_desc = "Enhanced VAD" if use_enhanced_vad else "VAD"
-                        lang_str = " (Amharic)" if amharic_mode else ""
-                        progress(0.65, desc=f"{mode_desc} refinement{lang_str}...")
-                        
-                        train_csv, eval_csv, duration = srt_processor_vad.process_srt_with_media_vad(
-                            srt_path=srt_path,
-                            media_path=audio_path,
-                            output_dir=output_path,
-                            language=dataset_language,
-                            use_vad_refinement=True,
-                            vad_threshold=vad_threshold,
-                            vad_min_speech_duration_ms=int(vad_min_speech),
-                            vad_min_silence_duration_ms=int(vad_min_silence),
-                            vad_speech_pad_ms=int(vad_pad),
-                            use_enhanced_vad=use_enhanced_vad,
-                            amharic_mode=amharic_mode,
-                            adaptive_threshold=True,
-                            gradio_progress=progress
-                        )
-                    else:
-                        train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
-                            srt_path=srt_path,
-                            media_path=audio_path,
-                            output_dir=output_path,
-                            language=dataset_language,
-                            gradio_progress=progress
-                        )
+                    # Use standard SRT processor (VAD removed)
+                    train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+                        srt_path=srt_path,
+                        media_path=audio_path,
+                        output_dir=output_path,
+                        language=dataset_language,
+                        gradio_progress=progress
+                    )
                     
                     # Count segments
                     import pandas as pd
@@ -1412,16 +1249,7 @@ if __name__ == "__main__":
                         pass
                     
                     progress(1.0, desc="YouTube processing complete!")
-                    vad_info_str = ""
-                    if use_vad:
-                        if use_enhanced_vad:
-                            vad_info_str = " (✨ Enhanced VAD"
-                            if amharic_mode:
-                                vad_info_str += " + 🇪🇹 Amharic Mode"
-                            vad_info_str += ")"
-                        else:
-                            vad_info_str = " (Standard VAD)"
-                    return f"✓ YouTube Processing Complete{vad_info_str}!\nTitle: {info.get('title', 'Unknown')}\nDuration: {info.get('duration', 0):.0f}s\nProcessed {num_segments} segments\nDataset created at: {output_path}\n\nℹ This dataset has been saved to history and won't be reprocessed."
+                    return f"✓ YouTube Processing Complete!\nTitle: {info.get('title', 'Unknown')}\nDuration: {info.get('duration', 0):.0f}s\nProcessed {num_segments} segments\nDataset created at: {output_path}\n\nℹ This dataset has been saved to history and won't be reprocessed."
                     
                 except Exception as e:
                     traceback.print_exc()
@@ -2259,13 +2087,6 @@ if __name__ == "__main__":
                     lang,
                     out_path,
                     srt_batch_mode,
-                    use_vad_refinement,  # VAD enable/disable
-                    vad_threshold,  # VAD threshold
-                    vad_min_speech_duration,  # Min speech duration
-                    vad_min_silence_duration,  # Min silence duration
-                    vad_speech_pad,  # Speech padding
-                    use_enhanced_vad_option,  # Enhanced VAD with quality metrics
-                    amharic_mode_option,  # Amharic-specific optimizations
                     srt_incremental_mode,  # Incremental mode
                     srt_check_duplicates,  # Skip duplicates
                 ],
@@ -2286,13 +2107,6 @@ if __name__ == "__main__":
                     youtube_cookies_browser,  # Browser for cookie import
                     youtube_proxy,  # Proxy URL
                     youtube_user_agent,  # Custom User-Agent
-                    youtube_use_vad,  # VAD enable/disable
-                    youtube_vad_threshold,  # VAD threshold
-                    youtube_vad_min_speech,  # Min speech duration
-                    youtube_vad_min_silence,  # Min silence duration
-                    youtube_vad_speech_pad,  # Speech padding
-                    youtube_use_enhanced_vad,  # Enhanced VAD
-                    youtube_amharic_mode,  # Amharic mode
                 ],
                 outputs=[youtube_status],
             )

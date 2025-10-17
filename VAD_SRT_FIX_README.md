@@ -1,6 +1,17 @@
 # VAD-SRT Text-Audio Mismatch Fix
 
-## Problem Description
+## ⚠️ **UPDATE: Silero VAD Removed (2025-10-17)**
+
+Due to critical text-audio mismatching issues, **Silero VAD has been completely removed** from YouTube/SRT processing.
+
+**Current Status:**
+- ✅ Standard SRT-based extraction is now the only method
+- ✅ Simple, reliable, and proven to work
+- ❌ VAD functionality removed from UI and backend
+
+---
+
+## Problem Description (Historical)
 
 ### Critical Issue
 When processing YouTube videos with SRT subtitles using Silero VAD, the system was **incorrectly pairing audio segments with text**. This caused severe misalignment in the training dataset.

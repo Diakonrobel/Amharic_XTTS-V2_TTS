@@ -820,6 +820,52 @@ if __name__ == "__main__":
                     Perfect for building large datasets across multiple sessions!
                     """)
                     
+                    with gr.Row():
+                        youtube_use_vad = gr.Checkbox(
+                            label="🎤 VAD Enhancement",
+                            value=False,
+                            info="AI-powered speech detection (+20% time per video)",
+                            scale=1
+                        )
+                    
+                    with gr.Accordion("⚙️ VAD Settings", open=False):
+                        with gr.Row():
+                            youtube_use_enhanced_vad = gr.Checkbox(
+                                label="✨ Enhanced VAD",
+                                value=False,
+                                info="Advanced VAD with quality metrics",
+                                scale=1
+                            )
+                            youtube_amharic_mode = gr.Checkbox(
+                                label="🇪🇹 Amharic Mode",
+                                value=False,
+                                info="Optimize for Amharic ejectives (auto for 'am' language)",
+                                scale=1
+                            )
+                        with gr.Row():
+                            youtube_vad_threshold = gr.Slider(
+                                label="Sensitivity",
+                                minimum=0.1, maximum=0.9, step=0.05, value=0.5,
+                                info="Higher = stricter"
+                            )
+                            youtube_vad_min_speech = gr.Slider(
+                                label="Min Speech (ms)",
+                                minimum=100, maximum=1000, step=50, value=250
+                            )
+                        with gr.Row():
+                            youtube_vad_min_silence = gr.Slider(
+                                label="Min Silence (ms)",
+                                minimum=100, maximum=1000, step=50, value=300
+                            )
+                            youtube_vad_speech_pad = gr.Slider(
+                                label="Padding (ms)",
+                                minimum=0, maximum=200, step=10, value=30
+                            )
+                        gr.Markdown("""
+                        💡 **Enhanced VAD**: Better quality with adaptive threshold, SNR estimation.  
+                        🇪🇹 **Amharic Mode**: Tuned for Amharic ejectives (ጥ, ጭ, ቅ) with extra padding.
+                        """)
+                    
                     with gr.Accordion("🔐 YouTube Authentication & Bypass (Optional)", open=False):
                         gr.Markdown("""
                         **Fix YouTube bot detection / sign-in requirements:**
@@ -1163,11 +1209,12 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error processing SRT: {str(e)}"
             
-            def process_youtube_batch_urls(urls, transcript_lang, out_path, incremental, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, progress):
+            def process_youtube_batch_urls(urls, transcript_lang, out_path, incremental, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, progress):
                 """Process multiple YouTube URLs in batch mode"""
                 try:
                     mode_desc = "INCREMENTAL (adding to existing)" if incremental else "STANDARD (new dataset)"
-                    progress(0, desc=f"Initializing batch processing ({mode_desc}) for {len(urls)} videos...")
+                    vad_desc = " + VAD" if use_vad else ""
+                    progress(0, desc=f"Initializing batch processing ({mode_desc}{vad_desc}) for {len(urls)} videos...")
                     
                     # Prepare auth parameters (empty strings -> None)
                     cookies_file = cookies_path.strip() if cookies_path and cookies_path.strip() else None
@@ -1189,6 +1236,13 @@ if __name__ == "__main__":
                         cookies_from_browser=cookies_browser,
                         proxy=proxy_url,
                         user_agent=ua,
+                        use_vad=use_vad,
+                        vad_threshold=vad_threshold,
+                        vad_min_speech_ms=int(vad_min_speech),
+                        vad_min_silence_ms=int(vad_min_silence),
+                        vad_pad_ms=int(vad_pad),
+                        use_enhanced_vad=use_enhanced_vad,
+                        amharic_mode=amharic_mode,
                     )
                     
                     # Count total segments
@@ -1230,7 +1284,7 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error in batch processing: {str(e)}"
             
-            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, incremental_mode, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, progress=gr.Progress(track_tqdm=True)):
+            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, incremental_mode, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, progress=gr.Progress(track_tqdm=True)):
                 """Download YouTube video(s) and extract transcripts"""
                 try:
                     if not url:
@@ -1250,7 +1304,7 @@ if __name__ == "__main__":
                     
                     # Check if batch mode and multiple URLs
                     if batch_mode and len(urls) > 1:
-                        return process_youtube_batch_urls(urls, transcript_lang, out_path, incremental_mode, check_duplicates, cookies_file, cookies_browser, proxy_url, ua, progress)
+                        return process_youtube_batch_urls(urls, transcript_lang, out_path, incremental_mode, check_duplicates, cookies_file, cookies_browser, proxy_url, ua, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, progress)
                     
                     # Single URL processing (existing logic)
                     url = urls[0]  # Use first URL
@@ -1300,13 +1354,37 @@ if __name__ == "__main__":
                     dataset_language = normalize_xtts_lang(transcript_lang)
                     print(f"Setting dataset language to '{dataset_language}' (from YouTube transcript language)")
                     
-                    train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
-                        srt_path=srt_path,
-                        media_path=audio_path,
-                        output_dir=output_path,
-                        language=dataset_language,
-                        gradio_progress=progress
-                    )
+                    # Use VAD processor if enabled
+                    if use_vad:
+                        from utils import srt_processor_vad
+                        
+                        mode_desc = "Enhanced VAD" if use_enhanced_vad else "VAD"
+                        lang_str = " (Amharic)" if amharic_mode else ""
+                        progress(0.65, desc=f"{mode_desc} refinement{lang_str}...")
+                        
+                        train_csv, eval_csv, duration = srt_processor_vad.process_srt_with_media_vad(
+                            srt_path=srt_path,
+                            media_path=audio_path,
+                            output_dir=output_path,
+                            language=dataset_language,
+                            use_vad_refinement=True,
+                            vad_threshold=vad_threshold,
+                            vad_min_speech_duration_ms=int(vad_min_speech),
+                            vad_min_silence_duration_ms=int(vad_min_silence),
+                            vad_speech_pad_ms=int(vad_pad),
+                            use_enhanced_vad=use_enhanced_vad,
+                            amharic_mode=amharic_mode,
+                            adaptive_threshold=True,
+                            gradio_progress=progress
+                        )
+                    else:
+                        train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+                            srt_path=srt_path,
+                            media_path=audio_path,
+                            output_dir=output_path,
+                            language=dataset_language,
+                            gradio_progress=progress
+                        )
                     
                     # Count segments
                     import pandas as pd
@@ -1334,7 +1412,16 @@ if __name__ == "__main__":
                         pass
                     
                     progress(1.0, desc="YouTube processing complete!")
-                    return f"✓ YouTube Processing Complete!\nTitle: {info.get('title', 'Unknown')}\nDuration: {info.get('duration', 0):.0f}s\nProcessed {num_segments} segments\nDataset created at: {output_path}\n\nℹ This dataset has been saved to history and won't be reprocessed."
+                    vad_info_str = ""
+                    if use_vad:
+                        if use_enhanced_vad:
+                            vad_info_str = " (✨ Enhanced VAD"
+                            if amharic_mode:
+                                vad_info_str += " + 🇪🇹 Amharic Mode"
+                            vad_info_str += ")"
+                        else:
+                            vad_info_str = " (Standard VAD)"
+                    return f"✓ YouTube Processing Complete{vad_info_str}!\nTitle: {info.get('title', 'Unknown')}\nDuration: {info.get('duration', 0):.0f}s\nProcessed {num_segments} segments\nDataset created at: {output_path}\n\nℹ This dataset has been saved to history and won't be reprocessed."
                     
                 except Exception as e:
                     traceback.print_exc()
@@ -2116,6 +2203,13 @@ if __name__ == "__main__":
                     youtube_cookies_browser,  # Browser for cookie import
                     youtube_proxy,  # Proxy URL
                     youtube_user_agent,  # Custom User-Agent
+                    youtube_use_vad,  # VAD enable/disable
+                    youtube_vad_threshold,  # VAD threshold
+                    youtube_vad_min_speech,  # Min speech duration
+                    youtube_vad_min_silence,  # Min silence duration
+                    youtube_vad_speech_pad,  # Speech padding
+                    youtube_use_enhanced_vad,  # Enhanced VAD
+                    youtube_amharic_mode,  # Amharic mode
                 ],
                 outputs=[youtube_status],
             )

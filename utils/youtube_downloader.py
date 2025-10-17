@@ -145,63 +145,64 @@ def get_video_info(
     visitor_data: Optional[str] = None,
 ) -> Dict:
     """
-    Get video information without downloading using multiple fallback strategies.
+    Get video information without downloading (simplified).
     
     Args:
         url: YouTube video URL
-        cookies_path: Path to cookies file in Netscape format
-        cookies_from_browser: Browser name to import cookies from (e.g., 'chrome', 'firefox', 'edge')
-        proxy: Optional proxy URL (e.g., http://user:pass@host:port)
+        cookies_path: Optional path to cookies file
+        cookies_from_browser: Optional browser name (only if available)
+        proxy: Optional proxy URL
         user_agent: Optional user-agent string
-        po_token: YouTube PO token for authentication
-        visitor_data: YouTube visitor data
+        po_token: Optional PO token
+        visitor_data: Optional visitor data
         
     Returns:
         Dictionary with video metadata
     """
-    # Try multiple player clients in order of success rate (2025)
-    player_clients = ['ios', 'android', 'tv_embedded', 'mediaconnect', 'mweb']
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+            }
+        },
+    }
     
-    last_error = None
-    for client in player_clients:
-        try:
-            ydl_opts = get_optimal_ytdlp_opts(
-                cookies_path=cookies_path,
-                cookies_from_browser=cookies_from_browser,
-                proxy=proxy,
-                user_agent=user_agent,
-                po_token=po_token,
-                visitor_data=visitor_data,
-                player_client=client,
-            )
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                
-                # Get available subtitle languages
-                manual_subs = list(info.get('subtitles', {}).keys())
-                auto_captions = list(info.get('automatic_captions', {}).keys())
-                all_available_langs = sorted(set(manual_subs + auto_captions))
-                
-                return {
-                    'title': info.get('title', 'Unknown'),
-                    'duration': info.get('duration', 0),
-                    'uploader': info.get('uploader', 'Unknown'),
-                    'description': info.get('description', ''),
-                    'has_subtitles': bool(manual_subs),
-                    'has_automatic_captions': bool(auto_captions),
-                    'available_languages': manual_subs,
-                    'available_auto_caption_languages': auto_captions,
-                    'all_subtitle_languages': all_available_langs,
-                    'player_client_used': client  # Track which client worked
-                }
-        except Exception as e:
-            last_error = e
-            # Try next client
-            continue
+    # Add optional parameters only if provided
+    if user_agent:
+        ydl_opts['http_headers'] = {'User-Agent': user_agent}
+    if proxy:
+        ydl_opts['proxy'] = proxy
+    if cookies_path:
+        ydl_opts['cookiefile'] = cookies_path
+    elif cookies_from_browser:
+        ydl_opts['cookiesfrombrowser'] = (cookies_from_browser, None, None, None)
+    if po_token:
+        ydl_opts['extractor_args']['youtube']['po_token'] = [po_token]
+    if visitor_data:
+        ydl_opts['extractor_args']['youtube']['visitor_data'] = [visitor_data]
     
-    # If all clients failed, raise the last error
-    raise RuntimeError(f"Failed to extract video info with all player clients. Last error: {last_error}")
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        
+        # Get available subtitle languages
+        manual_subs = list(info.get('subtitles', {}).keys())
+        auto_captions = list(info.get('automatic_captions', {}).keys())
+        all_available_langs = sorted(set(manual_subs + auto_captions))
+        
+        return {
+            'title': info.get('title', 'Unknown'),
+            'duration': info.get('duration', 0),
+            'uploader': info.get('uploader', 'Unknown'),
+            'description': info.get('description', ''),
+            'has_subtitles': bool(manual_subs),
+            'has_automatic_captions': bool(auto_captions),
+            'available_languages': manual_subs,
+            'available_auto_caption_languages': auto_captions,
+            'all_subtitle_languages': all_available_langs
+        }
 
 
 def convert_youtube_subtitle_to_srt(subtitle_text: str, format_ext: str) -> str:
@@ -458,82 +459,70 @@ def download_subtitles_robust(
         else:
             print(f"  ⚠ Strategy 1 failed: {e}")
     
-    # Strategy 2: Use yt-dlp with advanced options and retry logic with multiple player clients
-    print("\n[Strategy 2] Using yt-dlp with browser impersonation and player client fallback...")
-    
-    # Try multiple player clients in order
-    player_clients = ['ios', 'android', 'tv_embedded', 'mweb']
+    # Strategy 2: Use yt-dlp with basic approach (simplified)
+    print("\n[Strategy 2] Using yt-dlp to download subtitles...")
     
     for attempt in range(max_retries):
-        for client_idx, player_client in enumerate(player_clients):
-            try:
-                if attempt > 0 or client_idx > 0:
-                    # Exponential backoff with jitter
-                    delay = (2 ** attempt) + random.uniform(0.5, 2)
-                    print(f"  ⏳ Waiting {delay:.1f}s before retry (attempt {attempt + 1}/{max_retries}, client: {player_client})...")
-                    time.sleep(delay)
-                
-                # Get optimal options with current player client
-                subtitle_opts = get_optimal_ytdlp_opts(
-                    cookies_path=cookies_path,
-                    cookies_from_browser=cookies_from_browser,
-                    proxy=proxy,
-                    user_agent=user_agent,
-                    po_token=po_token,
-                    visitor_data=visitor_data,
-                    player_client=player_client,
-                )
-                
-                # Add subtitle-specific options
-                subtitle_opts.update({
-                    'skip_download': True,
-                    'writesubtitles': True,
-                    'writeautomaticsub': True,
-                    'subtitleslangs': [language, 'en'],
-                    'subtitlesformat': 'srt/vtt/best',
-                    'outtmpl': str(output_path / '%(title)s.%(ext)s'),
-                    'ignoreerrors': True,
-                })
-                
-                with yt_dlp.YoutubeDL(subtitle_opts) as ydl:
-                    print(f"  Attempt {attempt + 1}/{max_retries} with {player_client} client: Downloading subtitles...")
-                    ydl.download([url])
-                
-                # Look for subtitle file
-                subtitle_patterns = [
-                    f"{sanitized_title}.{language}.srt",
-                    f"{sanitized_title}.en.srt",
-                    f"{sanitized_title}.srt",
-                    f"{sanitized_title}.{language}.vtt",
-                    f"{sanitized_title}.en.vtt",
-                ]
-                
-                for pattern in subtitle_patterns:
-                    subtitle_candidate = output_path / pattern
-                    if subtitle_candidate.exists() and subtitle_candidate.stat().st_size > 0:
-                        subtitle_file = str(subtitle_candidate)
-                        print(f"  ✅ Successfully downloaded with {player_client} client: {subtitle_candidate.name}")
-                        return subtitle_file
-                
-                print(f"  ⚠ Attempt {attempt + 1} with {player_client} completed but no subtitle file found")
+        try:
+            if attempt > 0:
+                delay = 2 + random.uniform(1, 3)
+                print(f"  ⏳ Waiting {delay:.1f}s before retry {attempt + 1}/{max_retries}...")
+                time.sleep(delay)
             
-            except Exception as e:
-                error_str = str(e)
-                if '429' in error_str or 'Too Many Requests' in error_str:
-                    print(f"  ⚠ Rate limit detected with {player_client}, trying next client...")
-                    continue  # Try next client immediately
-                else:
-                    print(f"  ⚠ {player_client} failed: {error_str[:100]}")
-                    # Try next client
-                    continue
+            subtitle_opts = {
+                'skip_download': True,
+                'writesubtitles': True,
+                'writeautomaticsub': True,
+                'subtitleslangs': [language, 'en'],
+                'subtitlesformat': 'srt/vtt/best',
+                'outtmpl': str(output_path / '%(title)s.%(ext)s'),
+                'quiet': True,
+                'no_warnings': True,
+                'ignoreerrors': True,
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android', 'web'],
+                    }
+                },
+            }
+            
+            # Add optional parameters
+            if user_agent:
+                subtitle_opts['http_headers'] = {'User-Agent': user_agent}
+            if proxy:
+                subtitle_opts['proxy'] = proxy
+            if cookies_path:
+                subtitle_opts['cookiefile'] = cookies_path
+            elif cookies_from_browser:
+                subtitle_opts['cookiesfrombrowser'] = (cookies_from_browser, None, None, None)
+            
+            with yt_dlp.YoutubeDL(subtitle_opts) as ydl:
+                print(f"  Attempt {attempt + 1}/{max_retries}: Downloading subtitles...")
+                ydl.download([url])
+            
+            # Look for subtitle file
+            subtitle_patterns = [
+                f"{sanitized_title}.{language}.srt",
+                f"{sanitized_title}.en.srt",
+                f"{sanitized_title}.srt",
+                f"{sanitized_title}.{language}.vtt",
+                f"{sanitized_title}.en.vtt",
+            ]
+            
+            for pattern in subtitle_patterns:
+                subtitle_candidate = output_path / pattern
+                if subtitle_candidate.exists() and subtitle_candidate.stat().st_size > 0:
+                    subtitle_file = str(subtitle_candidate)
+                    print(f"  ✅ Successfully downloaded subtitles: {subtitle_candidate.name}")
+                    return subtitle_file
+            
+            print(f"  ⚠ Attempt {attempt + 1} completed but no subtitle file found")
+        
+        except Exception as e:
+            print(f"  ⚠ Attempt {attempt + 1} failed: {str(e)[:100]}")
     
-    # If all attempts and clients failed
-    print("\n❌ All subtitle download strategies exhausted")
-    print("   Tried all player clients: ios, android, tv_embedded, mweb")
-    print("   This is likely due to:")
-    print("   - YouTube rate limiting (HTTP 429)")
-    print("   - Temporary API issues")
-    print("   - Regional restrictions")
+    # If all attempts failed
+    print("\n⚠ Could not download subtitles from YouTube")
     print("   📝 Will use Whisper transcription as fallback")
     
     return None
@@ -685,7 +674,7 @@ def download_youtube_video(
     language: str = 'en',
     audio_only: bool = True,
     download_subtitles: bool = True,
-    auto_update: bool = True,
+    auto_update: bool = False,
     cookies_path: Optional[str] = None,
     cookies_from_browser: Optional[str] = None,
     proxy: Optional[str] = None,
@@ -694,7 +683,7 @@ def download_youtube_video(
     visitor_data: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str], Dict]:
     """
-    Download YouTube video/audio and subtitles.
+    Download YouTube video/audio and subtitles (simplified, works without cookies).
     
     Args:
         url: YouTube video URL
@@ -702,7 +691,13 @@ def download_youtube_video(
         language: Preferred subtitle language (ISO 639-1 code)
         audio_only: If True, download only audio
         download_subtitles: If True, attempt to download subtitles
-        auto_update: If True, update yt-dlp before downloading
+        auto_update: If True, update yt-dlp before downloading (default: False)
+        cookies_path: Optional path to cookies file
+        cookies_from_browser: Optional browser name for cookies (only if available)
+        proxy: Optional proxy URL
+        user_agent: Optional custom user agent
+        po_token: Optional PO token
+        visitor_data: Optional visitor data
         
     Returns:
         Tuple of (audio_path, subtitle_path, video_info)
@@ -710,7 +705,7 @@ def download_youtube_video(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # Env fallbacks if not provided
+    # Only use env variables if explicitly set (don't force cookies)
     if cookies_path is None:
         cookies_path = os.getenv("YTDLP_COOKIES")
     if cookies_from_browser is None:
@@ -761,23 +756,9 @@ def download_youtube_video(
         print(f"Warning: Could not fetch video info: {e}")
         info = {}
     
-    # Configure yt-dlp options with optimal bypass settings
-    # Try multiple player clients in order of success rate
-    player_clients = ['ios', 'android', 'tv_embedded', 'mweb']
-    
-    # Get base optimal options (will be updated per client)
-    ydl_opts = get_optimal_ytdlp_opts(
-        cookies_path=cookies_path,
-        cookies_from_browser=cookies_from_browser,
-        proxy=proxy,
-        user_agent=user_agent,
-        po_token=po_token,
-        visitor_data=visitor_data,
-        player_client=player_clients[0],  # Start with iOS (best success rate)
-    )
-    
-    # Add download-specific options
-    ydl_opts.update({
+    # Simplified yt-dlp options (works without cookies)
+    # Use android and web clients which work reliably without authentication
+    ydl_opts = {
         'format': 'bestaudio/best' if audio_only else 'bestvideo+bestaudio/best',
         'outtmpl': str(output_path / '%(title)s.%(ext)s'),
         'quiet': False,
@@ -788,7 +769,32 @@ def download_youtube_video(
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }] if audio_only else [],
-    })
+        # Use android and web clients (work without cookies)
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+            }
+        },
+        # Basic retry logic
+        'retries': 10,
+        'fragment_retries': 10,
+        'socket_timeout': 30,
+    }
+    
+    # Add optional authentication/networking (only if provided)
+    if user_agent:
+        ydl_opts['http_headers'] = {'User-Agent': user_agent}
+    if proxy:
+        ydl_opts['proxy'] = proxy
+    if cookies_path:
+        ydl_opts['cookiefile'] = cookies_path
+    elif cookies_from_browser:
+        # Only add if explicitly provided
+        ydl_opts['cookiesfrombrowser'] = (cookies_from_browser, None, None, None)
+    if po_token:
+        ydl_opts['extractor_args']['youtube']['po_token'] = [po_token]
+    if visitor_data:
+        ydl_opts['extractor_args']['youtube']['visitor_data'] = [visitor_data]
     
     # Add subtitle options - make them optional with error handling
     if download_subtitles:
@@ -801,92 +807,48 @@ def download_youtube_video(
             'ignoreerrors': True,  # Continue even if subtitles fail
         })
     
-    # Download with player client fallback
-    print(f"\nDownloading from YouTube with enhanced bypass...")
+    # Download (simplified - works without cookies)
+    print(f"\nDownloading from YouTube...")
     audio_file = None
     subtitle_file = None
     result = None
     
-    # Try downloading with multiple player clients
-    for client_idx, player_client in enumerate(player_clients):
-        try:
-            if client_idx > 0:
-                print(f"Retrying with {player_client} client...")
-                # Update options with new client
-                ydl_opts = get_optimal_ytdlp_opts(
-                    cookies_path=cookies_path,
-                    cookies_from_browser=cookies_from_browser,
-                    proxy=proxy,
-                    user_agent=user_agent,
-                    po_token=po_token,
-                    visitor_data=visitor_data,
-                    player_client=player_client,
-                )
-                ydl_opts.update({
-                    'format': 'bestaudio/best' if audio_only else 'bestvideo+bestaudio/best',
-                    'outtmpl': str(output_path / '%(title)s.%(ext)s'),
-                    'quiet': False,
-                    'no_warnings': False,
-                    'extract_audio': audio_only,
-                    'postprocessors': [{
-                        'key': 'FFmpegExtractAudio',
-                        'preferredcodec': 'wav',
-                        'preferredquality': '192',
-                    }] if audio_only else [],
-                })
-                # Small delay between retries
-                time.sleep(random.uniform(2, 4))
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            print("Downloading audio...")
+            result = ydl.extract_info(url, download=True)
             
-            # Remove subtitle options for audio-only download
-            opts_audio_only = ydl_opts.copy()
-            for key in ['writesubtitles', 'writeautomaticsub', 'subtitleslangs', 'subtitlesformat']:
-                opts_audio_only.pop(key, None)
+            # Check if extraction failed
+            if result is None:
+                raise RuntimeError("Failed to extract video information")
             
-            with yt_dlp.YoutubeDL(opts_audio_only) as ydl:
-                print(f"Downloading audio with {player_client} client...")
-                result = ydl.extract_info(url, download=True)
-                
-                # Check if extraction failed (YouTube blocking)
-                if result is None:
-                    raise RuntimeError(f"Extraction failed with {player_client} client")
-                
-                # Find downloaded files
-                title = result.get('title', 'video')
-                sanitized_title = yt_dlp.utils.sanitize_filename(title)
-                
-                # Look for audio file
-                audio_patterns = [f"{sanitized_title}.wav", f"{sanitized_title}.mp3", f"{sanitized_title}.m4a"]
-                for pattern in audio_patterns:
-                    audio_candidate = output_path / pattern
-                    if audio_candidate.exists():
-                        audio_file = str(audio_candidate)
-                        print(f"✓ Audio downloaded successfully with {player_client} client: {audio_file}")
-                        break
-                
-                # If audio file found, break out of client retry loop
-                if audio_file:
+            # Find downloaded files
+            title = result.get('title', 'video')
+            sanitized_title = yt_dlp.utils.sanitize_filename(title)
+            
+            # Look for audio file
+            audio_patterns = [f"{sanitized_title}.wav", f"{sanitized_title}.mp3", f"{sanitized_title}.m4a"]
+            for pattern in audio_patterns:
+                audio_candidate = output_path / pattern
+                if audio_candidate.exists():
+                    audio_file = str(audio_candidate)
+                    print(f"✓ Audio downloaded successfully: {audio_file}")
                     break
-        
-        except Exception as e:
-            error_str = str(e)
-            print(f"⚠ Download failed with {player_client} client: {error_str[:150]}")
             
-            # If this is the last client, re-raise the error
-            if client_idx == len(player_clients) - 1:
-                print(f"\n❌ All player clients failed")
-                print(f"   Tried: {', '.join(player_clients)}")
-                print(f"   Last error: {error_str}")
-                print(f"   This usually means YouTube is blocking access.")
-                print(f"   Try: 1) Using cookies from browser 2) Using a proxy 3) Waiting and retrying later")
-                import traceback
-                traceback.print_exc()
-                raise RuntimeError(f"Failed to download with all player clients. Last error: {error_str}")
-            # Otherwise continue to next client
-            continue
+            if not audio_file:
+                raise RuntimeError("Audio file not found after download")
     
-    # Verify we got an audio file
-    if not audio_file or not result:
-        raise RuntimeError("Failed to download audio from YouTube after trying all bypass methods")
+    except Exception as e:
+        error_str = str(e)
+        print(f"\n❌ Error downloading from YouTube: {error_str}")
+        print(f"\nTroubleshooting:")
+        print(f"  1. Make sure yt-dlp is updated: pip install -U yt-dlp")
+        print(f"  2. Try with cookies: --from-browser chrome")
+        print(f"  3. Try with a proxy: --proxy http://proxy:port")
+        print(f"  4. Check if the video is available and not region-locked")
+        import traceback
+        traceback.print_exc()
+        raise
     
     # Now try to download subtitles using robust strategies
     if download_subtitles:

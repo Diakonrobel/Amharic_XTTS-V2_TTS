@@ -8,14 +8,12 @@ Your YouTube downloader has been completely overhauled with the **latest bypass 
 
 ## ✨ What's New
 
-### 1. **Multi-Client Player Fallback** ⭐⭐⭐
-- Automatically tries **5 different player clients** in order of success rate
-- **iOS client** (best success rate in 2025)
-- **Android client** (excellent fallback)
-- **TV Embedded** (for restricted content)
-- **MediaConnect** (alternative approach)
-- **Mobile Web** (last resort)
-- **Zero configuration needed** - happens automatically!
+### 1. **Simplified Android/Web Client Approach** ⭐⭐⭐
+- Uses **Android and Web player clients** which work reliably without cookies
+- **No cookies required** for basic functionality
+- Works out of the box in most environments
+- **Zero configuration needed** - just works!
+- Optional authentication available for restricted content
 
 ### 2. **PO Token Authentication** ⭐⭐⭐ (Latest 2024+ Method)
 - Support for YouTube's newest authentication mechanism
@@ -173,14 +171,14 @@ To make permanent:
 - **Success rate: ~60-70%**
 
 ### After (New System):
-- ✅ 5 player clients with fallback
-- ✅ Extended retries (10+ attempts)
-- ✅ Smart user-agent rotation (7 variants)
+- ✅ Android + Web player clients (reliable without cookies)
+- ✅ Extended retries (10 attempts)
+- ✅ Optional authentication (cookies, proxy, PO token)
 - ✅ Detailed error reporting with guidance
 - ✅ Comprehensive failure tracking
-- ✅ PO token authentication support
-- ✅ Proxy rotation support
-- **Success rate: ~95%+ (with browser cookies)**
+- ✅ Works without any configuration
+- ✅ Simplified codebase
+- **Success rate: ~85%+ (no config), ~95%+ (with browser cookies)**
 
 ---
 

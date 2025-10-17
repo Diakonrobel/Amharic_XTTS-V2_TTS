@@ -183,6 +183,8 @@ def process_youtube_batch(
     cookies_from_browser: Optional[str] = None,
     proxy: Optional[str] = None,
     user_agent: Optional[str] = None,
+    po_token: Optional[str] = None,
+    visitor_data: Optional[str] = None,
 ) -> Tuple[str, str, List[Dict]]:
     """
     Process multiple YouTube URLs and merge into single dataset.
@@ -200,6 +202,8 @@ def process_youtube_batch(
         cookies_from_browser: Browser name for cookies import (chrome|firefox|edge)
         proxy: Proxy URL (http(s)://user:pass@host:port)
         user_agent: Custom User-Agent string
+        po_token: YouTube PO token for enhanced authentication
+        visitor_data: YouTube visitor data for enhanced authentication
         
     Returns:
         Tuple of (train_csv, eval_csv, list of video info dicts)
@@ -221,7 +225,7 @@ def process_youtube_batch(
             # Create temporary directory for this video
             temp_dir = tempfile.mkdtemp(prefix=f"yt_batch_{idx}_")
             
-            # Download video
+            # Download video with enhanced bypass
             audio_path, srt_path, info = youtube_downloader.download_youtube_video(
                 url=url,
                 output_dir=temp_dir,
@@ -233,6 +237,8 @@ def process_youtube_batch(
                 cookies_from_browser=cookies_from_browser,
                 proxy=proxy,
                 user_agent=user_agent,
+                po_token=po_token,
+                visitor_data=visitor_data,
             )
             
             if not audio_path or not srt_path:

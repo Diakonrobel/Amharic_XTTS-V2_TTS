@@ -129,37 +129,24 @@ class EnhancedAmharicG2P:
         if G2PBackend.TRANSPHONE in backend_order:
             logger.info("Attempting to load Transphone backend...")
             try:
-                from transphone import read_g2p
+                # CORRECT API: Import from transphone.g2p submodule
+                from transphone.g2p import read_g2p
                 logger.info("  ✅ Transphone module imported successfully")
                 
-                # Try multiple language codes for Amharic
-                transphone_codes = ['amh', 'am', 'AM', 'AMH']
-                transphone_loaded = False
-                last_error = None
+                # Initialize with model_name (not language code)
+                logger.info("  Initializing with model_name='latest'...")
+                self.transphone_g2p = read_g2p(model_name='latest')
+                logger.info("  ✅ Transphone G2P object created")
                 
-                for code in transphone_codes:
-                    try:
-                        logger.info(f"  Trying language code: '{code}'...")
-                        self.transphone_g2p = read_g2p(code)
-                        
-                        # VERIFY: Test with a simple conversion
-                        test_result = self.transphone_g2p('ሰላም')
-                        logger.info(f"  ✅ Test conversion successful: ሰላም → {test_result}")
-                        
-                        transphone_loaded = True
-                        logger.info(f"✅ Transphone backend initialized successfully (code: '{code}')")
-                        print(f" > ✅ Transphone G2P loaded and verified (language code: '{code}')")
-                        break
-                    except Exception as code_err:
-                        last_error = code_err
-                        logger.debug(f"  ❌ Code '{code}' failed: {type(code_err).__name__}: {code_err}")
-                        continue
+                # VERIFY: Test with a simple conversion using inference() method
+                test_text = 'ሰላም'
+                test_result = self.transphone_g2p.inference(test_text, lang_id='amh')
+                # Convert list to string
+                test_result_str = ''.join(test_result) if isinstance(test_result, list) else test_result
+                logger.info(f"  ✅ Test conversion successful: {test_text} → {test_result_str}")
                 
-                if not transphone_loaded:
-                    error_msg = f"Could not load Transphone with any language code. Last error: {last_error}"
-                    logger.error(f"❌ {error_msg}")
-                    self._backend_init_errors['transphone'] = error_msg
-                    raise RuntimeError(error_msg)
+                logger.info("✅ Transphone backend initialized and verified successfully")
+                print(f" > ✅ Transphone G2P loaded and verified (using model 'latest' with lang_id='amh')")
                     
             except ImportError as e:
                 error_msg = f"Transphone not installed: {e}"
@@ -374,7 +361,10 @@ class EnhancedAmharicG2P:
             # Try backend
             if backend == G2PBackend.TRANSPHONE and self.transphone_g2p:
                 try:
-                    result = self.transphone_g2p(text)
+                    # Use inference() method with lang_id parameter
+                    result_list = self.transphone_g2p.inference(text, lang_id='amh')
+                    # Convert list of phonemes to string
+                    result = ''.join(result_list) if isinstance(result_list, list) else result_list
                     logger.debug(f"Transphone output: {result[:50]}...")
                 except Exception as e:
                     logger.warning(f"Transphone failed: {e}")

@@ -602,8 +602,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_epochs",
         type=int,
-        help="Number of epochs to train. Default: 6",
-        default=6,
+        help="Number of epochs to train. Default: 15 (optimal for 30-40hr datasets)",
+        default=15,
     )
     parser.add_argument(
         "--batch_size",
@@ -620,8 +620,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max_audio_length",
         type=int,
-        help="Max permitted audio size in seconds. Default: 20",
-        default=20,
+        help="Max permitted audio size in seconds. Default: 11 (optimized for Amharic)",
+        default=11,
     )
 
     args = parser.parse_args()
@@ -1611,35 +1611,35 @@ if __name__ == "__main__":
                     num_epochs = gr.Slider(
                         label="Epochs",
                         minimum=1, maximum=100, step=1, value=args.num_epochs,
-                        info="Training iterations"
+                        info="15-20 recommended for 30-40hr datasets"
                     )
                     batch_size = gr.Slider(
                         label="Batch Size",
                         minimum=2, maximum=512, step=1, value=args.batch_size,
-                        info="Samples per batch"
+                        info="2 = safe for 15GB GPU, 4-8 for 24GB+"
                     )
                 with gr.Row():
                     grad_acumm = gr.Slider(
                         label="Grad Accumulation",
                         minimum=1, maximum=128, step=1, value=args.grad_acumm,
-                        info="Gradient accumulation steps"
+                        info="8 = effective batch of 16 (recommended)"
                     )
                     max_audio_length = gr.Slider(
                         label="Max Audio (sec)",
                         minimum=2, maximum=20, step=1, value=args.max_audio_length,
-                        info="Max permitted audio length"
+                        info="11 sec optimal for Amharic (256KB samples)"
                     )
                 
                 with gr.Row():
                     save_step = gr.Slider(
                         label="Checkpoint Save Frequency (steps)",
                         minimum=100, maximum=5000, step=100, value=1000,
-                        info="Save checkpoint every N steps"
+                        info="1000 steps recommended for 30-40hr data"
                     )
                     save_n_checkpoints = gr.Slider(
                         label="Keep N Checkpoints",
-                        minimum=1, maximum=10, step=1, value=1,
-                        info="Number of checkpoints to retain"
+                        minimum=1, maximum=10, step=1, value=3,
+                        info="Keep top 3 checkpoints (saves disk space)"
                     )
                 
                 clear_train_data = gr.Dropdown(
@@ -1655,19 +1655,51 @@ if __name__ == "__main__":
                 with gr.Row():
                     enable_grad_checkpoint = gr.Checkbox(
                         label="Gradient Checkpointing",
-                        value=False,
-                        info="20-30% memory reduction (minimal speed impact)"
+                        value=True,
+                        info="✅ Enabled: 20-30% memory reduction"
                     )
                     enable_sdpa = gr.Checkbox(
                         label="Fast Attention (SDPA)",
-                        value=False,
-                        info="1.3-1.5x speed + 30-40% memory reduction"
+                        value=True,
+                        info="✅ Enabled: 1.3-1.5x speed + 30-40% memory saving"
                     )
                     enable_mixed_precision = gr.Checkbox(
                         label="Mixed Precision (FP16/BF16)",
                         value=False,
-                        info="Additional speedup (Ampere+ GPUs)"
+                        info="Optional: Enable if you have Ampere+ GPU (RTX 30xx/40xx)"
                     )
+            
+            with gr.Group():
+                gr.Markdown("### 🔄 **Resume Training** (Continue from Checkpoint)")
+                gr.Markdown("""
+                💡 **Continue training** from a previous checkpoint instead of starting fresh.
+                Useful for adding more epochs or resuming interrupted training.
+                """)
+                with gr.Row():
+                    resume_from_checkpoint = gr.Checkbox(
+                        label="Resume from Checkpoint",
+                        value=False,
+                        info="Continue training instead of starting fresh",
+                        scale=1
+                    )
+                    checkpoint_selector = gr.Dropdown(
+                        label="Select Checkpoint",
+                        choices=[],
+                        value=None,
+                        interactive=True,
+                        info="Choose checkpoint to resume from",
+                        scale=2
+                    )
+                    refresh_checkpoints_btn = gr.Button(
+                        value="🔄",
+                        size="sm",
+                        scale=0,
+                        min_width=40
+                    )
+                gr.Markdown("""
+                🔍 **Tip**: Checkpoints are saved in `output/run/training/` during training.  
+                Click 🔄 to refresh the list after training completes.
+                """)
             
             with gr.Group():
                 gr.Markdown("### 🇪🇹 **Amharic G2P Options** (for 'amh' language)")
@@ -1749,6 +1781,33 @@ if __name__ == "__main__":
             from pathlib import Path
             import traceback
             
+            def load_available_checkpoints(output_path):
+                """Load list of available checkpoints from training directory"""
+                try:
+                    training_dir = Path(output_path) / "run" / "training"
+                    if not training_dir.exists():
+                        return []
+                    
+                    # Find all checkpoint files
+                    checkpoints = list(training_dir.glob("checkpoint_*.pth"))
+                    checkpoints += list(training_dir.glob("best_model.pth"))
+                    
+                    # Sort by modification time (newest first)
+                    checkpoints.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+                    
+                    # Return relative paths for display
+                    return [str(cp.relative_to(Path(output_path))) for cp in checkpoints]
+                except Exception as e:
+                    print(f"Error loading checkpoints: {e}")
+                    return []
+            
+            def refresh_checkpoint_list(output_path):
+                """Refresh the checkpoint dropdown"""
+                checkpoints = load_available_checkpoints(output_path)
+                if not checkpoints:
+                    return gr.Dropdown(choices=[], value=None)
+                return gr.Dropdown(choices=checkpoints, value=checkpoints[0] if checkpoints else None)
+            
             def check_vocab_and_dataset(output_path, train_csv):
                 """Check vocab consistency and dataset info"""
                 try:
@@ -1827,7 +1886,7 @@ if __name__ == "__main__":
                 except Exception as e:
                     return f"❌ Error checking vocab: {str(e)}"
             
-            def train_model(custom_model, version, language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length, save_step=1000, save_n_checkpoints=1, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False, enable_amharic_g2p=False, g2p_backend_train="transphone"):
+            def train_model(custom_model, version, language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length, save_step=1000, save_n_checkpoints=1, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False, enable_amharic_g2p=False, g2p_backend_train="transphone", resume_from_checkpoint_flag=False, checkpoint_path=None):
                 clear_gpu_cache()
                 
                 # Strip whitespace from paths to prevent accidental spaces
@@ -1844,9 +1903,18 @@ if __name__ == "__main__":
             
                 run_dir = Path(output_path) / "run"
             
-                # Remove train dir
-                if run_dir.exists():
-                    shutil.rmtree(run_dir)
+                # Handle checkpoint resumption
+                restore_checkpoint_path = None
+                if resume_from_checkpoint_flag and checkpoint_path:
+                    # Construct full path
+                    restore_checkpoint_path = Path(output_path) / checkpoint_path
+                    if not restore_checkpoint_path.exists():
+                        return f"❌ Checkpoint not found: {restore_checkpoint_path}", "", "", "", "", ""
+                    print(f"🔄 Resuming training from checkpoint: {restore_checkpoint_path}")
+                else:
+                    # Remove train dir only if starting fresh
+                    if run_dir.exists():
+                        shutil.rmtree(run_dir)
                 
                 # Check if the dataset language matches the language you specified 
                 lang_file_path = Path(output_path) / "dataset" / "lang.txt"
@@ -1881,8 +1949,11 @@ if __name__ == "__main__":
 # Normalize language code for XTTS internals
                     language_norm = normalize_xtts_lang(language)
 
+                    # Use restore checkpoint path if resuming, otherwise use custom_model
+                    model_to_load = str(restore_checkpoint_path) if restore_checkpoint_path else custom_model
+
                     speaker_xtts_path, config_path, original_xtts_checkpoint, vocab_file, exp_path, speaker_wav = train_gpt(
-                        custom_model, version, language_norm, num_epochs, batch_size, grad_acumm,
+                        model_to_load, version, language_norm, num_epochs, batch_size, grad_acumm,
                         train_csv, eval_csv, output_path=output_path, max_audio_length=max_audio_length,
                         save_step=save_step, save_n_checkpoints=save_n_checkpoints,
                         use_amharic_g2p=use_amharic_g2p,
@@ -2268,6 +2339,13 @@ if __name__ == "__main__":
                 outputs=[vocab_info_display]
             )
             
+            # Wire up resume training checkpoint refresh button
+            refresh_checkpoints_btn.click(
+                fn=refresh_checkpoint_list,
+                inputs=[out_path],
+                outputs=[checkpoint_selector]  # This is the training tab dropdown at line 1685
+            )
+            
             # Fine-tuning tab checkpoint manager handlers
             def refresh_training_checkpoints(output_path):
                 """Refresh and display checkpoints from training folder"""
@@ -2647,6 +2725,8 @@ if __name__ == "__main__":
                     enable_mixed_precision,
                     enable_amharic_g2p,
                     g2p_backend_train,
+                    resume_from_checkpoint,
+                    checkpoint_selector,
                 ],
                 outputs=[progress_train, xtts_config, xtts_vocab, xtts_checkpoint,xtts_speaker, speaker_reference_audio],
             )

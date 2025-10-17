@@ -364,11 +364,11 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
             # Optimizer values like tortoise, pytorch implementation with modifications to not apply WD to non-weight parameters.
             optimizer="AdamW",
             optimizer_wd_only_on_weights=OPTIMIZER_WD_ONLY_ON_WEIGHTS,
-            optimizer_params={"betas": [0.9, 0.96], "eps": 1e-8, "weight_decay": 0.05},  # Increased from 0.01 to 0.05 for stronger regularization
-            lr=1e-06,  # Further reduced from 2e-06 to 1e-06 for gentler mel learning with extended vocab
-            lr_scheduler="MultiStepLR",
-            # More aggressive LR reduction schedule: Reduce at epochs 1, 2, 3 (steps ~1010, ~2020, ~3030)
-            lr_scheduler_params={"milestones": [1010, 2020, 3030], "gamma": 0.5, "last_epoch": -1},
+            optimizer_params={"betas": [0.9, 0.96], "eps": 1e-8, "weight_decay": 0.01},  # Reduced back to 0.01 for 37.7hr dataset
+            lr=1e-05,  # Increased from 1e-06 to 1e-05 for 37.7hr dataset - was too low causing no learning
+            lr_scheduler="ReduceLROnPlateau",  # Changed to plateau-based for better adaptation
+            # Reduce LR when validation loss plateaus
+            lr_scheduler_params={"mode": "min", "factor": 0.5, "patience": 5, "min_lr": 1e-07, "verbose": True},
             test_sentences=[],
         )
 

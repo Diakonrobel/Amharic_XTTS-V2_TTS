@@ -193,6 +193,10 @@ def process_youtube_batch(
     vad_pad_ms: int = 30,
     use_enhanced_vad: bool = False,
     amharic_mode: bool = False,
+    # Background music removal parameters
+    remove_background_music: bool = False,
+    background_removal_model: str = "htdemucs",
+    background_removal_quality: str = "balanced",
 ) -> Tuple[str, str, List[Dict]]:
     """
     Process multiple YouTube URLs and merge into single dataset.
@@ -219,6 +223,9 @@ def process_youtube_batch(
         vad_pad_ms: Padding around speech in ms
         use_enhanced_vad: Use enhanced VAD with quality metrics
         amharic_mode: Enable Amharic-specific optimizations
+        remove_background_music: Remove background music from audio before processing
+        background_removal_model: Demucs model to use (htdemucs, mdx, mdx_extra)
+        background_removal_quality: Quality preset (fast, balanced, best)
         
     Returns:
         Tuple of (train_csv, eval_csv, list of video info dicts)
@@ -254,6 +261,10 @@ def process_youtube_batch(
                 user_agent=user_agent,
                 po_token=po_token,
                 visitor_data=visitor_data,
+                # Background music removal
+                remove_background_music=remove_background_music,
+                background_removal_model=background_removal_model,
+                background_removal_quality=background_removal_quality,
             )
             
             if not audio_path or not srt_path:

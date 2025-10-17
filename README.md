@@ -74,6 +74,55 @@ python headlessXttsTrain.py \
 - Ideal for dubbing projects, movie/TV show voice cloning
 - Supports multiple speakers if SRT includes speaker labels
 
+### 🎵 Background Music Removal (NEW!)
+
+Remove background music from audio files using state-of-the-art AI (Demucs by Meta) to extract clean vocals for TTS training.
+
+**Features:**
+- AI-powered vocal separation (Demucs model)
+- Multiple quality presets (fast, balanced, best)
+- GPU/CPU support with automatic detection
+- Integrated with YouTube downloader and batch processing
+- Preserves audio quality while removing music
+
+**Benefits for TTS:**
+- ✅ Improves model training quality
+- ✅ Produces clearer synthetic voices
+- ✅ Reduces unwanted artifacts
+- ✅ Results in more natural-sounding output
+
+**Installation:**
+```bash
+pip install demucs
+```
+
+**Usage (Python API):**
+```python
+from utils.audio_background_remover import remove_background_music
+
+# Remove background music
+clean_audio = remove_background_music(
+    input_audio="podcast_with_music.wav",
+    output_audio="podcast_clean.wav",
+    quality="balanced"  # Options: fast, balanced, best
+)
+```
+
+**Usage (YouTube Integration):**
+```python
+from utils import youtube_downloader
+
+audio_path, srt_path, info = youtube_downloader.download_and_process_youtube(
+    url="https://youtube.com/watch?v=VIDEO_ID",
+    output_dir="./downloads",
+    language="en",
+    remove_background_music=True,  # Enable background removal
+    background_removal_quality="balanced"
+)
+```
+
+**See `.warp/BACKGROUND_MUSIC_REMOVAL.md` for complete documentation.**
+
 ### 📹 YouTube Video Download with Transcripts
 
 Automatically download YouTube videos and extract available transcripts/subtitles.

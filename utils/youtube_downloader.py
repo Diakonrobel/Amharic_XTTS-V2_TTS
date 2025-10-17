@@ -699,6 +699,10 @@ def download_youtube_video(
     user_agent: Optional[str] = None,
     po_token: Optional[str] = None,
     visitor_data: Optional[str] = None,
+    # Background music removal parameters
+    remove_background_music: bool = False,
+    background_removal_model: str = "htdemucs",
+    background_removal_quality: str = "balanced",
 ) -> Tuple[Optional[str], Optional[str], Dict]:
     """
     Download YouTube video/audio and subtitles (simplified, works without cookies).
@@ -716,6 +720,9 @@ def download_youtube_video(
         user_agent: Optional custom user agent
         po_token: Optional PO token
         visitor_data: Optional visitor data
+        remove_background_music: Remove background music from audio (requires demucs)
+        background_removal_model: Demucs model to use (htdemucs, mdx, mdx_extra)
+        background_removal_quality: Quality preset (fast, balanced, best)
         
     Returns:
         Tuple of (audio_path, subtitle_path, video_info)
@@ -864,6 +871,34 @@ def download_youtube_video(
             
             if not audio_file:
                 raise RuntimeError("Audio file not found after download")
+            
+            # Remove background music if requested
+            if remove_background_music:
+                try:
+                    from utils.audio_background_remover import remove_background_music as remove_bg, is_available
+                    
+                    if not is_available():
+                        print("\n⚠ Background music removal requested but Demucs not installed")
+                        print("   Install with: pip install demucs")
+                        print("   Continuing without background removal...")
+                    else:
+                        print("\n🎵 Removing background music from downloaded audio...")
+                        print(f"   Model: {background_removal_model}")
+                        print(f"   Quality: {background_removal_quality}")
+                        
+                        # Process in-place (replace original audio file)
+                        audio_file = remove_bg(
+                            input_audio=audio_file,
+                            output_audio=None,  # In-place processing
+                            model=background_removal_model,
+                            quality=background_removal_quality,
+                            verbose=True
+                        )
+                        
+                        print(f"\n✅ Background removed! Clean audio ready for processing.")
+                except Exception as bg_error:
+                    print(f"\n⚠ Background removal failed: {bg_error}")
+                    print("   Continuing with original audio...")
     
     except Exception as e:
         error_str = str(e)
@@ -908,6 +943,10 @@ def download_and_process_youtube(
     user_agent: Optional[str] = None,
     po_token: Optional[str] = None,
     visitor_data: Optional[str] = None,
+    # Background music removal parameters
+    remove_background_music: bool = False,
+    background_removal_model: str = "htdemucs",
+    background_removal_quality: str = "balanced",
 ) -> Tuple[Optional[str], Optional[str], Dict]:
     """
     Download YouTube video and prepare for dataset creation.
@@ -919,6 +958,9 @@ def download_and_process_youtube(
         language: Language code
         use_whisper_if_no_srt: Use Whisper transcription if no SRT available
         auto_update: Auto-update yt-dlp
+        remove_background_music: Remove background music from audio (requires demucs)
+        background_removal_model: Demucs model to use (htdemucs, mdx, mdx_extra)
+        background_removal_quality: Quality preset (fast, balanced, best)
         
     Returns:
         Tuple of (audio_path, srt_path, info_dict)
@@ -941,6 +983,34 @@ def download_and_process_youtube(
     
     if not audio_path:
         raise RuntimeError("Failed to download audio from YouTube")
+    
+    # Remove background music if requested
+    if remove_background_music:
+        try:
+            from utils.audio_background_remover import remove_background_music as remove_bg, is_available
+            
+            if not is_available():
+                print("\n⚠ Background music removal requested but Demucs not installed")
+                print("   Install with: pip install demucs")
+                print("   Continuing without background removal...")
+            else:
+                print("\n🎵 Removing background music from downloaded audio...")
+                print(f"   Model: {background_removal_model}")
+                print(f"   Quality: {background_removal_quality}")
+                
+                # Process in-place (replace original audio file)
+                audio_path = remove_bg(
+                    input_audio=audio_path,
+                    output_audio=None,  # In-place processing
+                    model=background_removal_model,
+                    quality=background_removal_quality,
+                    verbose=True
+                )
+                
+                print(f"\n✅ Background removed! Clean audio ready for processing.")
+        except Exception as e:
+            print(f"\n⚠ Background removal failed: {e}")
+            print("   Continuing with original audio...")
     
     # If no subtitles and Whisper fallback enabled
     if not srt_path and use_whisper_if_no_srt:

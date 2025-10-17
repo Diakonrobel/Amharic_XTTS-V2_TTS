@@ -16,6 +16,9 @@ yt-dlp>=2024.1.0
 youtube-transcript-api>=0.6.0
 soundfile>=0.12.1
 
+# Optional: Background music removal (recommended for YouTube datasets)
+# Install with: pip install demucs
+# demucs>=4.0.0
 
 
 

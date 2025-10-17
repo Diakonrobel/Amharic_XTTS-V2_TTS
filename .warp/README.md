@@ -81,6 +81,16 @@ cp best_model_569.pth best_model_FINAL.pth
 
 ## 📖 Document Guide
 
+### `BACKGROUND_MUSIC_REMOVAL.md` ⭐ NEW!
+**Purpose:** Remove background music from audio for cleaner TTS datasets  
+**Contains:**
+- Complete guide to using Demucs for audio source separation
+- Integration with YouTube downloader and batch processor
+- Performance benchmarks and best practices
+- Troubleshooting guide
+
+**Read this if:** You want to improve dataset quality by removing background music from downloaded YouTube videos or other audio sources
+
 ### `training_diagnosis.md`
 **Purpose:** Understand what went wrong  
 **Contains:**

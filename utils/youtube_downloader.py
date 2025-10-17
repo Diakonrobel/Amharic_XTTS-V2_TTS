@@ -159,20 +159,29 @@ def get_video_info(
     Returns:
         Dictionary with video metadata
     """
+    # Aggressive bypass settings (same as download)
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],
+                'player_client': ['ios', 'mweb', 'android'],
+                'player_skip': ['configs', 'webpage'],
+                'skip': ['hls', 'dash'],
             }
         },
+        'http_headers': {
+            'User-Agent': 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
+            'X-YouTube-Client-Name': '5',
+            'X-YouTube-Client-Version': '19.29.1',
+        },
+        'age_limit': None,
     }
     
     # Add optional parameters only if provided
     if user_agent:
-        ydl_opts['http_headers'] = {'User-Agent': user_agent}
+        ydl_opts['http_headers']['User-Agent'] = user_agent
     if proxy:
         ydl_opts['proxy'] = proxy
     if cookies_path:
@@ -479,16 +488,25 @@ def download_subtitles_robust(
                 'quiet': True,
                 'no_warnings': True,
                 'ignoreerrors': True,
+                # Aggressive bypass settings
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['android', 'web'],
+                        'player_client': ['ios', 'mweb', 'android'],
+                        'player_skip': ['configs', 'webpage'],
+                        'skip': ['hls', 'dash'],
                     }
                 },
+                'http_headers': {
+                    'User-Agent': 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
+                    'X-YouTube-Client-Name': '5',
+                    'X-YouTube-Client-Version': '19.29.1',
+                },
+                'age_limit': None,
             }
             
             # Add optional parameters
             if user_agent:
-                subtitle_opts['http_headers'] = {'User-Agent': user_agent}
+                subtitle_opts['http_headers']['User-Agent'] = user_agent
             if proxy:
                 subtitle_opts['proxy'] = proxy
             if cookies_path:
@@ -756,8 +774,8 @@ def download_youtube_video(
         print(f"Warning: Could not fetch video info: {e}")
         info = {}
     
-    # Simplified yt-dlp options (works without cookies)
-    # Use android and web clients which work reliably without authentication
+    # Aggressive yt-dlp options (works without cookies)
+    # Use iOS client with mobile headers for best bypass success
     ydl_opts = {
         'format': 'bestaudio/best' if audio_only else 'bestvideo+bestaudio/best',
         'outtmpl': str(output_path / '%(title)s.%(ext)s'),
@@ -769,13 +787,22 @@ def download_youtube_video(
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }] if audio_only else [],
-        # Use android and web clients (work without cookies)
+        # Aggressive bypass settings
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],
+                'player_client': ['ios', 'mweb', 'android'],
+                'player_skip': ['configs', 'webpage'],
+                'skip': ['hls', 'dash'],
             }
         },
-        # Basic retry logic
+        # iOS YouTube app headers
+        'http_headers': {
+            'User-Agent': 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
+            'X-YouTube-Client-Name': '5',
+            'X-YouTube-Client-Version': '19.29.1',
+        },
+        'age_limit': None,
+        # Retry logic
         'retries': 10,
         'fragment_retries': 10,
         'socket_timeout': 30,
@@ -783,7 +810,7 @@ def download_youtube_video(
     
     # Add optional authentication/networking (only if provided)
     if user_agent:
-        ydl_opts['http_headers'] = {'User-Agent': user_agent}
+        ydl_opts['http_headers']['User-Agent'] = user_agent
     if proxy:
         ydl_opts['proxy'] = proxy
     if cookies_path:

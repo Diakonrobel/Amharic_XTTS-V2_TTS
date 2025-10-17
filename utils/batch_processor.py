@@ -268,6 +268,7 @@ def process_youtube_batch(
             if use_vad:
                 from utils import srt_processor_vad
                 
+                # Note: vad_min_speech_ms, vad_min_silence_ms, vad_pad_ms are handled internally by VAD
                 train_csv, eval_csv, duration = srt_processor_vad.process_srt_with_media_vad(
                     srt_path=srt_path,
                     media_path=audio_path,
@@ -275,9 +276,6 @@ def process_youtube_batch(
                     language=canonical_lang(transcript_lang),
                     use_vad_refinement=True,
                     vad_threshold=vad_threshold,
-                    vad_min_speech_duration_ms=vad_min_speech_ms,
-                    vad_min_silence_duration_ms=vad_min_silence_ms,
-                    vad_speech_pad_ms=vad_pad_ms,
                     use_enhanced_vad=use_enhanced_vad,
                     amharic_mode=amharic_mode,
                     adaptive_threshold=True,

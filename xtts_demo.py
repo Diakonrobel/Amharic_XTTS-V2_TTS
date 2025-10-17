@@ -1140,42 +1140,23 @@ if __name__ == "__main__":
                     output_path = os.path.join(out_path, "dataset")
                     os.makedirs(output_path, exist_ok=True)
                     
-                    # Choose processor based on VAD setting
+                    # CRITICAL: Silero VAD disabled due to text-audio mismatch bug
+                    # Always use standard SRT processor for reliable results
+                    mode_desc = "standard"
                     if use_vad:
-                        from utils import srt_processor_vad
-                        
-                        mode_desc = "Enhanced VAD" if use_enhanced_vad else "VAD"
-                        lang_str = " (Amharic)" if amharic_mode else ""
-                        progress(0, desc=f"Initializing {mode_desc} SRT processor{lang_str}...")
-                        progress(0.2, desc="Loading VAD model...")
-                        if use_enhanced_vad:
-                            progress(0.25, desc="Enhanced VAD with quality metrics...")
-                        progress(0.3, desc="Processing SRT with VAD refinement...")
-                        
-                        train_csv, eval_csv, duration = srt_processor_vad.process_srt_with_media_vad(
-                            srt_path=srt_file_path,
-                            media_path=media_file_path,
-                            output_dir=output_path,
-                            language=language,
-                            use_vad_refinement=True,
-                            vad_threshold=vad_threshold_val,
-                            use_enhanced_vad=use_enhanced_vad,
-                            amharic_mode=amharic_mode,
-                            adaptive_threshold=True,
-                            gradio_progress=progress
-                        )
+                        progress(0, desc="⚠ VAD disabled (known bug) - using standard SRT processing...")
                     else:
-                        mode_desc = "standard"
                         progress(0, desc=f"Initializing {mode_desc} SRT processor...")
-                        progress(0.3, desc="Processing SRT and extracting audio segments...")
-                        
-                        train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
-                            srt_path=srt_file_path,
-                            media_path=media_file_path,
-                            output_dir=output_path,
-                            language=language,
-                            gradio_progress=progress
-                        )
+                    
+                    progress(0.3, desc="Processing SRT and extracting audio segments...")
+                    
+                    train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+                        srt_path=srt_file_path,
+                        media_path=media_file_path,
+                        output_dir=output_path,
+                        language=language,
+                        gradio_progress=progress
+                    )
                     
                     # Count segments from train CSV
                     import pandas as pd
@@ -1194,16 +1175,10 @@ if __name__ == "__main__":
                     )
                     
                     progress(1.0, desc="SRT processing complete!")
-                    vad_info_str = ""
+                    vad_warning = ""
                     if use_vad:
-                        if use_enhanced_vad:
-                            vad_info_str = " (✨ Enhanced VAD"
-                            if amharic_mode:
-                                vad_info_str += " + 🇪🇹 Amharic Mode"
-                            vad_info_str += ")"
-                        else:
-                            vad_info_str = " (Standard VAD)"
-                    return f"✓ SRT Processing Complete{vad_info_str}!\nProcessed {num_segments} segments\nTotal audio: {duration:.1f}s\nDataset created at: {output_path}\nMode: {mode_desc.capitalize()}\n\nℹ This dataset has been saved to history and won't be reprocessed."
+                        vad_warning = "\n\n⚠ Note: VAD was requested but disabled (text-audio mismatch bug). Used standard SRT processing instead."
+                    return f"✓ SRT Processing Complete!\nProcessed {num_segments} segments\nTotal audio: {duration:.1f}s\nDataset created at: {output_path}\nMode: Standard (SRT-based){vad_warning}\n\nℹ This dataset has been saved to history and won't be reprocessed."
                     
                 except Exception as e:
                     traceback.print_exc()
@@ -1354,37 +1329,20 @@ if __name__ == "__main__":
                     dataset_language = normalize_xtts_lang(transcript_lang)
                     print(f"Setting dataset language to '{dataset_language}' (from YouTube transcript language)")
                     
-                    # Use VAD processor if enabled
+                    # CRITICAL: Silero VAD disabled due to text-audio mismatch bug
+                    # Always use standard SRT processor for reliable results
                     if use_vad:
-                        from utils import srt_processor_vad
-                        
-                        mode_desc = "Enhanced VAD" if use_enhanced_vad else "VAD"
-                        lang_str = " (Amharic)" if amharic_mode else ""
-                        progress(0.65, desc=f"{mode_desc} refinement{lang_str}...")
-                        
-                        train_csv, eval_csv, duration = srt_processor_vad.process_srt_with_media_vad(
-                            srt_path=srt_path,
-                            media_path=audio_path,
-                            output_dir=output_path,
-                            language=dataset_language,
-                            use_vad_refinement=True,
-                            vad_threshold=vad_threshold,
-                            vad_min_speech_duration_ms=int(vad_min_speech),
-                            vad_min_silence_duration_ms=int(vad_min_silence),
-                            vad_speech_pad_ms=int(vad_pad),
-                            use_enhanced_vad=use_enhanced_vad,
-                            amharic_mode=amharic_mode,
-                            adaptive_threshold=True,
-                            gradio_progress=progress
-                        )
+                        progress(0.6, desc="⚠ VAD disabled (known bug) - using standard processing...")
                     else:
-                        train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
-                            srt_path=srt_path,
-                            media_path=audio_path,
-                            output_dir=output_path,
-                            language=dataset_language,
-                            gradio_progress=progress
-                        )
+                        progress(0.6, desc="Processing transcript and audio...")
+                    
+                    train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+                        srt_path=srt_path,
+                        media_path=audio_path,
+                        output_dir=output_path,
+                        language=dataset_language,
+                        gradio_progress=progress
+                    )
                     
                     # Count segments
                     import pandas as pd
@@ -1412,16 +1370,10 @@ if __name__ == "__main__":
                         pass
                     
                     progress(1.0, desc="YouTube processing complete!")
-                    vad_info_str = ""
+                    vad_warning = ""
                     if use_vad:
-                        if use_enhanced_vad:
-                            vad_info_str = " (✨ Enhanced VAD"
-                            if amharic_mode:
-                                vad_info_str += " + 🇪🇹 Amharic Mode"
-                            vad_info_str += ")"
-                        else:
-                            vad_info_str = " (Standard VAD)"
-                    return f"✓ YouTube Processing Complete{vad_info_str}!\nTitle: {info.get('title', 'Unknown')}\nDuration: {info.get('duration', 0):.0f}s\nProcessed {num_segments} segments\nDataset created at: {output_path}\n\nℹ This dataset has been saved to history and won't be reprocessed."
+                        vad_warning = "\n\n⚠ Note: VAD was requested but disabled (text-audio mismatch bug). Used standard SRT processing instead."
+                    return f"✓ YouTube Processing Complete!\nTitle: {info.get('title', 'Unknown')}\nDuration: {info.get('duration', 0):.0f}s\nProcessed {num_segments} segments\nDataset created at: {output_path}{vad_warning}\n\nℹ This dataset has been saved to history and won't be reprocessed."
                     
                 except Exception as e:
                     traceback.print_exc()

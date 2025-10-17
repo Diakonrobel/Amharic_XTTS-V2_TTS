@@ -264,29 +264,18 @@ def process_youtube_batch(
             temp_dataset_dir = os.path.join(out_path, f"temp_dataset_{idx}")
             os.makedirs(temp_dataset_dir, exist_ok=True)
             
-            # Use VAD processor if enabled
+            # CRITICAL: Silero VAD disabled due to text-audio mismatch bug
+            # Always use standard SRT processor for reliable results
             if use_vad:
-                from utils import srt_processor_vad
-                
-                # Note: vad_min_speech_ms, vad_min_silence_ms, vad_pad_ms are handled internally by VAD
-                train_csv, eval_csv, duration = srt_processor_vad.process_srt_with_media_vad(
-                    srt_path=srt_path,
-                    media_path=audio_path,
-                    output_dir=temp_dataset_dir,
-                    language=canonical_lang(transcript_lang),
-                    use_vad_refinement=True,
-                    vad_threshold=vad_threshold,
-                    use_enhanced_vad=use_enhanced_vad,
-                    amharic_mode=amharic_mode,
-                    adaptive_threshold=True,
-                )
-            else:
-                train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
-                    srt_path=srt_path,
-                    media_path=audio_path,
-                    output_dir=temp_dataset_dir,
-                    language=canonical_lang(transcript_lang)
-                )
+                print(f"  ⚠ VAD requested but disabled (known text-audio mismatch issue)")
+                print(f"  ℹ Using standard SRT processing instead")
+            
+            train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+                srt_path=srt_path,
+                media_path=audio_path,
+                output_dir=temp_dataset_dir,
+                language=canonical_lang(transcript_lang)
+            )
             
             temp_datasets.append(temp_dataset_dir)
             video_infos.append({

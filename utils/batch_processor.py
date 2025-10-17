@@ -185,6 +185,14 @@ def process_youtube_batch(
     user_agent: Optional[str] = None,
     po_token: Optional[str] = None,
     visitor_data: Optional[str] = None,
+    # VAD parameters
+    use_vad: bool = False,
+    vad_threshold: float = 0.5,
+    vad_min_speech_ms: int = 250,
+    vad_min_silence_ms: int = 300,
+    vad_pad_ms: int = 30,
+    use_enhanced_vad: bool = False,
+    amharic_mode: bool = False,
 ) -> Tuple[str, str, List[Dict]]:
     """
     Process multiple YouTube URLs and merge into single dataset.
@@ -204,6 +212,13 @@ def process_youtube_batch(
         user_agent: Custom User-Agent string
         po_token: YouTube PO token for enhanced authentication
         visitor_data: YouTube visitor data for enhanced authentication
+        use_vad: Enable VAD refinement for better quality
+        vad_threshold: VAD confidence threshold (0-1)
+        vad_min_speech_ms: Minimum speech duration in ms
+        vad_min_silence_ms: Minimum silence duration in ms
+        vad_pad_ms: Padding around speech in ms
+        use_enhanced_vad: Use enhanced VAD with quality metrics
+        amharic_mode: Enable Amharic-specific optimizations
         
     Returns:
         Tuple of (train_csv, eval_csv, list of video info dicts)
@@ -249,13 +264,29 @@ def process_youtube_batch(
             temp_dataset_dir = os.path.join(out_path, f"temp_dataset_{idx}")
             os.makedirs(temp_dataset_dir, exist_ok=True)
             
-            # Use standard SRT processor (VAD removed)
-            train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
-                srt_path=srt_path,
-                media_path=audio_path,
-                output_dir=temp_dataset_dir,
-                language=canonical_lang(transcript_lang)
-            )
+            # Use VAD processor if enabled
+            if use_vad:
+                from utils import srt_processor_vad
+                
+                # Note: vad_min_speech_ms, vad_min_silence_ms, vad_pad_ms are handled internally by VAD
+                train_csv, eval_csv, duration = srt_processor_vad.process_srt_with_media_vad(
+                    srt_path=srt_path,
+                    media_path=audio_path,
+                    output_dir=temp_dataset_dir,
+                    language=canonical_lang(transcript_lang),
+                    use_vad_refinement=True,
+                    vad_threshold=vad_threshold,
+                    use_enhanced_vad=use_enhanced_vad,
+                    amharic_mode=amharic_mode,
+                    adaptive_threshold=True,
+                )
+            else:
+                train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+                    srt_path=srt_path,
+                    media_path=audio_path,
+                    output_dir=temp_dataset_dir,
+                    language=canonical_lang(transcript_lang)
+                )
             
             temp_datasets.append(temp_dataset_dir)
             video_infos.append({

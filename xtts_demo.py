@@ -866,6 +866,39 @@ if __name__ == "__main__":
                         🇪🇹 **Amharic Mode**: Tuned for Amharic ejectives (ጥ, ጭ, ቅ) with extra padding.
                         """)
                     
+                    with gr.Accordion("🎵 Background Music Removal (Optional)", open=False):
+                        gr.Markdown("""
+                        **Remove background music from downloaded audio using AI (Demucs):**
+                        - Extracts clean vocals for better TTS training
+                        - Improves voice quality and reduces artifacts
+                        - Requires `pip install demucs` (will be skipped if not installed)
+                        """)
+                        with gr.Row():
+                            youtube_remove_bg = gr.Checkbox(
+                                label="🎵 Remove Background Music",
+                                value=False,
+                                info="AI-powered vocal separation (adds ~2-5min per video)",
+                                scale=1
+                            )
+                            youtube_bg_quality = gr.Radio(
+                                label="Quality",
+                                choices=[("⚡ Fast (1-2min)", "fast"), ("⚖️ Balanced (3-5min)", "balanced"), ("✨ Best (10-15min)", "best")],
+                                value="balanced",
+                                info="Higher quality = slower processing",
+                                scale=2
+                            )
+                        youtube_bg_model = gr.Dropdown(
+                            label="Model (Advanced)",
+                            choices=[("htdemucs (Best Quality)", "htdemucs"), ("mdx_extra (Balanced)", "mdx_extra"), ("mdx (Fast)", "mdx")],
+                            value="htdemucs",
+                            info="Select Demucs model for separation",
+                            visible=False  # Hidden by default, can be shown for advanced users
+                        )
+                        gr.Markdown("""
+                        💡 **Recommended:** Use "Balanced" quality for most cases. "Fast" for quick tests, "Best" for final production datasets.  
+                        ⚠️ **Note:** Background removal adds processing time but significantly improves TTS training quality.
+                        """)
+                    
                     with gr.Accordion("🔐 YouTube Authentication & Bypass (Optional)", open=False):
                         gr.Markdown("""
                         **Fix YouTube bot detection / sign-in requirements:**
@@ -1184,7 +1217,7 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error processing SRT: {str(e)}"
             
-            def process_youtube_batch_urls(urls, transcript_lang, out_path, incremental, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, progress):
+            def process_youtube_batch_urls(urls, transcript_lang, out_path, incremental, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, remove_bg, bg_quality, bg_model, progress):
                 """Process multiple YouTube URLs in batch mode"""
                 try:
                     mode_desc = "INCREMENTAL (adding to existing)" if incremental else "STANDARD (new dataset)"
@@ -1218,6 +1251,10 @@ if __name__ == "__main__":
                         vad_pad_ms=int(vad_pad),
                         use_enhanced_vad=use_enhanced_vad,
                         amharic_mode=amharic_mode,
+                        # Background music removal
+                        remove_background_music=remove_bg,
+                        background_removal_model=bg_model,
+                        background_removal_quality=bg_quality,
                     )
                     
                     # Count total segments
@@ -1259,7 +1296,7 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error in batch processing: {str(e)}"
             
-            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, incremental_mode, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, progress=gr.Progress(track_tqdm=True)):
+            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, incremental_mode, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, remove_bg, bg_quality, bg_model, progress=gr.Progress(track_tqdm=True)):
                 """Download YouTube video(s) and extract transcripts"""
                 try:
                     if not url:
@@ -1279,7 +1316,7 @@ if __name__ == "__main__":
                     
                     # Check if batch mode and multiple URLs
                     if batch_mode and len(urls) > 1:
-                        return process_youtube_batch_urls(urls, transcript_lang, out_path, incremental_mode, check_duplicates, cookies_file, cookies_browser, proxy_url, ua, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, progress)
+                        return process_youtube_batch_urls(urls, transcript_lang, out_path, incremental_mode, check_duplicates, cookies_file, cookies_browser, proxy_url, ua, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, remove_bg, bg_quality, bg_model, progress)
                     
                     # Single URL processing (existing logic)
                     url = urls[0]  # Use first URL
@@ -1313,6 +1350,10 @@ if __name__ == "__main__":
                         cookies_from_browser=cookies_browser,
                         proxy=proxy_url,
                         user_agent=ua,
+                        # Background music removal
+                        remove_background_music=remove_bg,
+                        background_removal_model=bg_model,
+                        background_removal_quality=bg_quality,
                     )
                     
                     if not audio_path:
@@ -2245,6 +2286,9 @@ if __name__ == "__main__":
                     youtube_vad_speech_pad,  # Speech padding
                     youtube_use_enhanced_vad,  # Enhanced VAD
                     youtube_amharic_mode,  # Amharic mode
+                    youtube_remove_bg,  # Background music removal enable/disable
+                    youtube_bg_quality,  # Background removal quality
+                    youtube_bg_model,  # Background removal model
                 ],
                 outputs=[youtube_status],
             )

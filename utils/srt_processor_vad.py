@@ -135,14 +135,20 @@ def extract_segments_with_vad(
                     segment_audio=segment_audio,
                     segment_text=text,
                     segment_start_time=buffered_start,
+                    original_srt_start=start_time,  # Pass original SRT timing
+                    original_srt_end=end_time,      # Pass original SRT timing
                     vad_slicer=vad_slicer,
                     sr=sr,
                     min_duration=min_duration,
                     max_duration=max_duration
                 )
                 
-                # Save each refined segment
+                # Save each refined segment (only those with text)
                 for sub_idx, refined in enumerate(refined_segments):
+                    # CRITICAL FIX: Skip segments without text (VAD artifacts)
+                    if not refined.text or refined.text.strip() == "":
+                        continue
+                    
                     segment_filename = f"{Path(audio_path).stem}_{str(idx).zfill(6)}_{sub_idx}.wav"
                     segment_path = wavs_dir / segment_filename
                     
@@ -154,9 +160,9 @@ def extract_segments_with_vad(
                         sr
                     )
                     
-                    # Add to metadata
+                    # Add to metadata with validated text
                     metadata["audio_file"].append(f"wavs/{segment_filename}")
-                    metadata["text"].append(refined.text if refined.text else text)
+                    metadata["text"].append(refined.text.strip())
                     metadata["speaker_name"].append(speaker_name)
                 
             except Exception as vad_error:
@@ -220,6 +226,8 @@ def refine_segment_with_vad(
     segment_audio: 'np.ndarray',
     segment_text: str,
     segment_start_time: float,
+    original_srt_start: float,
+    original_srt_end: float,
     vad_slicer: VADSlicer,
     sr: int,
     min_duration: float,
@@ -228,13 +236,16 @@ def refine_segment_with_vad(
     """
     Refine a single SRT segment using VAD.
     
-    This detects actual speech boundaries within the segment,
-    trims silence, and optionally splits long segments.
+    CRITICAL FIX: Only assign text to the VAD segment that best matches the 
+    original SRT timing. This prevents text-audio mismatch when VAD splits
+    a segment into multiple parts.
     
     Args:
-        segment_audio: Audio samples for this segment
+        segment_audio: Audio samples for this segment (may include buffer)
         segment_text: Text from SRT
-        segment_start_time: Start time of segment in original audio
+        segment_start_time: Start time of buffered segment in original audio
+        original_srt_start: Original SRT start time (non-buffered)
+        original_srt_end: Original SRT end time (non-buffered)
         vad_slicer: VAD slicer instance
         sr: Sample rate
         min_duration: Minimum duration
@@ -247,10 +258,10 @@ def refine_segment_with_vad(
     speech_regions = vad_slicer.detect_speech_segments(segment_audio)
     
     if not speech_regions:
-        # No speech detected, return original
+        # No speech detected, return original with proper timing
         return [AudioSegment(
-            start_time=0,
-            end_time=len(segment_audio) / sr,
+            start_time=original_srt_start,
+            end_time=original_srt_end,
             audio=segment_audio,
             text=segment_text,
             confidence=0.5
@@ -263,9 +274,28 @@ def refine_segment_with_vad(
     if len(merged_regions) == 1 and merged_regions[0]['end'] - merged_regions[0]['start'] > max_duration:
         merged_regions = vad_slicer.split_long_segments(merged_regions, segment_audio)
     
+    # CRITICAL FIX: Find which VAD segment best matches the original SRT timing
+    # Only that segment should get the text!
+    best_match_idx = -1
+    best_overlap = 0.0
+    
+    for idx, region in enumerate(merged_regions):
+        # Convert region timing from relative to absolute
+        region_abs_start = segment_start_time + region['start']
+        region_abs_end = segment_start_time + region['end']
+        
+        # Calculate overlap with original SRT timing
+        overlap_start = max(region_abs_start, original_srt_start)
+        overlap_end = min(region_abs_end, original_srt_end)
+        overlap = max(0, overlap_end - overlap_start)
+        
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best_match_idx = idx
+    
     # Create refined segments
     refined_segments = []
-    for region in merged_regions:
+    for idx, region in enumerate(merged_regions):
         start_sample = int(region['start'] * sr)
         end_sample = int(region['end'] * sr)
         
@@ -280,19 +310,22 @@ def refine_segment_with_vad(
         if region_duration < min_duration or region_duration > max_duration:
             continue
         
+        # CRITICAL: Only assign text to the segment that best matches SRT timing
+        assigned_text = segment_text if idx == best_match_idx else ""
+        
         refined_segments.append(AudioSegment(
             start_time=segment_start_time + region['start'],
             end_time=segment_start_time + region['end'],
             audio=region_audio,
-            text=segment_text,  # Same text for all sub-segments
+            text=assigned_text,
             confidence=region['confidence']
         ))
     
     # If no valid segments after filtering, return original
     if not refined_segments:
         return [AudioSegment(
-            start_time=0,
-            end_time=len(segment_audio) / sr,
+            start_time=original_srt_start,
+            end_time=original_srt_end,
             audio=segment_audio,
             text=segment_text,
             confidence=0.5

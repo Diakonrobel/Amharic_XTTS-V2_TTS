@@ -108,7 +108,16 @@ def preprocess_training_samples_with_g2p(
     fail_count = 0
     skip_count = 0
     
-    logger.info(f"Starting G2P preprocessing for {len(samples)} samples...")
+    total_samples = len(samples)
+    start_msg = f"Starting G2P preprocessing for {total_samples} samples..."
+    progress_msg = f"  Progress will be logged every 500 samples (this may take 10-30 minutes for large datasets)"
+    logger.info(start_msg)
+    logger.info(progress_msg)
+    print(start_msg)  # Ensure visibility
+    print(progress_msg)
+    
+    # Calculate progress intervals
+    progress_interval = max(1, min(500, total_samples // 20))  # Show 20 updates or every 500
     
     for idx, sample in enumerate(samples):
         try:
@@ -137,6 +146,13 @@ def preprocess_training_samples_with_g2p(
             if success_count <= 5:
                 logger.info(f"  Sample {idx + 1}: {original_text[:50]}...")
                 logger.info(f"             → {phoneme_text[:50]}...")
+            
+            # Log progress periodically
+            elif (idx + 1) % progress_interval == 0:
+                progress_pct = (idx + 1) / total_samples * 100
+                msg = f"  ⏳ Progress: {idx + 1}/{total_samples} ({progress_pct:.1f}%) - {success_count} converted, {skip_count} skipped, {fail_count} failed"
+                logger.info(msg)
+                print(msg)  # Ensure visibility in all environments
         
         except Exception as e:
             logger.warning(f"Failed to preprocess sample {idx + 1}: {e}")

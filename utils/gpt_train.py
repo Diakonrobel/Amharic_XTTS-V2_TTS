@@ -727,9 +727,9 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     if (ema_model or warmup_scheduler or adaptive_clipper) and ENHANCEMENTS_AVAILABLE:
         original_optimizer_step = trainer.optimize
         
-        def enhanced_optimize(batch):
-            # Run original optimization
-            loss_dict = original_optimizer_step(batch)
+        def enhanced_optimize(*args, **kwargs):
+            # Run original optimization with all arguments
+            result = original_optimizer_step(*args, **kwargs)
             
             # Update EMA after optimizer step
             if ema_model:
@@ -745,7 +745,7 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
                 except:
                     pass
             
-            return loss_dict
+            return result
         
         trainer.optimize = enhanced_optimize
         print(" > ✅ Training loop enhanced with EMA/Warmup hooks")

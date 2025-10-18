@@ -1903,38 +1903,36 @@ if __name__ == "__main__":
             import traceback
             
             def load_available_checkpoints(output_path):
-                """Load list of available checkpoints from training directory"""
+                """Load list of available checkpoints from training directory using checkpoint_manager"""
                 try:
-                    # Handle both absolute and relative paths
-                    if not Path(output_path).is_absolute():
-                        output_path = Path.cwd() / output_path
-                    else:
-                        output_path = Path(output_path)
-                    
-                    training_dir = output_path / "run" / "training"
-                    if not training_dir.exists():
-                        print(f"Training directory not found: {training_dir}")
-                        return []
-                    
-                    # Find all checkpoint files RECURSIVELY in subdirectories
-                    checkpoints = list(training_dir.rglob("checkpoint_*.pth"))
-                    checkpoints += list(training_dir.rglob("best_model*.pth"))  # best_model*.pth to match best_model_4141.pth etc
+                    # Use the same checkpoint discovery as Checkpoint Manager section
+                    run_dir, checkpoints = checkpoint_manager.get_latest_training_run_checkpoints(output_path)
                     
                     if not checkpoints:
-                        print(f"No checkpoints found in {training_dir}")
-                        # Debug: list what's actually there
-                        for subdir in training_dir.glob("*"):
-                            if subdir.is_dir():
-                                print(f"  Found training run: {subdir.name}")
-                                ckpts_in_subdir = list(subdir.glob("*.pth"))
-                                print(f"    Checkpoints: {[c.name for c in ckpts_in_subdir]}")
+                        print(f"No checkpoints found in output_path: {output_path}")
                         return []
                     
-                    # Sort by modification time (newest first)
-                    checkpoints.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-                    
                     # Return relative paths from output_path for display
-                    return [str(cp.relative_to(output_path)) for cp in checkpoints]
+                    output_path_obj = Path(output_path)
+                    if not output_path_obj.is_absolute():
+                        output_path_obj = Path.cwd() / output_path_obj
+                    
+                    relative_paths = []
+                    for ckpt in checkpoints:
+                        ckpt_path = Path(ckpt.path)
+                        try:
+                            rel_path = ckpt_path.relative_to(output_path_obj)
+                            relative_paths.append(str(rel_path))
+                        except ValueError:
+                            # Fallback: use absolute path if relative fails
+                            relative_paths.append(str(ckpt_path))
+                    
+                    print(f"Found {len(relative_paths)} checkpoints for resume training")
+                    for rp in relative_paths:
+                        print(f"  - {rp}")
+                    
+                    return relative_paths
+                    
                 except Exception as e:
                     print(f"Error loading checkpoints: {e}")
                     import traceback

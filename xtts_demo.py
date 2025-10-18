@@ -2586,10 +2586,21 @@ if __name__ == "__main__":
             )
             
             # Wire up resume training checkpoint refresh button
+            # TEMPORARY: Simple test handler without inputs
+            def simple_refresh_test():
+                print("\n" + "="*70)
+                print("🔄🔄🔄 REFRESH BUTTON HANDLER CALLED! 🔄🔄🔄")
+                print("="*70)
+                return gr.Dropdown(
+                    choices=[("✅ Refresh button works! Now debugging why checkpoint loading fails...", "")],
+                    value="",
+                    info="Button handler is executing successfully"
+                )
+            
             refresh_checkpoints_btn.click(
-                fn=refresh_checkpoint_list,
-                inputs=[out_path],
-                outputs=[checkpoint_selector]  # This is the training tab dropdown at line 1685
+                fn=simple_refresh_test,
+                inputs=[],
+                outputs=[checkpoint_selector]
             )
             
             # Fine-tuning tab checkpoint manager handlers

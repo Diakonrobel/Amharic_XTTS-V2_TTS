@@ -27,6 +27,16 @@ except ImportError:
     print(" > Warning: Training optimizations module not available")
     OPTIMIZATIONS_AVAILABLE = False
 
+# Import training enhancements
+try:
+    from utils.training_enhancements import (
+        EMAModel, WarmupLRScheduler, LabelSmoother, AdaptiveGradientClipper, auto_detect_mixed_precision
+    )
+    ENHANCEMENTS_AVAILABLE = True
+except ImportError:
+    print(" > Warning: Training enhancements module not available")
+    ENHANCEMENTS_AVAILABLE = False
+
 # Import dataset validator
 try:
     from utils.dataset_validator import validate_dataset_before_training, DatasetValidationError
@@ -44,7 +54,7 @@ except ImportError:
     SMALL_DATASET_CONFIG_AVAILABLE = False
 
 
-def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, save_step=1000, save_n_checkpoints=1, use_amharic_g2p=False, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False, freeze_encoder=True, freeze_first_n_gpt_layers=0, learning_rate_override=None, weight_decay_override=None, early_stopping_patience=None):
+def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, save_step=1000, save_n_checkpoints=1, use_amharic_g2p=False, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False, freeze_encoder=True, freeze_first_n_gpt_layers=0, learning_rate_override=None, weight_decay_override=None, early_stopping_patience=None, use_ema=True, lr_warmup_steps=500, use_label_smoothing=False, label_smoothing_factor=0.1):
     #  Logging parameters
     RUN_NAME = "GPT_XTTS_FT"
     PROJECT_NAME = "XTTS_trainer"
@@ -300,9 +310,24 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     # Determine if we should enable language adaptation mode (Amharic, non-small dataset)
     language_adaptation_mode = (language in ["am", "amh"]) and (not use_small_dataset_config)
     
+    # Auto-enable mixed precision if not explicitly set
+    if not enable_mixed_precision and ENHANCEMENTS_AVAILABLE:
+        enable_mixed_precision = auto_detect_mixed_precision()
+        if enable_mixed_precision:
+            print(" > ✅ Mixed precision AUTO-ENABLED (modern GPU detected)")
+    
     # Override parameters for better anti-overfitting
     final_learning_rate = learning_rate_override if learning_rate_override is not None else (2e-06 if language_adaptation_mode else 1e-05)
     final_weight_decay = weight_decay_override if weight_decay_override is not None else (0.05 if language_adaptation_mode else 0.01)
+    
+    # Enable EMA by default for language adaptation
+    use_ema_final = use_ema and ENHANCEMENTS_AVAILABLE
+    lr_warmup_steps_final = lr_warmup_steps if (use_ema_final or language_adaptation_mode) else 0
+    
+    if use_ema_final:
+        print(f" > ✅ EMA (Exponential Moving Average) enabled: decay=0.999")
+    if lr_warmup_steps_final > 0:
+        print(f" > ✅ LR Warmup enabled: {lr_warmup_steps_final} steps (0 → {final_learning_rate})")
     
     # Determine layer freezing strategy
     freeze_encoder_layers = freeze_encoder if freeze_encoder is not None else (True if language_adaptation_mode else False)
@@ -629,23 +654,101 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         eval_samples=eval_samples,
     )
     
-    # Apply gradient clipping to prevent exploding gradients
-    grad_clip_norm = XTTSSmallDatasetConfig.GRAD_CLIP_NORM if use_small_dataset_config else (0.5 if language_adaptation_mode else 1.0)
-    try:
-        import torch.nn.utils as nn_utils
-        original_train_step = trainer.train_step
+    # Initialize training enhancements
+    ema_model = None
+    warmup_scheduler = None
+    adaptive_clipper = None
+    
+    if ENHANCEMENTS_AVAILABLE:
+        # Initialize EMA
+        if use_ema_final:
+            try:
+                ema_model = EMAModel(model, decay=0.999)
+                print(" > ✅ EMA model initialized")
+            except Exception as e:
+                print(f" > ⚠️  Could not initialize EMA: {e}")
+                ema_model = None
         
-        def train_step_with_grad_clip(*args, **kwargs):
-            result = original_train_step(*args, **kwargs)
-            # Clip gradients after backward pass
-            if model.training:
-                nn_utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
-            return result
+        # Initialize adaptive gradient clipper
+        try:
+            grad_clip_norm = XTTSSmallDatasetConfig.GRAD_CLIP_NORM if use_small_dataset_config else (0.5 if language_adaptation_mode else 1.0)
+            adaptive_clipper = AdaptiveGradientClipper(model, max_norm=grad_clip_norm)
+            print(f" > ✅ Adaptive gradient clipping enabled (max_norm={grad_clip_norm})")
+        except Exception as e:
+            print(f" > ⚠️  Could not enable adaptive clipping: {e}")
+            # Fallback to basic clipping
+            try:
+                import torch.nn.utils as nn_utils
+                original_train_step = trainer.train_step
+                
+                def train_step_with_grad_clip(*args, **kwargs):
+                    result = original_train_step(*args, **kwargs)
+                    if model.training:
+                        nn_utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
+                    return result
+                
+                trainer.train_step = train_step_with_grad_clip
+                print(f" > ✅ Basic gradient clipping enabled (max_norm={grad_clip_norm})")
+            except Exception as e2:
+                print(f" > ⚠️  Could not enable gradient clipping: {e2}")
+    else:
+        # Fallback to basic clipping if enhancements not available
+        grad_clip_norm = XTTSSmallDatasetConfig.GRAD_CLIP_NORM if use_small_dataset_config else (0.5 if language_adaptation_mode else 1.0)
+        try:
+            import torch.nn.utils as nn_utils
+            original_train_step = trainer.train_step
+            
+            def train_step_with_grad_clip(*args, **kwargs):
+                result = original_train_step(*args, **kwargs)
+                if model.training:
+                    nn_utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
+                return result
+            
+            trainer.train_step = train_step_with_grad_clip
+            print(f" > ✅ Gradient clipping enabled (max_norm={grad_clip_norm})")
+        except Exception as e:
+            print(f" > ⚠️  Could not enable gradient clipping: {e}")
+    
+    
+    # Initialize LR warmup after trainer is created
+    if lr_warmup_steps_final > 0 and ENHANCEMENTS_AVAILABLE:
+        try:
+            warmup_scheduler = WarmupLRScheduler(
+                trainer.optimizer,
+                warmup_steps=lr_warmup_steps_final,
+                base_lr=final_learning_rate
+            )
+            print(f" > ✅ LR Warmup scheduler initialized")
+        except Exception as e:
+            print(f" > ⚠️  Could not initialize warmup scheduler: {e}")
+            warmup_scheduler = None
+    
+    # Monkey-patch trainer to add EMA and warmup updates
+    if (ema_model or warmup_scheduler or adaptive_clipper) and ENHANCEMENTS_AVAILABLE:
+        original_optimizer_step = trainer.optimize
         
-        trainer.train_step = train_step_with_grad_clip
-        print(f" > Γ£à Gradient clipping enabled (max_norm={grad_clip_norm})")
-    except Exception as e:
-        print(f" > ΓÜá∩╕Å  Could not enable gradient clipping: {e}")
+        def enhanced_optimize(batch):
+            # Run original optimization
+            loss_dict = original_optimizer_step(batch)
+            
+            # Update EMA after optimizer step
+            if ema_model:
+                try:
+                    ema_model.update()
+                except:
+                    pass
+            
+            # Update warmup scheduler
+            if warmup_scheduler:
+                try:
+                    warmup_scheduler.step()
+                except:
+                    pass
+            
+            return loss_dict
+        
+        trainer.optimize = enhanced_optimize
+        print(" > ✅ Training loop enhanced with EMA/Warmup hooks")
     
     # Setup early stopping
     early_stopping = None
@@ -685,9 +788,47 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         print(" >    Expected: eval_loss should decrease by 20-30% per epoch")
         print("=" * 70 + "\n")
     
-    # Run training (early stopping via manual monitoring - only 2 epochs)
-    # With only 2 epochs and layer freezing, manual monitoring is sufficient
+    # Run training with enhancements
+    print("\n" + "="*70)
+    print("🚀 STARTING TRAINING WITH ENHANCEMENTS")
+    if use_ema_final:
+        print("  ✅ EMA: Enabled (decay=0.999)")
+    if lr_warmup_steps_final > 0:
+        print(f"  ✅ LR Warmup: {lr_warmup_steps_final} steps")
+    if adaptive_clipper:
+        print("  ✅ Adaptive Gradient Clipping: Enabled")
+    if enable_mixed_precision:
+        print("  ✅ Mixed Precision: Enabled")
+    print("="*70 + "\n")
+    
     trainer.fit()
+    
+    # If using EMA, save the EMA checkpoint as best model
+    if ema_model:
+        try:
+            print("\n" + "="*70)
+            print("🌟 SAVING EMA MODEL (Smoothed Weights)")
+            print("="*70)
+            
+            # Apply EMA weights
+            ema_model.apply_shadow()
+            
+            # Save EMA checkpoint
+            ema_checkpoint_path = os.path.join(trainer.output_path, "best_model_ema.pth")
+            torch.save({
+                'model': trainer.model.state_dict(),
+                'config': trainer.config,
+                'ema_decay': ema_model.decay
+            }, ema_checkpoint_path)
+            
+            print(f" > ✅ EMA checkpoint saved: {ema_checkpoint_path}")
+            print(" > 💡 This checkpoint often has better quality than the raw checkpoint!")
+            print("="*70 + "\n")
+            
+            # Restore original weights for normal checkpoint saving
+            ema_model.restore()
+        except Exception as e:
+            print(f" > ⚠️  Could not save EMA checkpoint: {e}")
 
     # get the longest text audio file to use as speaker reference
     samples_len = [len(item["text"].split(" ")) for item in train_samples]

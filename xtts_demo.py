@@ -1817,6 +1817,11 @@ if __name__ == "__main__":
                         scale=0,
                         min_width=40
                     )
+                
+                # DEBUG: Add test button
+                test_btn = gr.Button(value="🧪 TEST (Click to verify)", size="sm", variant="secondary")
+                test_output = gr.Textbox(label="Test Result", value="", visible=True, interactive=False)
+                
                 gr.Markdown("""
                 🔍 **Tip**: Checkpoints are saved in `output/run/training/` during training.  
                 Click 🔄 to refresh the list after training completes.
@@ -2553,6 +2558,19 @@ if __name__ == "__main__":
                 fn=check_vocab_and_dataset,
                 inputs=[out_path, train_csv],
                 outputs=[vocab_info_display]
+            )
+            
+            # TEST: Simple button to verify Gradio is working
+            def test_button_handler():
+                print("\n" + "#"*70)
+                print("🧪 TEST BUTTON CLICKED! Gradio is working!")
+                print("#"*70)
+                return "✅ Test button works! Check Lightning AI terminal for message."
+            
+            test_btn.click(
+                fn=test_button_handler,
+                inputs=[],
+                outputs=[test_output]
             )
             
             # Wire up resume training checkpoint refresh button

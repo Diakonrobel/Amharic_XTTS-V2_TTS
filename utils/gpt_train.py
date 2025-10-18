@@ -407,7 +407,7 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
             optimizer_params={"betas": [0.9, 0.96], "eps": 1e-8, "weight_decay": final_weight_decay},
             lr=final_learning_rate,
             lr_scheduler="ReduceLROnPlateau",
-            lr_scheduler_params={"mode": "min", "factor": 0.5, "patience": early_stop_patience, "min_lr": 1e-07, "verbose": True},
+            lr_scheduler_params={"mode": "min", "factor": 0.5, "patience": early_stop_patience, "min_lr": 1e-07},
             test_sentences=[],
         )
 

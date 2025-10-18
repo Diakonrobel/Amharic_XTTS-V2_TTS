@@ -406,8 +406,8 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
             optimizer_wd_only_on_weights=OPTIMIZER_WD_ONLY_ON_WEIGHTS,
             optimizer_params={"betas": [0.9, 0.96], "eps": 1e-8, "weight_decay": final_weight_decay},
             lr=final_learning_rate,
-            lr_scheduler="ReduceLROnPlateau",
-            lr_scheduler_params={"mode": "min", "factor": 0.5, "patience": early_stop_patience, "min_lr": 1e-07},
+            lr_scheduler="MultiStepLR",
+            lr_scheduler_params={"milestones": [1, 2, 3], "gamma": 0.5},
             test_sentences=[],
         )
 

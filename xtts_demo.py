@@ -1981,8 +1981,20 @@ if __name__ == "__main__":
                 """Refresh the checkpoint dropdown"""
                 print("\n" + "*"*70)
                 print("🔄 REFRESH BUTTON CLICKED!")
-                print(f"Calling refresh_checkpoint_list with output_path: {repr(output_path)}")
+                print(f"Received output_path type: {type(output_path)}")
+                print(f"Received output_path value: {repr(output_path)}")
+                print(f"Is output_path None? {output_path is None}")
+                print(f"Is output_path empty string? {output_path == ''}")
                 print("*"*70)
+                
+                # Emergency bailout if output_path is invalid
+                if not output_path or output_path == "":
+                    print("❌ ERROR: output_path is None or empty!")
+                    return gr.Dropdown(
+                        choices=[("❌ ERROR: No output path set", "")],
+                        value="",
+                        info="Please set Output Directory in Data Processing tab first"
+                    )
                 
                 checkpoints = load_available_checkpoints(output_path)
                 

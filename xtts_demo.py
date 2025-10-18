@@ -1974,14 +1974,25 @@ if __name__ == "__main__":
             
             def refresh_checkpoint_list(output_path):
                 """Refresh the checkpoint dropdown"""
+                print("\n" + "*"*70)
+                print("🔄 REFRESH BUTTON CLICKED!")
+                print(f"Calling refresh_checkpoint_list with output_path: {repr(output_path)}")
+                print("*"*70)
+                
                 checkpoints = load_available_checkpoints(output_path)
+                
+                print(f"\n📊 REFRESH RESULT: {len(checkpoints)} checkpoint(s) returned")
+                
                 if not checkpoints:
                     # Return helpful message when no checkpoints exist
+                    print("⚠️ Returning empty dropdown (no checkpoints found)")
                     return gr.Dropdown(
                         choices=[("⚠️ No checkpoints found - Complete training first", "")],
                         value="",
                         info="Checkpoints are saved during training to: output/run/training/"
                     )
+                
+                print(f"✅ Returning dropdown with {len(checkpoints)} options")
                 return gr.Dropdown(
                     choices=checkpoints,
                     value=checkpoints[0] if checkpoints else None,

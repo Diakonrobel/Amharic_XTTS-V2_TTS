@@ -1805,10 +1805,10 @@ if __name__ == "__main__":
                     )
                     checkpoint_selector = gr.Dropdown(
                         label="Select Checkpoint",
-                        choices=[],
-                        value=None,
+                        choices=[("Click 🔄 to load checkpoints", "")],
+                        value="",
                         interactive=True,
-                        info="Choose checkpoint to resume from",
+                        info="Checkpoints appear here after training starts",
                         scale=2
                     )
                     refresh_checkpoints_btn = gr.Button(
@@ -1938,8 +1938,17 @@ if __name__ == "__main__":
                 """Refresh the checkpoint dropdown"""
                 checkpoints = load_available_checkpoints(output_path)
                 if not checkpoints:
-                    return gr.Dropdown(choices=[], value=None)
-                return gr.Dropdown(choices=checkpoints, value=checkpoints[0] if checkpoints else None)
+                    # Return helpful message when no checkpoints exist
+                    return gr.Dropdown(
+                        choices=[("⚠️ No checkpoints found - Complete training first", "")],
+                        value="",
+                        info="Checkpoints are saved during training to: output/run/training/"
+                    )
+                return gr.Dropdown(
+                    choices=checkpoints,
+                    value=checkpoints[0] if checkpoints else None,
+                    info=f"Found {len(checkpoints)} checkpoint(s) - Select one to resume training"
+                )
             
             def check_vocab_and_dataset(output_path, train_csv):
                 """Check vocab consistency and dataset info"""

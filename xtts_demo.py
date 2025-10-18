@@ -1674,6 +1674,77 @@ if __name__ == "__main__":
                 )
             
             with gr.Group():
+                gr.Markdown("### 🛡️ **Anti-Overfitting Configuration** (Prevent Memorization)")
+                gr.Markdown("""
+                **Critical for ~60hr datasets**: These settings prevent your model from memorizing the training data (overfitting after 2 epochs).
+                Recommended for Amharic and limited-diversity datasets.
+                """)
+                
+                with gr.Accordion("🔒 Layer Freezing (Recommended)", open=True):
+                    gr.Markdown("""
+                    **Freeze layers** to prevent the model from changing too much. Only train the essential parts.
+                    """)
+                    with gr.Row():
+                        freeze_encoder = gr.Checkbox(
+                            label="Freeze Encoder (mel_encoder + dvae)",
+                            value=True,
+                            info="✅ Recommended: Freeze audio encoder to preserve pretrained features",
+                            scale=2
+                        )
+                        freeze_n_gpt_layers = gr.Slider(
+                            label="Freeze First N GPT Layers",
+                            minimum=0, maximum=30, step=1, value=28,
+                            info="28 = freeze 28/30 layers (only train last 2) - HIGHLY recommended for 60hr",
+                            scale=3
+                        )
+                    gr.Markdown("""
+                    💡 **Why freeze?** XTTS v2 has 30 GPT layers. Freezing 28 means only the last 2 layers adapt to your voice,
+                    while preserving the pretrained language knowledge. This is **critical** for preventing overfitting with limited speaker diversity.
+                    """)
+                
+                with gr.Accordion("📉 Learning Rate & Regularization", open=True):
+                    gr.Markdown("""
+                    **Lower learning rate** = slower, more careful updates. **Higher weight decay** = stronger regularization.
+                    """)
+                    with gr.Row():
+                        learning_rate_custom = gr.Number(
+                            label="Learning Rate Override",
+                            value=2e-6,
+                            precision=0,
+                            info="2e-6 recommended (5x lower than default). Use 1e-6 for even safer training.",
+                            scale=1
+                        )
+                        weight_decay_custom = gr.Slider(
+                            label="Weight Decay (Regularization)",
+                            minimum=0.01, maximum=0.2, step=0.01, value=0.05,
+                            info="0.05 = 5x stronger than default (prevents overfitting)",
+                            scale=1
+                        )
+                    gr.Markdown("""
+                    💡 **For your case**: LR=2e-6 and WD=0.05 will make training much more conservative,
+                    preventing the rapid overfitting you experienced in 2 epochs.
+                    """)
+                
+                with gr.Accordion("⏹️ Early Stopping", open=True):
+                    gr.Markdown("""
+                    **Stop automatically** when validation loss stops improving (prevents overfitting).
+                    """)
+                    enable_early_stopping = gr.Checkbox(
+                        label="Enable Early Stopping",
+                        value=True,
+                        info="✅ Strongly recommended: Auto-stop when model starts overfitting"
+                    )
+                    early_stop_patience = gr.Slider(
+                        label="Patience (epochs)",
+                        minimum=1, maximum=10, step=1, value=2,
+                        info="Stop if eval loss doesn't improve for 2 epochs"
+                    )
+                    gr.Markdown("""
+                    💡 **Your scenario**: With patience=2, training will stop automatically after 2 epochs of no improvement,
+                    catching overfitting before it ruins your model.
+                    """)
+            
+            with gr.Group():
                 gr.Markdown("### ⚡ **Training Optimizations** (Speed & Memory)")
                 gr.Markdown("_Enable optimizations for faster training with less memory_")
                 with gr.Row():
@@ -1922,7 +1993,7 @@ if __name__ == "__main__":
                 except Exception as e:
                     return f"❌ Error checking vocab: {str(e)}"
             
-            def train_model(custom_model, version, language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length, save_step=1000, save_n_checkpoints=1, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False, enable_amharic_g2p=False, g2p_backend_train="transphone", resume_from_checkpoint_flag=False, checkpoint_path=None):
+            def train_model(custom_model, version, language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length, save_step=1000, save_n_checkpoints=1, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False, enable_amharic_g2p=False, g2p_backend_train="transphone", resume_from_checkpoint_flag=False, checkpoint_path=None, freeze_encoder_flag=True, freeze_n_gpt_layers_val=0, learning_rate_val=None, weight_decay_val=None, enable_early_stop=False, early_stop_patience_val=None):
                 clear_gpu_cache()
                 
                 # Strip whitespace from paths to prevent accidental spaces
@@ -1995,7 +2066,12 @@ if __name__ == "__main__":
                         use_amharic_g2p=use_amharic_g2p,
                         enable_grad_checkpoint=enable_grad_checkpoint,
                         enable_sdpa=enable_sdpa,
-                        enable_mixed_precision=enable_mixed_precision
+                        enable_mixed_precision=enable_mixed_precision,
+                        freeze_encoder=freeze_encoder_flag,
+                        freeze_first_n_gpt_layers=int(freeze_n_gpt_layers_val) if freeze_n_gpt_layers_val else 0,
+                        learning_rate_override=float(learning_rate_val) if learning_rate_val else None,
+                        weight_decay_override=float(weight_decay_val) if weight_decay_val else None,
+                        early_stopping_patience=int(early_stop_patience_val) if (enable_early_stop and early_stop_patience_val) else None
                     )
                 except:
                     traceback.print_exc()
@@ -2768,6 +2844,12 @@ if __name__ == "__main__":
                     g2p_backend_train,
                     resume_from_checkpoint,
                     checkpoint_selector,
+                    freeze_encoder,
+                    freeze_n_gpt_layers,
+                    learning_rate_custom,
+                    weight_decay_custom,
+                    enable_early_stopping,
+                    early_stop_patience,
                 ],
                 outputs=[progress_train, xtts_config, xtts_vocab, xtts_checkpoint,xtts_speaker, speaker_reference_audio],
             )

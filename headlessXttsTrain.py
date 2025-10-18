@@ -24,7 +24,7 @@ from faster_whisper import WhisperModel # Keep for data processing
 
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import Xtts
-from utils.lang_norm import canonical_lang
+from utils.lang_norm import canonical_lang, to_transcript_code
 
 # Keep utility functions (potentially modified)
 def download_file(url, destination):
@@ -211,9 +211,11 @@ def preprocess_dataset_headless(audio_file_path, language, whisper_model_name, d
     clear_gpu_cache()
     # Canonicalize language for dataset artifacts (ensure 'amh' for Amharic)
     language = canonical_lang(language)
+    language_for_asr = to_transcript_code(language)  # Whisper/cleaners expect ISO-639-1 like 'am'
     print(f"\n--- Starting Step 1: Data Processing ---")
     print(f"Using audio file: {audio_file_path}")
-    print(f"Language: {language}")
+    print(f"Language (training): {language}")
+    print(f"Language (ASR/cleaners): {language_for_asr}")
     print(f"Whisper model: {whisper_model_name}")
     print(f"Dataset output path: {dataset_out_path}")
 
@@ -240,7 +242,7 @@ def preprocess_dataset_headless(audio_file_path, language, whisper_model_name, d
         train_meta, eval_meta, audio_total_size = format_audio_list(
             [str(audio_file_path)],
             asr_model=asr_model,
-            target_language=language,
+            target_language=language_for_asr,
             out_path=dataset_out_path,
             gradio_progress=None # No progress bar
         )
@@ -278,7 +280,7 @@ def preprocess_dataset_headless(audio_file_path, language, whisper_model_name, d
     return "Dataset Processed Successfully!", str(train_meta), str(eval_meta)
 
 
-def train_model_headless(language, train_csv_path, eval_csv_path, num_epochs, batch_size, grad_acumm, output_path_base, max_audio_length_sec, version="v2.0.2", custom_model=""):
+def train_model_headless(language, train_csv_path, eval_csv_path, num_epochs, batch_size, grad_acumm, output_path_base, max_audio_length_sec, version="v2.0.2", custom_model="", use_g2p=False, g2p_backend="transphone"):
     """Headless version of train_model."""
     clear_gpu_cache()
     # Canonicalize language for training (ensure 'amh')
@@ -337,7 +339,9 @@ def train_model_headless(language, train_csv_path, eval_csv_path, num_epochs, ba
             train_csv=train_csv_full_path,  # Pass FULL absolute path
             eval_csv=eval_csv_full_path,    # Pass FULL absolute path
             output_path=str(output_path_base.resolve()), # Base directory for 'run' and 'ready' folders
-            max_audio_length=max_audio_length_frames
+            max_audio_length=max_audio_length_frames,
+            use_amharic_g2p=bool(use_g2p or language in ["am","amh"])  # Enable G2P for Amharic if requested or language detected
+        )
         )
 
         # --- Find the best model checkpoint from the experiment path ---
@@ -907,7 +911,7 @@ args = parser.parse_args()
                     train_meta, eval_meta, total_size = format_audio_list(
                         segment_files,
                         asr_model=asr_model,
-                        target_language=args.lang,
+                        target_language=to_transcript_code(args.lang),
                         out_path=str(output_dir_dataset),
                         gradio_progress=None
                     )
@@ -963,7 +967,9 @@ args = parser.parse_args()
              output_path_base=str(output_dir.resolve()), # Pass absolute path
              max_audio_length_sec=args.max_audio_length,
              version=args.xtts_base_version,
-             custom_model=args.custom_model
+             custom_model=args.custom_model,
+             use_g2p=args.use_g2p,
+             g2p_backend=args.g2p_backend
         )
         if "failed" in status.lower() or "error" in status.lower():
              print(f"Error during training: {status}")

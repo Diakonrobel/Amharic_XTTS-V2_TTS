@@ -44,7 +44,7 @@ except ImportError:
     SMALL_DATASET_CONFIG_AVAILABLE = False
 
 
-def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, save_step=1000, save_n_checkpoints=1, use_amharic_g2p=False, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False):
+def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, save_step=1000, save_n_checkpoints=1, use_amharic_g2p=False, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False, freeze_encoder=True, freeze_first_n_gpt_layers=0, learning_rate_override=None, weight_decay_override=None, early_stopping_patience=None):
     #  Logging parameters
     RUN_NAME = "GPT_XTTS_FT"
     PROJECT_NAME = "XTTS_trainer"
@@ -297,6 +297,21 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     )
     # define audio config
     audio_config = XttsAudioConfig(sample_rate=22050, dvae_sample_rate=22050, output_sample_rate=24000)
+    # Determine if we should enable language adaptation mode (Amharic, non-small dataset)
+    language_adaptation_mode = (language in ["am", "amh"]) and (not use_small_dataset_config)
+    
+    # Override parameters for better anti-overfitting
+    final_learning_rate = learning_rate_override if learning_rate_override is not None else (2e-06 if language_adaptation_mode else 1e-05)
+    final_weight_decay = weight_decay_override if weight_decay_override is not None else (0.05 if language_adaptation_mode else 0.01)
+    
+    # Determine layer freezing strategy
+    freeze_encoder_layers = freeze_encoder if freeze_encoder is not None else (True if language_adaptation_mode else False)
+    freeze_gpt_layers_count = freeze_first_n_gpt_layers if freeze_first_n_gpt_layers > 0 else (28 if language_adaptation_mode else 0)
+    
+    # Early stopping configuration
+    use_early_stopping = early_stopping_patience is not None
+    early_stop_patience = early_stopping_patience if early_stopping_patience is not None else (2 if language_adaptation_mode else 5)
+
     # training parameters config
     # Use small dataset config if applicable
     if use_small_dataset_config:
@@ -364,11 +379,10 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
             # Optimizer values like tortoise, pytorch implementation with modifications to not apply WD to non-weight parameters.
             optimizer="AdamW",
             optimizer_wd_only_on_weights=OPTIMIZER_WD_ONLY_ON_WEIGHTS,
-            optimizer_params={"betas": [0.9, 0.96], "eps": 1e-8, "weight_decay": 0.01},  # Reduced back to 0.01 for 37.7hr dataset
-            lr=1e-05,  # Increased from 1e-06 to 1e-05 for 37.7hr dataset - was too low causing no learning
-            lr_scheduler="ReduceLROnPlateau",  # Changed to plateau-based for better adaptation
-            # Reduce LR when validation loss plateaus
-            lr_scheduler_params={"mode": "min", "factor": 0.5, "patience": 5, "min_lr": 1e-07, "verbose": True},
+            optimizer_params={"betas": [0.9, 0.96], "eps": 1e-8, "weight_decay": final_weight_decay},
+            lr=final_learning_rate,
+            lr_scheduler="ReduceLROnPlateau",
+            lr_scheduler_params={"mode": "min", "factor": 0.5, "patience": early_stop_patience, "min_lr": 1e-07, "verbose": True},
             test_sentences=[],
         )
 
@@ -395,16 +409,90 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
             verbose=True
         )
     
+
     # init the model from config (without checkpoint if extended vocab)
     model = GPTTrainer.init_from_config(config)
     
-    # Apply layer freezing for small datasets
+    # Apply layer freezing for small datasets or language adaptation (Amharic)
     if use_small_dataset_config:
         print("\n" + "="*70)
         print("≡ƒöÆ APPLYING LAYER FREEZING FOR SMALL DATASET")
         print("="*70)
         total_params, trainable_params = XTTSSmallDatasetConfig.apply_layer_freezing(model)
         print("="*70 + "\n")
+    
+    # Apply layer freezing based on configuration
+    if freeze_encoder_layers or freeze_gpt_layers_count > 0:
+        try:
+            print("\n" + "="*70)
+            print("≡ƒöÆ APPLYING LAYER FREEZING FOR ANTI-OVERFITTING")
+            print("="*70)
+            
+            frozen_params = 0
+            trainable_params = 0
+            
+            if hasattr(model, 'xtts'):
+                # Freeze encoder modules if requested
+                if freeze_encoder_layers:
+                    if hasattr(model.xtts, 'mel_encoder'):
+                        for p in model.xtts.mel_encoder.parameters():
+                            p.requires_grad = False
+                            frozen_params += p.numel()
+                        print("  ✓ Froze mel_encoder")
+                    if hasattr(model.xtts, 'dvae'):
+                        for p in model.xtts.dvae.parameters():
+                            p.requires_grad = False
+                            frozen_params += p.numel()
+                        print("  ✓ Froze dvae")
+                
+                # Freeze first N GPT layers
+                if freeze_gpt_layers_count > 0 and hasattr(model.xtts, 'gpt') and hasattr(model.xtts.gpt, 'transformer'):
+                    layers = getattr(model.xtts.gpt.transformer, 'h', [])
+                    total_layers = len(layers)
+                    freeze_n = min(freeze_gpt_layers_count, total_layers - 2)  # Keep at least 2 trainable
+                    
+                    for i, layer in enumerate(layers):
+                        if i < freeze_n:
+                            for p in layer.parameters():
+                                p.requires_grad = False
+                                frozen_params += p.numel()
+                        else:
+                            for p in layer.parameters():
+                                p.requires_grad = True
+                                trainable_params += p.numel()
+                    
+                    print(f"  ✓ Froze first {freeze_n}/{total_layers} GPT layers")
+                    print(f"  ✓ Last {total_layers - freeze_n} layers TRAINABLE")
+                
+                # Ensure text embedding and head stay trainable
+                if hasattr(model.xtts.gpt, 'text_embedding'):
+                    for p in model.xtts.gpt.text_embedding.parameters():
+                        p.requires_grad = True
+                        trainable_params += p.numel()
+                    print("  ✓ text_embedding TRAINABLE")
+                if hasattr(model.xtts.gpt, 'text_head'):
+                    for p in model.xtts.gpt.text_head.parameters():
+                        p.requires_grad = True
+                        trainable_params += p.numel()
+                    print("  ✓ text_head TRAINABLE")
+            
+            # Count total trainable/frozen parameters
+            for name, param in model.named_parameters():
+                if param.requires_grad and 'xtts.gpt' not in name:
+                    trainable_params += param.numel()
+                elif not param.requires_grad:
+                    frozen_params += param.numel()
+            
+            total_params = frozen_params + trainable_params
+            print(f"\n└┐ Parameter Summary:")
+            print(f"  Total: {total_params:,}")
+            print(f"  Frozen: {frozen_params:,} ({frozen_params/total_params*100:.1f}%)")
+            print(f"  Trainable: {trainable_params:,} ({trainable_params/total_params*100:.1f}%)")
+            print("="*70 + "\n")
+        except Exception as e:
+            print(f" > Warning: Could not apply layer freezing: {e}")
+            import traceback
+            traceback.print_exc()
     
     # Apply optimizations to model AFTER initialization
     if OPTIMIZATIONS_AVAILABLE and (enable_grad_checkpoint or enable_sdpa or enable_mixed_precision):
@@ -521,6 +609,11 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         print(" > Γ£à Dataset already contains phonemes - skipping G2P conversion")
         print(f" > Using language code: '{effective_language}'")
 
+    # Optionally enforce a minimum grad accumulation for stability in language adaptation mode
+    if language_adaptation_mode and GRAD_ACUMM_STEPS < 4:
+        print(f" > Language adaptation: increasing grad_accum_steps {GRAD_ACUMM_STEPS} -> 4 for stabler updates")
+        GRAD_ACUMM_STEPS = 4
+
     # init the trainer and ≡ƒÜÇ
     trainer = Trainer(
         TrainerArgs(
@@ -537,7 +630,7 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     )
     
     # Apply gradient clipping to prevent exploding gradients
-    grad_clip_norm = XTTSSmallDatasetConfig.GRAD_CLIP_NORM if use_small_dataset_config else 1.0
+    grad_clip_norm = XTTSSmallDatasetConfig.GRAD_CLIP_NORM if use_small_dataset_config else (0.5 if language_adaptation_mode else 1.0)
     try:
         import torch.nn.utils as nn_utils
         original_train_step = trainer.train_step
@@ -554,12 +647,13 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     except Exception as e:
         print(f" > ΓÜá∩╕Å  Could not enable gradient clipping: {e}")
     
-    # Setup early stopping for small datasets
+    # Setup early stopping
     early_stopping = None
-    if use_small_dataset_config:
+    if use_small_dataset_config or use_early_stopping:
+        patience_val = XTTSSmallDatasetConfig.EARLY_STOP_PATIENCE if use_small_dataset_config else early_stop_patience
         early_stopping = EarlyStoppingCallback(
-            patience=XTTSSmallDatasetConfig.EARLY_STOP_PATIENCE,
-            min_delta=XTTSSmallDatasetConfig.EARLY_STOP_MIN_DELTA,
+            patience=patience_val,
+            min_delta=XTTSSmallDatasetConfig.EARLY_STOP_MIN_DELTA if use_small_dataset_config else 0.01,
             verbose=True
         )
         print("\n" + "=" * 70)

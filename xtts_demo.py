@@ -1905,38 +1905,71 @@ if __name__ == "__main__":
             def load_available_checkpoints(output_path):
                 """Load list of available checkpoints from training directory using checkpoint_manager"""
                 try:
-                    # Use the same checkpoint discovery as Checkpoint Manager section
-                    run_dir, checkpoints = checkpoint_manager.get_latest_training_run_checkpoints(output_path)
+                    print("\n" + "="*70)
+                    print("🔍 CHECKPOINT SEARCH DEBUG")
+                    print("="*70)
+                    print(f"Received output_path: {repr(output_path)}")
+                    print(f"Current working directory: {Path.cwd()}")
                     
-                    if not checkpoints:
-                        print(f"No checkpoints found in output_path: {output_path}")
+                    # Convert to absolute path
+                    if not output_path:
+                        print("❌ ERROR: output_path is empty!")
                         return []
                     
-                    # Return relative paths from output_path for display
                     output_path_obj = Path(output_path)
                     if not output_path_obj.is_absolute():
                         output_path_obj = Path.cwd() / output_path_obj
                     
+                    print(f"Absolute output_path: {output_path_obj}")
+                    print(f"Output path exists: {output_path_obj.exists()}")
+                    
+                    training_base = output_path_obj / "run" / "training"
+                    print(f"Training base path: {training_base}")
+                    print(f"Training base exists: {training_base.exists()}")
+                    
+                    if training_base.exists():
+                        subdirs = list(training_base.iterdir())
+                        print(f"Found {len(subdirs)} subdirectories:")
+                        for subdir in subdirs:
+                            if subdir.is_dir():
+                                ckpts = list(subdir.glob("*.pth"))
+                                print(f"  - {subdir.name}: {len(ckpts)} checkpoint(s)")
+                    
+                    # Use checkpoint_manager to find checkpoints
+                    print(f"\nCalling checkpoint_manager.get_latest_training_run_checkpoints({output_path})...")
+                    run_dir, checkpoints = checkpoint_manager.get_latest_training_run_checkpoints(str(output_path_obj))
+                    
+                    print(f"Run directory: {run_dir}")
+                    print(f"Checkpoints found: {len(checkpoints)}")
+                    
+                    if not checkpoints:
+                        print("❌ No checkpoints found!")
+                        print("="*70 + "\n")
+                        return []
+                    
+                    # Return relative paths from output_path for display
                     relative_paths = []
                     for ckpt in checkpoints:
                         ckpt_path = Path(ckpt.path)
                         try:
                             rel_path = ckpt_path.relative_to(output_path_obj)
                             relative_paths.append(str(rel_path))
+                            print(f"  ✅ {rel_path}")
                         except ValueError:
                             # Fallback: use absolute path if relative fails
                             relative_paths.append(str(ckpt_path))
+                            print(f"  ⚠️  {ckpt_path} (absolute - couldn't make relative)")
                     
-                    print(f"Found {len(relative_paths)} checkpoints for resume training")
-                    for rp in relative_paths:
-                        print(f"  - {rp}")
+                    print(f"\n✅ SUCCESS: Found {len(relative_paths)} checkpoints for resume training")
+                    print("="*70 + "\n")
                     
                     return relative_paths
                     
                 except Exception as e:
-                    print(f"Error loading checkpoints: {e}")
+                    print(f"\n❌ ERROR loading checkpoints: {e}")
                     import traceback
                     traceback.print_exc()
+                    print("="*70 + "\n")
                     return []
             
             def refresh_checkpoint_list(output_path):

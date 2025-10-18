@@ -1905,8 +1905,15 @@ if __name__ == "__main__":
             def load_available_checkpoints(output_path):
                 """Load list of available checkpoints from training directory"""
                 try:
-                    training_dir = Path(output_path) / "run" / "training"
+                    # Handle both absolute and relative paths
+                    if not Path(output_path).is_absolute():
+                        output_path = Path.cwd() / output_path
+                    else:
+                        output_path = Path(output_path)
+                    
+                    training_dir = output_path / "run" / "training"
                     if not training_dir.exists():
+                        print(f"Training directory not found: {training_dir}")
                         return []
                     
                     # Find all checkpoint files RECURSIVELY in subdirectories
@@ -1926,8 +1933,8 @@ if __name__ == "__main__":
                     # Sort by modification time (newest first)
                     checkpoints.sort(key=lambda x: x.stat().st_mtime, reverse=True)
                     
-                    # Return relative paths for display
-                    return [str(cp.relative_to(Path(output_path))) for cp in checkpoints]
+                    # Return relative paths from output_path for display
+                    return [str(cp.relative_to(output_path)) for cp in checkpoints]
                 except Exception as e:
                     print(f"Error loading checkpoints: {e}")
                     import traceback
@@ -2035,6 +2042,11 @@ if __name__ == "__main__":
                 train_csv = train_csv.strip() if train_csv else ""
                 eval_csv = eval_csv.strip() if eval_csv else ""
                 custom_model = custom_model.strip() if custom_model else ""
+                output_path = output_path.strip() if output_path else ""
+                
+                # Handle both absolute and relative output paths
+                if output_path and not Path(output_path).is_absolute():
+                    output_path = str(Path.cwd() / output_path)
           
                 # Check if `custom_model` is a URL and download it if true.
                 if custom_model.startswith("http"):
@@ -2048,11 +2060,18 @@ if __name__ == "__main__":
                 # Handle checkpoint resumption
                 restore_checkpoint_path = None
                 if resume_from_checkpoint_flag and checkpoint_path:
-                    # Construct full path
+                    # Construct full path from output_path and relative checkpoint path
                     restore_checkpoint_path = Path(output_path) / checkpoint_path
+                    
+                    # Debug logging
+                    print(f"🔍 Checkpoint resumption requested:")
+                    print(f"   Output path: {output_path}")
+                    print(f"   Checkpoint path: {checkpoint_path}")
+                    print(f"   Full checkpoint path: {restore_checkpoint_path}")
+                    
                     if not restore_checkpoint_path.exists():
                         return f"❌ Checkpoint not found: {restore_checkpoint_path}", "", "", "", "", ""
-                    print(f"🔄 Resuming training from checkpoint: {restore_checkpoint_path}")
+                    print(f"✅ Found checkpoint, resuming training from: {restore_checkpoint_path}")
                 else:
                     # Remove train dir only if starting fresh
                     if run_dir.exists():

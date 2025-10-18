@@ -2099,6 +2099,7 @@ if __name__ == "__main__":
                         train_csv, eval_csv, output_path=output_path, max_audio_length=max_audio_length,
                         save_step=save_step, save_n_checkpoints=save_n_checkpoints,
                         use_amharic_g2p=use_amharic_g2p,
+                        g2p_backend_train=g2p_backend_train,  # Pass user's G2P backend choice
                         enable_grad_checkpoint=enable_grad_checkpoint,
                         enable_sdpa=enable_sdpa,
                         enable_mixed_precision=enable_mixed_precision,

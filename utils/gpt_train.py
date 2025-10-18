@@ -54,7 +54,7 @@ except ImportError:
     SMALL_DATASET_CONFIG_AVAILABLE = False
 
 
-def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, save_step=1000, save_n_checkpoints=1, use_amharic_g2p=False, enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False, freeze_encoder=True, freeze_first_n_gpt_layers=0, learning_rate_override=None, weight_decay_override=None, early_stopping_patience=None, use_ema=True, lr_warmup_steps=500, use_label_smoothing=False, label_smoothing_factor=0.1):
+def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, save_step=1000, save_n_checkpoints=1, use_amharic_g2p=False, g2p_backend_train="transphone", enable_grad_checkpoint=False, enable_sdpa=False, enable_mixed_precision=False, freeze_encoder=True, freeze_first_n_gpt_layers=0, learning_rate_override=None, weight_decay_override=None, early_stopping_patience=None, use_ema=True, lr_warmup_steps=500, use_label_smoothing=False, label_smoothing_factor=0.1):
     #  Logging parameters
     RUN_NAME = "GPT_XTTS_FT"
     PROJECT_NAME = "XTTS_trainer"
@@ -597,14 +597,14 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
             from utils.amharic_g2p_dataset_wrapper import apply_g2p_to_training_data
             from utils.g2p_backend_selector import select_g2p_backend
             
-            # Dynamically select best available G2P backend
-            # NO HARDCODED SELECTION - auto-detects and falls back intelligently
+            # Use user-selected G2P backend from WebUI (or auto-select if None)
             selected_backend, reason = select_g2p_backend(
-                preferred=None,  # Auto-select best available
+                preferred=g2p_backend_train,  # Use user's choice from WebUI
                 fallback=True,
                 verbose=False
             )
             print(f" > Selected G2P backend: {selected_backend} ({reason})")
+            print(f" > User requested: {g2p_backend_train}")
             
             # Preprocess samples and get effective language
             train_samples, eval_samples, new_language = apply_g2p_to_training_data(

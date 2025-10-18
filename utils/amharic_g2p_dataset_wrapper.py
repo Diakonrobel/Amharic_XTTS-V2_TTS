@@ -6,6 +6,7 @@ allowing seamless integration with the XTTS training pipeline.
 """
 
 import os
+import sys
 import csv
 import logging
 from pathlib import Path
@@ -111,10 +112,13 @@ def preprocess_training_samples_with_g2p(
     total_samples = len(samples)
     start_msg = f"Starting G2P preprocessing for {total_samples} samples..."
     progress_msg = f"  Progress will be logged every 500 samples (this may take 10-30 minutes for large datasets)"
+    warning_msg = f"  TIP: For faster processing, use 'rule_based' G2P backend (20x faster, 95%+ accurate)"
     logger.info(start_msg)
     logger.info(progress_msg)
-    print(start_msg)  # Ensure visibility
-    print(progress_msg)
+    logger.info(warning_msg)
+    print(start_msg, flush=True)  # Force unbuffered output
+    print(progress_msg, flush=True)
+    print(warning_msg, flush=True)
     
     # Calculate progress intervals
     progress_interval = max(1, min(500, total_samples // 20))  # Show 20 updates or every 500
@@ -152,7 +156,8 @@ def preprocess_training_samples_with_g2p(
                 progress_pct = (idx + 1) / total_samples * 100
                 msg = f"  ⏳ Progress: {idx + 1}/{total_samples} ({progress_pct:.1f}%) - {success_count} converted, {skip_count} skipped, {fail_count} failed"
                 logger.info(msg)
-                print(msg)  # Ensure visibility in all environments
+                print(msg, flush=True)  # Force unbuffered output
+                sys.stdout.flush()  # Extra flush for subprocess environments
         
         except Exception as e:
             logger.warning(f"Failed to preprocess sample {idx + 1}: {e}")

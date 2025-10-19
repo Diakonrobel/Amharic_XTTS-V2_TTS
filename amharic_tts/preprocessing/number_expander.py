@@ -71,12 +71,15 @@ class AmharicNumberExpander:
         
         Args:
             number: Integer or string representation of number
+                    Supports comma-separated numbers (e.g., "15,000")
             
         Returns:
             Amharic word representation
         """
         try:
-            num = int(str(number).strip())
+            # Remove commas for numbers like 15,000 or 1,000,000
+            num_str = str(number).strip().replace(',', '')
+            num = int(num_str)
         except ValueError:
             return str(number)  # Return as-is if not a valid number
             

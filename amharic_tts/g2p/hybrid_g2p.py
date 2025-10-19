@@ -288,15 +288,22 @@ class HybridAmharicG2P:
             except Exception as e:
                 logger.warning(f"Ethiopian numeral expansion failed: {e}")
         
-        # Step 3: Expand Arabic numerals
+        # Step 3: Expand Arabic numerals (including comma-separated like 15,000)
         if self.config.expand_numbers and self.number_expander:
             try:
-                # Use regex to find and expand Arabic numerals
+                # Match numbers with optional comma separators (e.g., 15,000 or 1,000,000)
+                # Pattern: \d{1,3}(?:,\d{3})+ matches 1,000 or 15,000 or 1,000,000
+                # Pattern: \d+ matches simple numbers like 250
                 def expand_match(match):
                     try:
                         return self.number_expander.expand(match.group(0))
                     except:
                         return match.group(0)
+                
+                # First, expand comma-separated numbers (must come first to avoid partial matches)
+                text = re.sub(r'\d{1,3}(?:,\d{3})+', expand_match, text)
+                
+                # Then, expand remaining simple numbers
                 text = re.sub(r'\d+', expand_match, text)
             except Exception as e:
                 logger.warning(f"Number expansion failed: {e}")

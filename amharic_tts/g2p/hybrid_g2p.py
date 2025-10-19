@@ -301,12 +301,12 @@ class HybridAmharicG2P:
             except Exception as e:
                 logger.warning(f"Number expansion failed: {e}")
         
-        # Step 4: Preserve prosody markers (optional - depends on TTS model)
+        # Step 4: Normalize punctuation spacing for better prosody
         if self.config.preserve_prosody and self.prosody_handler:
             try:
-                # Extract prosody info but don't add markers yet
-                # (XTTS handles prosody from punctuation directly)
-                pass
+                # XTTS learns prosody from punctuation directly
+                # Just ensure proper spacing after punctuation marks
+                text = self.prosody_handler.process_for_g2p(text, keep_markers=False)
             except Exception as e:
                 logger.warning(f"Prosody processing failed: {e}")
         

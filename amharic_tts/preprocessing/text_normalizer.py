@@ -52,33 +52,42 @@ class AmharicTextNormalizer:
         }
         
         # Common Amharic abbreviations
-        # NOTE: Abbreviations are matched case-sensitively and with exact spacing
+        # NOTE: Abbreviations support multiple separators: dot (.), slash (/), and spaces
         self.abbreviations = {
             # Calendar/Time abbreviations
             'ዓ.ም': 'ዓመተ ምህረት',  # Year of Grace (Ethiopian calendar)
             'ዓ.ም.': 'ዓመተ ምህረት',  # With trailing period
             'ዓ . ም': 'ዓመተ ምህረት',  # With spaces
+            'ዓ/ም': 'ዓመተ ምህረት',  # With slash
             'ዓ.ዓ': 'ዓመተ ዓለም',     # Year of the World
             'ዓ.ዓ.': 'ዓመተ ዓለም',    # With trailing period
+            'ዓ/ዓ': 'ዓመተ ዓለም',     # With slash
             
             # Place/Organization abbreviations
             'ክ.ክ': 'ክፍለ ከተማ',     # Sub-city
             'ክ.ክ.': 'ክፍለ ከተማ',    # With trailing period
             'ክ . ክ': 'ክፍለ ከተማ',    # With spaces
+            'ክ/ክ': 'ክፍለ ከተማ',     # With slash
             
             # Education abbreviations
             'ት.ቤት': 'ትምህርት ቤት',  # School
+            'ት/ቤት': 'ትምህርት ቤት',  # With slash
             'ት.ት': 'ትምህርት ተቋም',   # Educational institution
+            'ት/ት': 'ትምህርት ተቋም',   # With slash
             'ኢ.ፌ.ዲ.ሪ': 'የኢትዮጵያ ፌደራላዊ ዲሞክራሲያዊ ሪፐብሊክ',
+            'ኢ/ፌ/ዲ/ሪ': 'የኢትዮጵያ ፌደራላዊ ዲሞክራሲያዊ ሪፐብሊክ',  # With slash
             
             # Title abbreviations
             'ም.ም': 'መምህር',         # Teacher (title)
+            'ም/ም': 'መምህር',         # With slash
             'ዶ.ር': 'ዶክተር',         # Doctor
             'ዶ.ር.': 'ዶክተር',        # With trailing period
             'ዶ . ር': 'ዶክተር',        # With spaces
+            'ዶ/ር': 'ዶክተር',         # With slash
             'ፕ.ር': 'ፕሮፌሰር',       # Professor
             'ፕ.ር.': 'ፕሮፌሰር',      # With trailing period
             'ፕ . ር': 'ፕሮፌሰር',      # With spaces
+            'ፕ/ር': 'ፕሮፌሰር',       # With slash
         }
         
     def normalize(self, text: str) -> str:

@@ -44,10 +44,16 @@ class G2PBackendSelector:
     # Backend definitions with priority (lower = better)
     # Priority is only used for automatic selection, NOT hardcoded
     BACKEND_DEFINITIONS = {
+        'hybrid': {
+            'module': None,  # Uses multiple backends intelligently
+            'import_test': lambda: True,  # Always available (falls back gracefully)
+            'priority': 0,  # BEST - combines all features
+            'description': 'Hybrid - Enterprise G2P (epitran+rule_based+preprocessing)'
+        },
         'transphone': {
             'module': 'transphone',
             'import_test': lambda: __import__('transphone'),
-            'priority': 1,  # Highest quality for Amharic
+            'priority': 1,  # High quality single backend
             'description': 'Transphone - State-of-the-art multilingual G2P'
         },
         'epitran': {

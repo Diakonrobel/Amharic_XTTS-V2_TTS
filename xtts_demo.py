@@ -1062,9 +1062,9 @@ if __name__ == "__main__":
                     )
                     g2p_backend_selection = gr.Dropdown(
                         label="G2P Backend",
-                        value="epitran",
-                        choices=["epitran", "transphone", "rule_based"],
-                        info="epitran recommended for Amharic",
+                        value="hybrid",
+                        choices=["hybrid", "epitran", "transphone", "rule_based"],
+                        info="hybrid = BEST (epitran+rule_based+preprocessing)",
                         scale=1
                     )
             
@@ -1576,10 +1576,25 @@ if __name__ == "__main__":
                 g2p_converter = None
                 if use_g2p_preprocessing and language == "amh":
                     try:
-                        from amharic_tts.g2p.amharic_g2p_enhanced import AmharicG2P
-                        print(f"Initializing Amharic G2P with backend: {g2p_backend}")
-                        g2p_converter = AmharicG2P(backend=g2p_backend)
-                        print("G2P converter initialized successfully")
+                        # Use hybrid G2P system if selected, else fall back to legacy
+                        if g2p_backend == "hybrid":
+                            from amharic_tts.g2p.hybrid_g2p import HybridAmharicG2P, G2PConfig
+                            print(f"Initializing Hybrid G2P (epitran + rule_based + preprocessing)")
+                            config = G2PConfig(
+                                use_epitran=True,
+                                use_rule_based=True,
+                                expand_ethiopian_numerals=True,
+                                expand_numbers=True,
+                                expand_abbreviations=True,
+                                preserve_prosody=True
+                            )
+                            g2p_converter = HybridAmharicG2P(config=config)
+                            print("✅ Hybrid G2P system initialized successfully")
+                        else:
+                            from amharic_tts.g2p.amharic_g2p_enhanced import AmharicG2P
+                            print(f"Initializing Amharic G2P with backend: {g2p_backend}")
+                            g2p_converter = AmharicG2P(backend=g2p_backend)
+                            print("G2P converter initialized successfully")
                     except ImportError as e:
                         print(f"Warning: Could not load Amharic G2P: {e}")
                         print("Dataset will be created without G2P preprocessing")
@@ -1872,9 +1887,9 @@ if __name__ == "__main__":
                     )
                     g2p_backend_train = gr.Dropdown(
                         label="G2P Backend",
-                        value="epitran",  # epitran recommended for Amharic
-                        choices=["epitran", "transphone", "rule_based"],
-                        info="epitran = best quality for Amharic",
+                        value="hybrid",  # hybrid system = BEST
+                        choices=["hybrid", "epitran", "transphone", "rule_based"],
+                        info="hybrid = BEST (all features + code-switching)",
                         scale=1
                     )
                 

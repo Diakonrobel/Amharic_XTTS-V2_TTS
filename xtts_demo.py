@@ -26,6 +26,7 @@ from utils.gpt_train import train_gpt
 from utils import srt_processor
 from utils import youtube_downloader, srt_processor, audio_slicer, dataset_tracker, batch_processor, dataset_statistics, checkpoint_manager
 from utils import audio_slicer
+from webui import dataset_merger_ui
 
 from faster_whisper import WhisperModel
 
@@ -1630,6 +1631,8 @@ if __name__ == "__main__":
                 print("Dataset Processed!")
                 return "Dataset Processed!", train_meta, eval_meta
 
+        with gr.Tab("🔀 Dataset Merger"):
+            dataset_merger_ui.create_dataset_merger_tab()
 
         with gr.Tab("🔧 Fine-tuning"):
             gr.Markdown("## Model Training Configuration")

@@ -22,7 +22,7 @@ def scan_temp_datasets(base_path):
         temp_dirs = sorted([d for d in base_dir.glob("temp_dataset_*") if d.is_dir()])
         
         if not temp_dirs:
-            return "✅ No temp datasets found - all clean!", "", []
+            return "✅ No temp datasets found - all clean!", None, []
         
         # Count wavs in each
         dataset_info = []
@@ -52,7 +52,7 @@ def scan_temp_datasets(base_path):
         return summary, json.dumps(dataset_info, indent=2), choices
         
     except Exception as e:
-        return f"❌ Error scanning: {str(e)}", "", []
+        return f"❌ Error scanning: {str(e)}", None, []
 
 def preview_merge_operation(base_path, selected_datasets, standardize_names):
     """Preview what the merge operation will do"""

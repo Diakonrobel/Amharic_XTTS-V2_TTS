@@ -185,30 +185,56 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
                         print(" > ✅ Initialized internal tokenizer from vocab file")
                 except Exception as _e:
                     print(f" > ⚠️ Could not init internal tokenizer: {_e}")
-                # Ensure gpt_inference compatibility proxy exists
+                # Ensure gpt_inference compatibility proxy exists and properly initialized
                 try:
-                    if hasattr(XTTS_MODEL, 'gpt') and not hasattr(XTTS_MODEL.gpt, 'gpt_inference'):
-                        # For legacy checkpoints, gpt_inference should just point to the main GPT model itself
-                        # The GPT wrapper class in XTTS already has the generate() method
-                        XTTS_MODEL.gpt.gpt_inference = XTTS_MODEL.gpt
-                        print(" > ✅ Created compatibility proxy for gpt_inference (aliased to main gpt)")
+                    if hasattr(XTTS_MODEL, 'gpt'):
+                        # The gpt module needs init_gpt_for_inference() to be called
+                        # This sets up the KV-cache and creates gpt_inference attribute
+                        if hasattr(XTTS_MODEL.gpt, 'init_gpt_for_inference'):
+                            XTTS_MODEL.gpt.init_gpt_for_inference()
+                            print(" > ✅ Initialized GPT for inference mode (KV-cache enabled)")
+                        elif not hasattr(XTTS_MODEL.gpt, 'gpt_inference'):
+                            # Fallback: For older models, alias gpt_inference to gpt
+                            XTTS_MODEL.gpt.gpt_inference = XTTS_MODEL.gpt
+                            print(" > ✅ Created compatibility proxy for gpt_inference (aliased to main gpt)")
                 except Exception as _e:
                     print(f" > ⚠️ Could not create gpt_inference proxy: {_e}")
                 print(f" > ✅ Checkpoint loaded (manual) and embeddings expanded to {vocab_size} tokens")
             else:
                 # Sizes now match; proceed with standard load
                 XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, speaker_file_path=xtts_speaker, use_deepspeed=False, eval=True)
+                # Ensure inference mode is initialized
+                try:
+                    if hasattr(XTTS_MODEL, 'gpt') and hasattr(XTTS_MODEL.gpt, 'init_gpt_for_inference'):
+                        XTTS_MODEL.gpt.init_gpt_for_inference()
+                        print(" > ✅ Initialized GPT for inference mode")
+                except Exception as _e:
+                    print(f" > ⚠️ Could not init GPT inference mode: {_e}")
         else:
             # Normal loading - sizes match
             XTTS_MODEL = Xtts.init_from_config(config)
-            XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, speaker_file_path=xtts_speaker, use_deepspeed=False)
+            XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, speaker_file_path=xtts_speaker, use_deepspeed=False, eval=True)
+            # Ensure inference mode is initialized
+            try:
+                if hasattr(XTTS_MODEL, 'gpt') and hasattr(XTTS_MODEL.gpt, 'init_gpt_for_inference'):
+                    XTTS_MODEL.gpt.init_gpt_for_inference()
+                    print(" > ✅ Initialized GPT for inference mode")
+            except Exception as _e:
+                print(f" > ⚠️ Could not init GPT inference mode: {_e}")
         
     except Exception as e:
         print(f" > Detected legacy checkpoint layout; will try standard load then robust fallback ({e})")
         # Try standard load first (works if sizes are actually compatible)
         XTTS_MODEL = Xtts.init_from_config(config)
         try:
-            XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, speaker_file_path=xtts_speaker, use_deepspeed=False)
+            XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, speaker_file_path=xtts_speaker, use_deepspeed=False, eval=True)
+            # Ensure inference mode is initialized
+            try:
+                if hasattr(XTTS_MODEL, 'gpt') and hasattr(XTTS_MODEL.gpt, 'init_gpt_for_inference'):
+                    XTTS_MODEL.gpt.init_gpt_for_inference()
+                    print(" > ✅ Initialized GPT for inference mode")
+            except Exception as _e:
+                print(f" > ⚠️ Could not init GPT inference mode: {_e}")
         except Exception as std_err:
             print(f" > Standard load failed: {std_err}")
             print(f" > Attempting robust manual loading...")
@@ -294,16 +320,21 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
                             print(" > ✅ Initialized internal tokenizer from vocab file")
                     except Exception as _e:
                         print(f" > ⚠️ Could not init internal tokenizer: {_e}")
-                    # Ensure gpt_inference compatibility proxy exists
+                    # Ensure gpt_inference compatibility proxy exists and properly initialized
                     try:
-                        if hasattr(XTTS_MODEL, 'gpt') and not hasattr(XTTS_MODEL.gpt, 'gpt_inference'):
-                            # For legacy checkpoints, gpt_inference should just point to the main GPT model itself
-                            # The GPT wrapper class in XTTS already has the generate() method
-                            XTTS_MODEL.gpt.gpt_inference = XTTS_MODEL.gpt
-                            print(" > ✅ Created compatibility proxy for gpt_inference (aliased to main gpt)")
+                        if hasattr(XTTS_MODEL, 'gpt'):
+                            # The gpt module needs init_gpt_for_inference() to be called
+                            # This sets up the KV-cache and creates gpt_inference attribute
+                            if hasattr(XTTS_MODEL.gpt, 'init_gpt_for_inference'):
+                                XTTS_MODEL.gpt.init_gpt_for_inference()
+                                print(" > ✅ Initialized GPT for inference mode (KV-cache enabled)")
+                            elif not hasattr(XTTS_MODEL.gpt, 'gpt_inference'):
+                                # Fallback: For older models, alias gpt_inference to gpt
+                                XTTS_MODEL.gpt.gpt_inference = XTTS_MODEL.gpt
+                                print(" > ✅ Created compatibility proxy for gpt_inference (aliased to main gpt)")
                     except Exception as _e:
                         print(f" > ⚠️ Could not create gpt_inference proxy: {_e}")
-                    print(f" > ✅ Manual load successful with vocab size {vocab_size} (ckpt tokens: {checkpoint_vocab_size or 'unknown'})")
+                    print(f" > ✅ Checkpoint loaded (robust manual) and embeddings expanded to {vocab_size} tokens")
                 else:
                     print(" > ⚠️ Model does not expose gpt module; manual embedding resize skipped")
             except Exception as load_error:

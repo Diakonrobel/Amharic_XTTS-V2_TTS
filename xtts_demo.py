@@ -2577,9 +2577,20 @@ if __name__ == "__main__":
             print(f"Output: {checkpoint_selector}")
             print("#"*70 + "\n")
             
+            # TEMP DEBUG: Simple function to test if button works AT ALL
+            def simple_test_click():
+                print("\n" + "!"*70)
+                print("✅ BUTTON CLICKED - FUNCTION TRIGGERED!")
+                print("!"*70 + "\n")
+                return gr.Dropdown(
+                    choices=[("✅ WORKS! Button handler triggered successfully", "")],
+                    value="",
+                    info="Function was called - debugging successful"
+                )
+            
             refresh_checkpoints_btn.click(
-                fn=refresh_checkpoint_list,
-                inputs=[out_path],
+                fn=simple_test_click,
+                inputs=[],
                 outputs=[checkpoint_selector]
             )
             

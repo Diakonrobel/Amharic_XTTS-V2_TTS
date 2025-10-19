@@ -1803,7 +1803,7 @@ if __name__ == "__main__":
                         info="Continue training instead of starting fresh",
                         scale=1
                     )
-                    checkpoint_selector = gr.Dropdown(
+                    resume_checkpoint_selector = gr.Dropdown(
                         label="Select Checkpoint",
                         choices=[("Click 🔄 to load checkpoints", "")],
                         value="",
@@ -1811,7 +1811,7 @@ if __name__ == "__main__":
                         info="Checkpoints appear here after training starts",
                         scale=2
                     )
-                    refresh_checkpoints_btn = gr.Button(
+                    resume_refresh_btn = gr.Button(
                         value="🔄",
                         size="sm",
                         scale=0,
@@ -2617,10 +2617,10 @@ if __name__ == "__main__":
                         info="Error loading checkpoints"
                     )
             
-            refresh_checkpoints_btn.click(
+            resume_refresh_btn.click(
                 fn=refresh_resume_checkpoints,
                 inputs=[out_path],
-                outputs=[checkpoint_selector]
+                outputs=[resume_checkpoint_selector]
             )
             
             # Fine-tuning tab checkpoint manager handlers
@@ -3003,7 +3003,7 @@ if __name__ == "__main__":
                     enable_amharic_g2p,
                     g2p_backend_train,
                     resume_from_checkpoint,
-                    checkpoint_selector,
+                    resume_checkpoint_selector,
                     freeze_encoder,
                     freeze_n_gpt_layers,
                     learning_rate_custom,

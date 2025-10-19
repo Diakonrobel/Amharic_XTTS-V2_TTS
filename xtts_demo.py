@@ -1062,9 +1062,9 @@ if __name__ == "__main__":
                     )
                     g2p_backend_selection = gr.Dropdown(
                         label="G2P Backend",
-                        value="transphone",
-                        choices=["transphone", "epitran", "rule_based"],
-                        info="Auto-fallback if unavailable",
+                        value="epitran",
+                        choices=["epitran", "transphone", "rule_based"],
+                        info="epitran recommended for Amharic",
                         scale=1
                     )
             
@@ -1560,7 +1560,7 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error slicing audio: {str(e)}"
         
-            def preprocess_dataset(audio_path, audio_folder_path, language, whisper_model, out_path, train_csv, eval_csv, use_g2p_preprocessing=False, g2p_backend="transphone", progress=gr.Progress(track_tqdm=True)):
+            def preprocess_dataset(audio_path, audio_folder_path, language, whisper_model, out_path, train_csv, eval_csv, use_g2p_preprocessing=False, g2p_backend="epitran", progress=gr.Progress(track_tqdm=True)):
                 clear_gpu_cache()
             
                 train_csv = ""
@@ -1872,9 +1872,9 @@ if __name__ == "__main__":
                     )
                     g2p_backend_train = gr.Dropdown(
                         label="G2P Backend",
-                        value="rule_based",  # rule_based is most reliable
-                        choices=["rule_based", "transphone", "epitran"],
-                        info="rule_based = offline, no dependencies",
+                        value="epitran",  # epitran recommended for Amharic
+                        choices=["epitran", "transphone", "rule_based"],
+                        info="epitran = best quality for Amharic",
                         scale=1
                     )
                 

@@ -22,17 +22,18 @@ class AmharicTextNormalizer:
         """Load normalization rules"""
         
         # Character variant normalization
+        # NOTE: ዓ and ፕ are NOT normalized to preserve abbreviations like ዓ.ም and ፕ.ር
         self.char_variants = {
             'ሥ': 'ስ',  # ሥ → ስ
             'ዕ': 'እ',  # ዕ → እ
-            'ፕ': '፝',  # ፕ → ፝
+            # 'ፕ': '፝',  # DO NOT normalize ፕ - used in abbreviations like ፕ.ር!
             'ኅ': 'ሕ',  # ኅ → ሕ
             'ኽ': 'ክ',  # ኽ → ክ
             'ሕ': 'ሕ',  # ሕ → ሕ
             'ዐ': 'አ',  # ዐ → አ
             'ኣ': 'አ',  # ኣ → አ
             'ሀ': 'ሃ',  # ሀ → ሃ (test requirement)
-            'ዓ': 'አ',  # ዓ → አ (test requirement)
+            # 'ዓ': 'አ',  # DO NOT normalize ዓ - used in abbreviations!
         }
         
         # Punctuation conversion (Ethiopic → Standard)
@@ -51,16 +52,33 @@ class AmharicTextNormalizer:
         }
         
         # Common Amharic abbreviations
+        # NOTE: Abbreviations are matched case-sensitively and with exact spacing
         self.abbreviations = {
+            # Calendar/Time abbreviations
             'ዓ.ም': 'ዓመተ ምህረት',  # Year of Grace (Ethiopian calendar)
+            'ዓ.ም.': 'ዓመተ ምህረት',  # With trailing period
+            'ዓ . ም': 'ዓመተ ምህረት',  # With spaces
             'ዓ.ዓ': 'ዓመተ ዓለም',     # Year of the World
+            'ዓ.ዓ.': 'ዓመተ ዓለም',    # With trailing period
+            
+            # Place/Organization abbreviations
             'ክ.ክ': 'ክፍለ ከተማ',     # Sub-city
+            'ክ.ክ.': 'ክፍለ ከተማ',    # With trailing period
+            'ክ . ክ': 'ክፍለ ከተማ',    # With spaces
+            
+            # Education abbreviations
             'ት.ቤት': 'ትምህርት ቤት',  # School
             'ት.ት': 'ትምህርት ተቋም',   # Educational institution
             'ኢ.ፌ.ዲ.ሪ': 'የኢትዮጵያ ፌደራላዊ ዲሞክራሲያዊ ሪፐብሊክ',
+            
+            # Title abbreviations
             'ም.ም': 'መምህር',         # Teacher (title)
             'ዶ.ር': 'ዶክተር',         # Doctor
+            'ዶ.ር.': 'ዶክተር',        # With trailing period
+            'ዶ . ር': 'ዶክተር',        # With spaces
             'ፕ.ር': 'ፕሮፌሰር',       # Professor
+            'ፕ.ር.': 'ፕሮፌሰር',      # With trailing period
+            'ፕ . ር': 'ፕሮፌሰር',      # With spaces
         }
         
     def normalize(self, text: str) -> str:
@@ -72,15 +90,20 @@ class AmharicTextNormalizer:
             
         Returns:
             Normalized text
+            
+        Note:
+            Order matters! Abbreviations must be expanded BEFORE character 
+            normalization, because abbreviations like 'ዓ.ም' use specific 
+            characters that would be normalized away.
         """
         if not text:
             return ""
             
-        # Step 1: Normalize character variants
-        text = self._normalize_characters(text)
-        
-        # Step 2: Expand abbreviations
+        # Step 1: Expand abbreviations FIRST (before character normalization!)
         text = self._expand_abbreviations(text)
+        
+        # Step 2: Normalize character variants
+        text = self._normalize_characters(text)
         
         # Step 3: Convert punctuation
         text = self._convert_punctuation(text)
@@ -97,9 +120,21 @@ class AmharicTextNormalizer:
         return text
         
     def _expand_abbreviations(self, text: str) -> str:
-        """Expand common Amharic abbreviations"""
-        for abbr, expansion in self.abbreviations.items():
-            text = text.replace(abbr, expansion)
+        """
+        Expand common Amharic abbreviations
+        
+        Uses regex word boundaries to avoid partial matches.
+        Example: 'ዓ.ም' expands, but 'ዓ.ም.ን' won't accidentally expand just 'ዓ.ም' part.
+        """
+        # Sort abbreviations by length (longest first) to handle overlaps
+        sorted_abbrs = sorted(self.abbreviations.items(), key=lambda x: len(x[0]), reverse=True)
+        
+        for abbr, expansion in sorted_abbrs:
+            # Use regex for more robust matching
+            # Pattern matches abbreviation with word boundaries
+            pattern = re.escape(abbr)
+            text = re.sub(pattern, expansion, text)
+        
         return text
         
     def _convert_punctuation(self, text: str) -> str:

@@ -36,6 +36,7 @@ try:
     from ..preprocessing.number_expander import AmharicNumberExpander
     from ..preprocessing.ethiopian_numeral_expander import EthiopianNumeralExpander
     from ..preprocessing.prosody_handler import ProsodyHandler
+    from ..preprocessing.symbol_expander import SymbolExpander
     PREPROCESSING_AVAILABLE = True
 except ImportError:
     PREPROCESSING_AVAILABLE = False
@@ -77,6 +78,7 @@ class G2PConfig:
     expand_numbers: bool = True
     expand_ethiopian_numerals: bool = True
     expand_abbreviations: bool = True
+    expand_symbols: bool = True  # New: expand math & currency symbols
     normalize_text: bool = True
     preserve_prosody: bool = True
     
@@ -157,6 +159,7 @@ class HybridAmharicG2P:
                 self.number_expander = AmharicNumberExpander()
                 self.ethiopian_expander = EthiopianNumeralExpander()
                 self.prosody_handler = ProsodyHandler()
+                self.symbol_expander = SymbolExpander()
                 logger.info("✅ Preprocessing modules loaded")
             except Exception as e:
                 logger.warning(f"⚠️  Preprocessing init partial: {e}")
@@ -164,11 +167,13 @@ class HybridAmharicG2P:
                 self.number_expander = None
                 self.ethiopian_expander = None
                 self.prosody_handler = None
+                self.symbol_expander = None
         else:
             self.text_normalizer = None
             self.number_expander = None
             self.ethiopian_expander = None
             self.prosody_handler = None
+            self.symbol_expander = None
     
     def _init_backends(self):
         """Initialize G2P backends"""
@@ -205,6 +210,7 @@ class HybridAmharicG2P:
         print(f"Caching:          {'✅' if self.config.enable_caching else '❌'}")
         print(f"Code-switching:   {'✅' if self.config.detect_language else '❌'}")
         print(f"Ethiopian nums:   {'✅' if self.config.expand_ethiopian_numerals else '❌'}")
+        print(f"Symbols:          {'✅' if self.config.expand_symbols else '❌'}")
         print(f"Prosody:          {'✅' if self.config.preserve_prosody else '❌'}")
         print("=" * 80 + "\n")
     
@@ -259,9 +265,10 @@ class HybridAmharicG2P:
         
         Pipeline:
         1. Text normalization (character variants, abbreviations)
-        2. Ethiopian numeral expansion
-        3. Arabic numeral expansion
-        4. Prosody marker preservation
+        2. Symbol expansion (math operators, currency)
+        3. Ethiopian numeral expansion
+        4. Arabic numeral expansion
+        5. Prosody marker preservation
         
         Args:
             text: Raw input text
@@ -281,14 +288,21 @@ class HybridAmharicG2P:
             except Exception as e:
                 logger.warning(f"Text normalization failed: {e}")
         
-        # Step 2: Expand Ethiopian numerals FIRST (before Arabic)
+        # Step 2: Expand symbols (before numbers, so $50 → 50 ዶላር, then expand 50)
+        if self.config.expand_symbols and self.symbol_expander:
+            try:
+                text = self.symbol_expander.expand(text)
+            except Exception as e:
+                logger.warning(f"Symbol expansion failed: {e}")
+        
+        # Step 3: Expand Ethiopian numerals (before Arabic)
         if self.config.expand_ethiopian_numerals and self.ethiopian_expander:
             try:
                 text = self.ethiopian_expander.expand_in_text(text)
             except Exception as e:
                 logger.warning(f"Ethiopian numeral expansion failed: {e}")
         
-        # Step 3: Expand Arabic numerals (including comma-separated like 15,000)
+        # Step 4: Expand Arabic numerals (including comma-separated like 15,000)
         if self.config.expand_numbers and self.number_expander:
             try:
                 # Match numbers with optional comma separators (e.g., 15,000 or 1,000,000)
@@ -308,7 +322,7 @@ class HybridAmharicG2P:
             except Exception as e:
                 logger.warning(f"Number expansion failed: {e}")
         
-        # Step 4: Normalize punctuation spacing for better prosody
+        # Step 5: Normalize punctuation spacing for better prosody
         if self.config.preserve_prosody and self.prosody_handler:
             try:
                 # XTTS learns prosody from punctuation directly

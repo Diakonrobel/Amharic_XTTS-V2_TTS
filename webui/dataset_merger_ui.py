@@ -257,7 +257,7 @@ def create_dataset_merger_tab():
         
         with gr.Row():
             merge_btn = gr.Button("▶️ Execute Merge", variant="primary", size="lg", scale=2)
-            gr.Markdown("", scale=1)  # Spacer
+            gr.HTML("", scale=1)  # Spacer
         
         with gr.Accordion("📊 Merge Results", open=True):
             merge_status = gr.Markdown(value="Merge not started")

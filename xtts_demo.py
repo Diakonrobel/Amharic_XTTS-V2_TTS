@@ -1818,10 +1818,6 @@ if __name__ == "__main__":
                         min_width=40
                     )
                 
-                # DEBUG: Add test button
-                test_btn = gr.Button(value="🧪 TEST (Click to verify)", size="sm", variant="secondary")
-                test_output = gr.Textbox(label="Test Result", value="", visible=True, interactive=False)
-                
                 gr.Markdown("""
                 🔍 **Tip**: Checkpoints are saved in `output/run/training/` during training.  
                 Click 🔄 to refresh the list after training completes.
@@ -2572,34 +2568,10 @@ if __name__ == "__main__":
                 outputs=[vocab_info_display]
             )
             
-            # TEST: Simple button to verify Gradio is working
-            def test_button_handler():
-                print("\n" + "#"*70)
-                print("🧪 TEST BUTTON CLICKED! Gradio is working!")
-                print("#"*70)
-                return "✅ Test button works! Check Lightning AI terminal for message."
-            
-            test_btn.click(
-                fn=test_button_handler,
-                inputs=[],
-                outputs=[test_output]
-            )
-            
             # Wire up resume training checkpoint refresh button
-            # TEMPORARY: Simple test handler without inputs
-            def simple_refresh_test():
-                print("\n" + "="*70)
-                print("🔄🔄🔄 REFRESH BUTTON HANDLER CALLED! 🔄🔄🔄")
-                print("="*70)
-                return gr.Dropdown(
-                    choices=[("✅ Refresh button works! Now debugging why checkpoint loading fails...", "")],
-                    value="",
-                    info="Button handler is executing successfully"
-                )
-            
             refresh_checkpoints_btn.click(
-                fn=simple_refresh_test,
-                inputs=[],
+                fn=refresh_checkpoint_list,
+                inputs=[out_path],
                 outputs=[checkpoint_selector]
             )
             

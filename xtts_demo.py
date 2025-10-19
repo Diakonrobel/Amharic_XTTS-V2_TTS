@@ -2569,6 +2569,14 @@ if __name__ == "__main__":
             )
             
             # Wire up resume training checkpoint refresh button
+            print("\n" + "#"*70)
+            print("🔧 WIRING REFRESH BUTTON HANDLER")
+            print(f"Button object: {refresh_checkpoints_btn}")
+            print(f"Function: {refresh_checkpoint_list}")
+            print(f"Input: {out_path}")
+            print(f"Output: {checkpoint_selector}")
+            print("#"*70 + "\n")
+            
             refresh_checkpoints_btn.click(
                 fn=refresh_checkpoint_list,
                 inputs=[out_path],

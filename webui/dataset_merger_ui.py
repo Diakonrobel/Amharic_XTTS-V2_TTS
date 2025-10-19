@@ -22,7 +22,7 @@ def scan_temp_datasets(base_path):
         temp_dirs = sorted([d for d in base_dir.glob("temp_dataset_*") if d.is_dir()])
         
         if not temp_dirs:
-            return "✅ No temp datasets found - all clean!", None, []
+            return "✅ No temp datasets found - all clean!", {}, []
         
         # Count wavs in each
         dataset_info = []
@@ -49,10 +49,10 @@ def scan_temp_datasets(base_path):
         # Create choices for selective merge
         choices = [(f"{d['name']} ({d['wavs']} files)", d['name']) for d in dataset_info]
         
-        return summary, json.dumps(dataset_info, indent=2), choices
+        return summary, dataset_info, choices
         
     except Exception as e:
-        return f"❌ Error scanning: {str(e)}", None, []
+        return f"❌ Error scanning: {str(e)}", {"error": str(e)}, []
 
 def preview_merge_operation(base_path, selected_datasets, standardize_names):
     """Preview what the merge operation will do"""
@@ -220,7 +220,7 @@ def create_dataset_merger_tab():
             scan_btn = gr.Button("🔍 Scan for Temp Datasets", variant="primary", scale=1)
         
         scan_output = gr.Markdown(value="Click 'Scan' to find temp datasets")
-        scan_details = gr.JSON(label="Dataset Details", visible=False)
+        scan_details = gr.JSON(label="Dataset Details", value={}, visible=False)
         
         with gr.Accordion("⚙️ Merge Options", open=True):
             with gr.Row():

@@ -2569,28 +2569,57 @@ if __name__ == "__main__":
             )
             
             # Wire up resume training checkpoint refresh button
-            print("\n" + "#"*70)
-            print("🔧 WIRING REFRESH BUTTON HANDLER")
-            print(f"Button object: {refresh_checkpoints_btn}")
-            print(f"Function: {refresh_checkpoint_list}")
-            print(f"Input: {out_path}")
-            print(f"Output: {checkpoint_selector}")
-            print("#"*70 + "\n")
-            
-            # TEMP DEBUG: Simple function to test if button works AT ALL
-            def simple_test_click():
-                print("\n" + "!"*70)
-                print("✅ BUTTON CLICKED - FUNCTION TRIGGERED!")
-                print("!"*70 + "\n")
-                return gr.Dropdown(
-                    choices=[("✅ WORKS! Button handler triggered successfully", "")],
-                    value="",
-                    info="Function was called - debugging successful"
-                )
+            # Clone working implementation from Checkpoint Manager section
+            def refresh_resume_checkpoints(output_path):
+                """Refresh checkpoint dropdown for resume training - CLONED FROM WORKING SECTION"""
+                try:
+                    print("\n" + "="*70)
+                    print("🔄 REFRESH RESUME CHECKPOINTS CALLED!")
+                    print(f"Output path: {output_path}")
+                    print("="*70)
+                    
+                    run_dir, checkpoints = checkpoint_manager.get_latest_training_run_checkpoints(output_path)
+                    
+                    if not checkpoints:
+                        print("⚠️ No checkpoints found")
+                        return gr.Dropdown(
+                            choices=[("⚠️ No checkpoints found - Complete training first", "")],
+                            value="",
+                            info="Checkpoints are saved during training to: output/run/training/"
+                        )
+                    
+                    print(f"✅ Found {len(checkpoints)} checkpoint(s)")
+                    
+                    # Generate dropdown choices (display_name, path) - SAME AS WORKING SECTION
+                    dropdown_choices = [(ckpt.display_name(), ckpt.path) for ckpt in checkpoints]
+                    
+                    # Get recommended checkpoint
+                    recommended = checkpoint_manager.recommend_best_checkpoint(checkpoints)
+                    default_value = recommended.path if recommended else (dropdown_choices[0][1] if dropdown_choices else "")
+                    
+                    print(f"Dropdown choices: {len(dropdown_choices)}")
+                    for i, (display, path) in enumerate(dropdown_choices[:3]):
+                        print(f"  {i+1}. {display}")
+                    
+                    return gr.Dropdown(
+                        choices=dropdown_choices,
+                        value=default_value,
+                        info=f"Found {len(checkpoints)} checkpoint(s) - Select one to resume training"
+                    )
+                    
+                except Exception as e:
+                    import traceback
+                    print(f"❌ ERROR in refresh_resume_checkpoints: {e}")
+                    traceback.print_exc()
+                    return gr.Dropdown(
+                        choices=[(f"❌ Error: {str(e)}", "")],
+                        value="",
+                        info="Error loading checkpoints"
+                    )
             
             refresh_checkpoints_btn.click(
-                fn=simple_test_click,
-                inputs=[],
+                fn=refresh_resume_checkpoints,
+                inputs=[out_path],
                 outputs=[checkpoint_selector]
             )
             

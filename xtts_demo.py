@@ -430,13 +430,33 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
                 except Exception:
                     resolved_backend = 'transphone'
 
-            from amharic_tts.tokenizer.xtts_tokenizer_wrapper import create_xtts_tokenizer
             print(f" > 🇪🇹 Amharic G2P enabled for inference (backend: {resolved_backend})")
             print(f" > Original text: {tts_text[:50]}{'...' if len(tts_text) > 50 else ''}")
-            tokenizer = create_xtts_tokenizer(use_phonemes=True, g2p_backend=resolved_backend)
-            original_text = tts_text
-            _g2p_lang = 'am' if lang in ('am', 'amh') else lang
-            tts_text = tokenizer.preprocess_text(tts_text, lang=_g2p_lang)
+            
+            # Use hybrid G2P system if selected
+            if resolved_backend == "hybrid":
+                from amharic_tts.g2p.hybrid_g2p import HybridAmharicG2P, G2PConfig
+                print(f" > Initializing Hybrid G2P (epitran + rule_based + preprocessing)")
+                config = G2PConfig(
+                    use_epitran=True,
+                    use_rule_based=True,
+                    expand_ethiopian_numerals=True,
+                    expand_numbers=True,
+                    expand_abbreviations=True,
+                    preserve_prosody=True
+                )
+                g2p_converter = HybridAmharicG2P(config=config)
+                original_text = tts_text
+                tts_text = g2p_converter.convert(tts_text)
+                print(f" > ✅ Hybrid G2P conversion complete")
+            else:
+                # Use standard tokenizer for other backends
+                from amharic_tts.tokenizer.xtts_tokenizer_wrapper import create_xtts_tokenizer
+                tokenizer = create_xtts_tokenizer(use_phonemes=True, g2p_backend=resolved_backend)
+                original_text = tts_text
+                _g2p_lang = 'am' if lang in ('am', 'amh') else lang
+                tts_text = tokenizer.preprocess_text(tts_text, lang=_g2p_lang)
+            
             print(f" > Converted to phonemes: {tts_text[:100]}{'...' if len(tts_text) > 100 else ''}")
             
             # Validate G2P conversion worked
@@ -2415,6 +2435,13 @@ if __name__ == "__main__":
                                 scale=1
                             )
                         
+                        checkpoint_g2p_backend = gr.Dropdown(
+                            label="G2P Backend",
+                            value="hybrid",
+                            choices=["hybrid", "transphone", "epitran", "rule_based"],
+                            info="hybrid = BEST (all features)"
+                        )
+                        
                         test_checkpoint_btn = gr.Button(
                             value="🎙️ Test Selected Checkpoint",
                             variant="secondary",
@@ -2458,8 +2485,8 @@ if __name__ == "__main__":
                         g2p_backend_infer = gr.Dropdown(
                             label="G2P Backend (Inference)",
                             value="auto",
-                            choices=["auto", "transphone", "epitran", "rule_based"],
-                            info="Auto uses the backend from training_meta.json if available; otherwise transphone"
+                            choices=["auto", "hybrid", "transphone", "epitran", "rule_based"],
+                            info="Auto uses training backend; hybrid = BEST (all features)"
                         )
                         
                         with gr.Accordion("⚙️ Advanced Settings", open=False):
@@ -3267,7 +3294,7 @@ if __name__ == "__main__":
             )
             
             def test_checkpoint_inference(selected_checkpoint_path, test_text, test_lang, use_g2p, 
-                                         out_path, speaker_ref_path):
+                                         g2p_backend, out_path, speaker_ref_path):
                 """Generate speech directly from a checkpoint without loading it globally"""
                 try:
                     if not selected_checkpoint_path or selected_checkpoint_path == "":
@@ -3338,10 +3365,28 @@ if __name__ == "__main__":
                     original_text = test_text
                     if use_g2p and test_lang in ["am", "amh"]:
                         try:
-                            from amharic_tts.tokenizer.xtts_tokenizer_wrapper import create_xtts_tokenizer
-                            print(" > 🇪🇹 Applying Amharic G2P...")
-                            tokenizer = create_xtts_tokenizer(use_phonemes=True, g2p_backend="rule_based")
-                            test_text = tokenizer.preprocess_text(test_text, lang='am')
+                            print(f" > 🇪🇹 Applying Amharic G2P (backend: {g2p_backend})...")
+                            
+                            # Use hybrid G2P system if selected
+                            if g2p_backend == "hybrid":
+                                from amharic_tts.g2p.hybrid_g2p import HybridAmharicG2P, G2PConfig
+                                print(f" > Initializing Hybrid G2P (epitran + rule_based + preprocessing)")
+                                config = G2PConfig(
+                                    use_epitran=True,
+                                    use_rule_based=True,
+                                    expand_ethiopian_numerals=True,
+                                    expand_numbers=True,
+                                    expand_abbreviations=True,
+                                    preserve_prosody=True
+                                )
+                                g2p_converter = HybridAmharicG2P(config=config)
+                                test_text = g2p_converter.convert(test_text)
+                            else:
+                                # Use standard tokenizer for other backends
+                                from amharic_tts.tokenizer.xtts_tokenizer_wrapper import create_xtts_tokenizer
+                                tokenizer = create_xtts_tokenizer(use_phonemes=True, g2p_backend=g2p_backend)
+                                test_text = tokenizer.preprocess_text(test_text, lang='am')
+                            
                             print(f" > Converted: {original_text[:50]}... → {test_text[:50]}...")
                         except Exception as e:
                             print(f" > ⚠️ G2P failed: {e}, using original text")
@@ -3411,6 +3456,7 @@ if __name__ == "__main__":
                     checkpoint_test_text,
                     checkpoint_test_language,
                     checkpoint_use_g2p,
+                    checkpoint_g2p_backend,
                     out_path,
                     speaker_reference_audio
                 ],

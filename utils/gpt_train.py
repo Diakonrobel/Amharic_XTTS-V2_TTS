@@ -686,6 +686,41 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         eval_samples=eval_samples,
     )
     
+    # Apply Mixed Precision (AMP) if enabled
+    if enable_mixed_precision and torch.cuda.is_available():
+        try:
+            # Determine precision type based on GPU capability
+            use_bf16 = torch.cuda.is_bf16_supported()
+            dtype = torch.bfloat16 if use_bf16 else torch.float16
+            
+            print(f"\n{'='*70}")
+            print("⚡ ENABLING MIXED PRECISION TRAINING")
+            print(f"{'='*70}")
+            print(f" > Precision: {'BF16 (bfloat16)' if use_bf16 else 'FP16 (float16)'}")
+            print(f" > GPU: {torch.cuda.get_device_name(0)}")
+            print(f" > Compute Capability: {torch.cuda.get_device_capability()}")
+            print(f" > T4 GPU supports: FP16 ✅ | BF16 ❌ (requires Ampere+)")
+            print(f" > Using: {'BF16' if use_bf16 else 'FP16'} for training")
+            print(f" > Expected: 1.5-2x training speedup, 20-30% memory reduction")
+            print(f"{'='*70}\n")
+            
+            # Wrap training step with autocast
+            original_train_step = trainer.train_step
+            
+            def amp_train_step(*args, **kwargs):
+                # Use autocast context for mixed precision
+                with torch.cuda.amp.autocast(dtype=dtype):
+                    return original_train_step(*args, **kwargs)
+            
+            trainer.train_step = amp_train_step
+            print(" > ✅ AMP autocast enabled - training will use mixed precision")
+            
+        except Exception as e:
+            print(f" > ⚠️  Could not enable mixed precision: {e}")
+            print(f" > Training will continue in FP32 (no speedup)")
+            import traceback
+            traceback.print_exc()
+    
     # Initialize training enhancements
     ema_model = None
     warmup_scheduler = None

@@ -843,6 +843,7 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     # ===================================================================
     
     # Apply Mixed Precision (AMP) if enabled
+    scaler = None  # GradScaler for mixed precision
     if enable_mixed_precision and torch.cuda.is_available():
         try:
             # Determine precision type based on GPU compute capability
@@ -863,16 +864,51 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
             print(f" > Expected: 1.5-2x training speedup, 20-30% memory reduction")
             print(f"{'='*70}\n")
             
+            # CRITICAL: Initialize GradScaler for FP16 (BF16 doesn't need it)
+            if not use_bf16:
+                from torch.cuda.amp import GradScaler
+                scaler = GradScaler()
+                print(f" > 🛡️  GradScaler initialized: init_scale={scaler.get_scale()}")
+            
             # Wrap training step with autocast
             original_train_step = trainer.train_step
+            original_optimize = trainer.optimize
             
             def amp_train_step(*args, **kwargs):
                 # Use autocast context for mixed precision
                 with torch.cuda.amp.autocast(dtype=dtype):
                     return original_train_step(*args, **kwargs)
             
+            def amp_optimize(loss, *args, **kwargs):
+                # Use GradScaler for FP16 training
+                if scaler is not None:
+                    # Scale loss and backward
+                    scaler.scale(loss).backward()
+                    
+                    # Unscale gradients before clipping
+                    scaler.unscale_(trainer.optimizer)
+                    
+                    # Clip gradients (now on unscaled gradients)
+                    grad_clip_norm = kwargs.get('grad_clip', 1.0)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
+                    
+                    # Step optimizer (will skip if gradients have inf/NaN)
+                    scaler.step(trainer.optimizer)
+                    
+                    # Update scaler for next iteration
+                    scaler.update()
+                    
+                    # Zero gradients
+                    trainer.optimizer.zero_grad()
+                else:
+                    # BF16 or no scaling needed
+                    return original_optimize(loss, *args, **kwargs)
+            
             trainer.train_step = amp_train_step
+            trainer.optimize = amp_optimize
             print(" > ✅ AMP autocast enabled - training will use mixed precision")
+            if scaler:
+                print(" > ✅ GradScaler integrated - gradients will be properly scaled")
             
         except Exception as e:
             print(f" > ⚠️  Could not enable mixed precision: {e}")

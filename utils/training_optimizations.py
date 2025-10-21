@@ -149,15 +149,29 @@ class TrainingOptimizer:
                 
                 # Manual gradient checkpointing for transformer blocks
                 elif hasattr(gpt_model, 'layers') or hasattr(gpt_model, 'h'):
-                    layers = gpt_model.layers if hasattr(gpt_model, 'layers') else gpt_model.h
+                    # Get layers list, ensuring it's iterable
+                    layers = None
+                    if hasattr(gpt_model, 'layers') and isinstance(gpt_model.layers, (list, tuple)):
+                        layers = gpt_model.layers
+                    elif hasattr(gpt_model, 'h') and isinstance(gpt_model.h, (list, tuple)):
+                        layers = gpt_model.h
+                    elif hasattr(gpt_model, 'transformer') and hasattr(gpt_model.transformer, 'h'):
+                        # XTTS uses gpt.transformer.h structure
+                        if isinstance(gpt_model.transformer.h, (list, tuple)):
+                            layers = gpt_model.transformer.h
                     
-                    for layer in layers:
-                        if hasattr(layer, 'gradient_checkpointing'):
-                            layer.gradient_checkpointing = True
-                    
-                    if self.verbose:
-                        logger.info(f"✅ Gradient checkpointing enabled on {len(layers)} transformer layers")
-                    return True
+                    if layers and len(layers) > 0:
+                        for layer in layers:
+                            if hasattr(layer, 'gradient_checkpointing'):
+                                layer.gradient_checkpointing = True
+                        
+                        if self.verbose:
+                            logger.info(f"✅ Gradient checkpointing enabled on {len(layers)} transformer layers")
+                        return True
+                    else:
+                        if self.verbose:
+                            logger.warning("⚠️  Could not find transformer layers for gradient checkpointing")
+                        return False
                 else:
                     if self.verbose:
                         logger.warning("⚠️  Model doesn't support gradient checkpointing")

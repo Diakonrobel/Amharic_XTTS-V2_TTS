@@ -14,6 +14,13 @@ import numpy as np
 import torch
 import torchaudio
 import traceback
+
+# ============================================================================
+# CRITICAL: Import training patches BEFORE any training code
+# This fixes NaN loss issues in mixed precision training automatically
+# ============================================================================
+from utils import training_patches
+
 from utils.formatter import format_audio_list, list_audios # Assuming these utils exist and work standalone
 from utils.gpt_train import train_gpt # Assuming this util exists and works standalone
 from utils import srt_processor

@@ -507,7 +507,6 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
             repetition_penalty=XTTS_MODEL.config.repetition_penalty,
             top_k=XTTS_MODEL.config.top_k,
             top_p=XTTS_MODEL.config.top_p,
-            num_gpt_cond_samples=int(num_gpt_outputs),
             enable_text_splitting=True
         )
     else:
@@ -521,7 +520,6 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
             repetition_penalty=float(repetition_penalty),
             top_k=top_k,
             top_p=top_p,
-            num_gpt_cond_samples=int(num_gpt_outputs),
             enable_text_splitting=sentence_split
         )
 

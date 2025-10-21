@@ -450,12 +450,15 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         print("🇪🇹 PATCHING TOKENIZER FOR AMHARIC LANGUAGE SUPPORT")
         print("="*70)
         
-        # Get tokenizer from model
+        # Get tokenizer from model (check all possible locations)
         tokenizer = None
         if hasattr(model, 'tokenizer'):
             tokenizer = model.tokenizer
-        elif hasattr(model, 'xtts') and hasattr(model.xtts, 'tokenizer'):
-            tokenizer = model.xtts.tokenizer
+        elif hasattr(model, 'xtts'):
+            if hasattr(model.xtts, 'tokenizer'):
+                tokenizer = model.xtts.tokenizer
+            elif hasattr(model.xtts, 'gpt') and hasattr(model.xtts.gpt, 'tokenizer'):
+                tokenizer = model.xtts.gpt.tokenizer
         
         if tokenizer and hasattr(tokenizer, 'char_limits'):
             # Add Amharic language codes to char_limits

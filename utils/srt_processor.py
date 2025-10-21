@@ -221,6 +221,13 @@ def extract_segments_from_audio(
     
     wav = wav.squeeze()
     
+    # Resample to 22050 Hz if necessary for consistent XTTS training
+    if sr != 22050:
+        print(f"Resampling from {sr} Hz to 22050 Hz...")
+        resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=22050)
+        wav = resampler(wav)
+        sr = 22050
+    
     metadata = {
         "audio_file": [],
         "text": [],

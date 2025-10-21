@@ -400,7 +400,7 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
     print("Model Loaded!")
     return "Model Loaded!"
 
-def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repetition_penalty,top_k,top_p,sentence_split,use_config,use_g2p_inference=False, g2p_backend_infer="auto"):
+def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repetition_penalty,top_k,top_p,sentence_split,use_config,use_g2p_inference=False, g2p_backend_infer="auto", num_gpt_outputs=1):
     if XTTS_MODEL is None or not speaker_audio_file:
         return "You need to run the previous step to load the model !!", None, None
 
@@ -488,8 +488,9 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
     # Use 'am' for XTTS inference API when Amharic selected to avoid upstream NotImplementedError
     _inference_lang = 'am' if lang_norm in ('am', 'amh') else lang_norm
 
+    # Pass audio_path as list (XTTS API expects list)
     gpt_cond_latent, speaker_embedding = XTTS_MODEL.get_conditioning_latents(
-        audio_path=speaker_audio_file,
+        audio_path=[speaker_audio_file],
         gpt_cond_len=XTTS_MODEL.config.gpt_cond_len,
         max_ref_length=XTTS_MODEL.config.max_ref_len,
         sound_norm_refs=XTTS_MODEL.config.sound_norm_refs
@@ -506,6 +507,7 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
             repetition_penalty=XTTS_MODEL.config.repetition_penalty,
             top_k=XTTS_MODEL.config.top_k,
             top_p=XTTS_MODEL.config.top_p,
+            num_gpt_cond_samples=int(num_gpt_outputs),
             enable_text_splitting=True
         )
     else:
@@ -519,6 +521,7 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
             repetition_penalty=float(repetition_penalty),
             top_k=top_k,
             top_p=top_p,
+            num_gpt_cond_samples=int(num_gpt_outputs),
             enable_text_splitting=sentence_split
         )
 
@@ -2498,8 +2501,10 @@ if __name__ == "__main__":
                                 top_k = gr.Slider(label="Top K", minimum=1, maximum=100, step=1, value=50)
                             with gr.Row():
                                 top_p = gr.Slider(label="Top P", minimum=0, maximum=1, step=0.05, value=0.85)
+                                num_gpt_outputs = gr.Slider(label="Samples (Quality)", minimum=1, maximum=16, step=1, value=1, info="Generate multiple samples, pick best (1=fast, 4-8=better quality)")
+                            with gr.Row():
                                 sentence_split = gr.Checkbox(label="Text Splitting", value=True)
-                            use_config = gr.Checkbox(label="Use Config Settings", value=False, info="Override above with config values")
+                                use_config = gr.Checkbox(label="Use Config Settings", value=False, info="Override above with config values")
                         
                         tts_btn = gr.Button(value="▶️ Step 4 - Generate Speech", variant="primary", size="lg")
                     
@@ -3127,6 +3132,7 @@ if __name__ == "__main__":
                     use_config,
                     use_g2p_inference,
                     g2p_backend_infer,
+                    num_gpt_outputs,
                 ],
                 outputs=[progress_gen, tts_output_audio,reference_audio],
             )
@@ -3393,8 +3399,9 @@ if __name__ == "__main__":
                     
                     # Get conditioning latents
                     print(" > Extracting speaker embedding...")
+                    # Pass audio_path as list (XTTS API expects list)
                     gpt_cond_latent, speaker_embedding = test_model.get_conditioning_latents(
-                        audio_path=speaker_ref_path,
+                        audio_path=[speaker_ref_path],
                         gpt_cond_len=test_model.config.gpt_cond_len,
                         max_ref_length=test_model.config.max_ref_len,
                         sound_norm_refs=test_model.config.sound_norm_refs

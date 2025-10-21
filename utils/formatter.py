@@ -107,6 +107,13 @@ def format_audio_list(audio_files, asr_model, target_language="en", out_path=Non
             wav = torch.mean(wav, dim=0, keepdim=True)
 
         wav = wav.squeeze()
+        
+        # Resample to 22050 Hz if necessary for consistent XTTS training
+        if sr != 22050:
+            resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=22050)
+            wav = resampler(wav)
+            sr = 22050
+        
         audio_total_size += (wav.size(-1) / sr)
 
         segments, _= asr_model.transcribe(audio_path, vad_filter=True, word_timestamps=True, language=target_language)

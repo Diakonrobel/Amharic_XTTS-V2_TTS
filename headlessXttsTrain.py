@@ -227,8 +227,8 @@ def preprocess_dataset_headless(audio_file_path, language, whisper_model_name, d
     try:
         # Loading Whisper
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        compute_type = "float16" if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else "float32" # Check bf16 support for potential speedup
-        # compute_type = "float16" if torch.cuda.is_available() else "float32" # Original
+        # Use float16 on CUDA for better performance (bf16 check was overly restrictive)
+        compute_type = "float16" if torch.cuda.is_available() else "float32"
         print(f"Loading Whisper model '{whisper_model_name}' on device '{device}' with compute type '{compute_type}'...")
 
         # Check if model path exists, download if necessary (logic adapted from FasterWhisper)
@@ -626,11 +626,13 @@ def run_tts_headless(lang, tts_text, speaker_audio_file, output_wav_path, temper
         # Ensure conditioning latents are calculated correctly, matching model's expectations
         # Handle potential API changes in XTTS versions
         if hasattr(XTTS_MODEL, "get_conditioning_latents"):
+            # Pass audio_path as list (XTTS API expects list)
+            # Use XTTS default values: gpt_cond_len=12, max_ref_len=10 (tuned for stability)
             gpt_cond_latent, speaker_embedding = XTTS_MODEL.get_conditioning_latents(
-                audio_path=speaker_ref_to_use,
-                gpt_cond_len=getattr(XTTS_MODEL.config, 'gpt_cond_len', 30), # Provide default if missing
-                max_ref_length=getattr(XTTS_MODEL.config, 'max_ref_len', 60), # Provide default
-                sound_norm_refs=getattr(XTTS_MODEL.config, 'sound_norm_refs', False) # Provide default
+                audio_path=[speaker_ref_to_use],
+                gpt_cond_len=getattr(XTTS_MODEL.config, 'gpt_cond_len', 12),
+                max_ref_length=getattr(XTTS_MODEL.config, 'max_ref_len', 10),
+                sound_norm_refs=getattr(XTTS_MODEL.config, 'sound_norm_refs', False)
             )
         elif hasattr(XTTS_MODEL, "extract_tts_latents"): # Check for alternative method names
              # This might require different parameters depending on the XTTS version

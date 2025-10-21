@@ -1044,9 +1044,12 @@ def transcribe_with_whisper(
     """
     from faster_whisper import WhisperModel
     import pysrt
+    import torch
     
     print(f"Loading Whisper model ({model_size})...")
-    model = WhisperModel(model_size, device="cuda", compute_type="float16")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    compute_type = "float16" if torch.cuda.is_available() else "float32"
+    model = WhisperModel(model_size, device=device, compute_type=compute_type)
     
     print("Transcribing audio...")
     segments, info = model.transcribe(

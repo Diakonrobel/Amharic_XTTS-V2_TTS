@@ -438,6 +438,82 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     # init the model from config (without checkpoint if extended vocab)
     model = GPTTrainer.init_from_config(config)
     
+    # ===================================================================
+    # PATCH TOKENIZER FOR AMHARIC LANGUAGE CODE SUPPORT (BPE-ONLY MODE)
+    # ===================================================================
+    # The XTTS tokenizer doesn't natively support 'amh' language code.
+    # This patch enables BPE-only training without G2P by:
+    # 1. Adding 'am'/'amh' to char_limits
+    # 2. Mapping Amharic preprocessing to English (returns raw text)
+    if language in ["am", "amh"]:
+        print("\n" + "="*70)
+        print("🇪🇹 PATCHING TOKENIZER FOR AMHARIC LANGUAGE SUPPORT")
+        print("="*70)
+        
+        # Get tokenizer from model
+        tokenizer = None
+        if hasattr(model, 'tokenizer'):
+            tokenizer = model.tokenizer
+        elif hasattr(model, 'xtts') and hasattr(model.xtts, 'tokenizer'):
+            tokenizer = model.xtts.tokenizer
+        
+        if tokenizer and hasattr(tokenizer, 'char_limits'):
+            # Add Amharic language codes to char_limits
+            if 'am' not in tokenizer.char_limits:
+                tokenizer.char_limits['am'] = 200  # Amharic (ISO 639-1)
+                print(" > ✅ Added 'am' language code to tokenizer")
+            
+            if 'amh' not in tokenizer.char_limits:
+                tokenizer.char_limits['amh'] = 200  # Amharic (ISO 639-3)
+                print(" > ✅ Added 'amh' language code to tokenizer")
+            
+            # Patch preprocess_text to handle Amharic codes
+            if hasattr(tokenizer, 'preprocess_text'):
+                _original_preprocess = tokenizer.preprocess_text
+                
+                def _amharic_safe_preprocess(txt, lang):
+                    """
+                    Amharic-safe preprocessing for BPE-only mode.
+                    Maps 'am'/'amh' to 'en' preprocessing (returns raw text).
+                    This avoids NotImplementedError while preserving Ethiopic characters.
+                    """
+                    try:
+                        # Normalize language code
+                        base_lang = lang.split('-')[0].lower() if isinstance(lang, str) else lang
+                    except Exception:
+                        base_lang = lang
+                    
+                    # IPA markers (for G2P mode detection)
+                    ipa_markers = ('ə', 'ɨ', 'ʔ', 'ʕ', 'ʷ', 'ː', 'ʼ', 'ʃ', 'ʧ', 'ʤ', 'ɲ')
+                    
+                    # Handle Amharic codes specially
+                    if base_lang in ('am', 'amh'):
+                        # If text looks like IPA phonemes, keep as-is
+                        if txt and any(marker in txt for marker in ipa_markers):
+                            return txt
+                        
+                        # Otherwise, use English preprocessing (returns raw text)
+                        # This is perfect for BPE-only mode with Ethiopic script
+                        try:
+                            return _original_preprocess(txt, 'en')
+                        except Exception:
+                            # Ultimate fallback: return text unchanged
+                            return txt
+                    
+                    # Default behavior for other languages
+                    return _original_preprocess(txt, lang)
+                
+                tokenizer.preprocess_text = _amharic_safe_preprocess
+                print(" > ✅ Patched tokenizer.preprocess_text() for Amharic")
+                print(" > ℹ️  Amharic text will be preprocessed as raw Ethiopic (BPE-only)")
+            
+            print("="*70 + "\n")
+        else:
+            print(" > ⚠️  Warning: Could not find tokenizer to patch")
+            print(" > Training may fail with NotImplementedError for 'amh'")
+            print("="*70 + "\n")
+    # ===================================================================
+    
     # Apply layer freezing for small datasets or language adaptation (Amharic)
     if use_small_dataset_config:
         print("\n" + "="*70)

@@ -689,8 +689,11 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     # Apply Mixed Precision (AMP) if enabled
     if enable_mixed_precision and torch.cuda.is_available():
         try:
-            # Determine precision type based on GPU capability
-            use_bf16 = torch.cuda.is_bf16_supported()
+            # Determine precision type based on GPU compute capability
+            # BF16 requires Ampere+ (compute capability >= 8.0)
+            # T4 = 7.5 (NO BF16), A100/A10 = 8.0+ (YES BF16)
+            compute_cap = torch.cuda.get_device_capability()
+            use_bf16 = compute_cap[0] >= 8  # Ampere or newer
             dtype = torch.bfloat16 if use_bf16 else torch.float16
             
             print(f"\n{'='*70}")
@@ -698,8 +701,8 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
             print(f"{'='*70}")
             print(f" > Precision: {'BF16 (bfloat16)' if use_bf16 else 'FP16 (float16)'}")
             print(f" > GPU: {torch.cuda.get_device_name(0)}")
-            print(f" > Compute Capability: {torch.cuda.get_device_capability()}")
-            print(f" > T4 GPU supports: FP16 ✅ | BF16 ❌ (requires Ampere+)")
+            print(f" > Compute Capability: {compute_cap[0]}.{compute_cap[1]}")
+            print(f" > GPU supports: FP16 ✅ | BF16 {'✅' if use_bf16 else '❌ (requires Ampere+ / CC 8.0+)'}")
             print(f" > Using: {'BF16' if use_bf16 else 'FP16'} for training")
             print(f" > Expected: 1.5-2x training speedup, 20-30% memory reduction")
             print(f"{'='*70}\n")

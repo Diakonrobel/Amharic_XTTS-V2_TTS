@@ -58,14 +58,17 @@ def apply_global_amharic_bpe_patch():
         print("🩹 APPLYING GLOBAL AMHARIC BPE TOKENIZER PATCH")
         print("="*70)
         
-        # 1. Patch char_limits at class level
-        if not hasattr(VoiceBpeTokenizer, '_original_char_limits'):
-            VoiceBpeTokenizer._original_char_limits = VoiceBpeTokenizer.char_limits.copy()
-        
-        # Add Amharic codes
-        VoiceBpeTokenizer.char_limits['am'] = 200   # ISO 639-1
-        VoiceBpeTokenizer.char_limits['amh'] = 200  # ISO 639-3
-        print(" > ✅ Added 'am' and 'amh' to char_limits")
+        # 1. Patch char_limits at class level (if it exists)
+        if hasattr(VoiceBpeTokenizer, 'char_limits'):
+            if not hasattr(VoiceBpeTokenizer, '_original_char_limits'):
+                VoiceBpeTokenizer._original_char_limits = VoiceBpeTokenizer.char_limits.copy()
+            
+            # Add Amharic codes
+            VoiceBpeTokenizer.char_limits['am'] = 200   # ISO 639-1
+            VoiceBpeTokenizer.char_limits['amh'] = 200  # ISO 639-3
+            print(" > ✅ Added 'am' and 'amh' to char_limits")
+        else:
+            print(" > ℹ️  char_limits not found (OK - not needed for this TTS version)")
         
         # 2. Patch preprocess_text method at class level
         if not hasattr(VoiceBpeTokenizer, '_original_preprocess_text'):

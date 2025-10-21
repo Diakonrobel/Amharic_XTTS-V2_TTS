@@ -541,38 +541,66 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
             checkpoint = torch.load(checkpoint_to_load, map_location="cpu", weights_only=False)
             state_dict = checkpoint["model"]
             
-            old_vocab_size = state_dict['gpt.text_embedding.weight'].shape[0]
-            embed_dim = state_dict['gpt.text_embedding.weight'].shape[1]
+            # Find text embedding key (handle different formats)
+            embed_key = None
+            head_w_key = None
+            head_b_key = None
             
-            print(f" > Checkpoint vocab size: {old_vocab_size}")
-            print(f" > Extended vocab size: {new_vocab_size}")
-            print(f" > Will add {new_vocab_size - old_vocab_size} new token embeddings")
+            # Try different key patterns
+            for key in state_dict.keys():
+                if 'text_embedding.weight' in key:
+                    embed_key = key
+                if 'text_head.weight' in key:
+                    head_w_key = key
+                if 'text_head.bias' in key:
+                    head_b_key = key
             
-            # Create new extended embedding layers
-            new_text_embedding = torch.nn.Embedding(new_vocab_size, embed_dim)
-            new_text_embedding.weight.data[:old_vocab_size] = state_dict['gpt.text_embedding.weight']
-            new_text_embedding.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * 0.02
+            if not embed_key:
+                raise KeyError("Could not find text_embedding.weight in checkpoint. Keys available: " + str(list(state_dict.keys())[:10]))
             
-            new_text_head = torch.nn.Linear(embed_dim, new_vocab_size)
-            new_text_head.weight.data[:old_vocab_size] = state_dict['gpt.text_head.weight']
-            new_text_head.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * 0.02
-            new_text_head.bias.data[:old_vocab_size] = state_dict['gpt.text_head.bias']
-            new_text_head.bias.data[old_vocab_size:] = torch.zeros(new_vocab_size - old_vocab_size)
+            old_vocab_size = state_dict[embed_key].shape[0]
+            embed_dim = state_dict[embed_key].shape[1]
             
-            # Remove text embedding layers from state dict
-            filtered_state = {k: v for k, v in state_dict.items() 
-                            if 'text_embedding' not in k and 'text_head' not in k}
-            
-            # Load non-text layers
-            model.xtts.load_state_dict(filtered_state, strict=False)
-            
-            # Replace text embedding layers with extended versions
-            model.xtts.gpt.text_embedding = new_text_embedding
-            model.xtts.gpt.text_head = new_text_head
-            
-            print(f" > Γ£à Checkpoint loaded and embeddings resized!")
-            print(f" > Copied {old_vocab_size} existing embeddings")
-            print(f" > Initialized {new_vocab_size - old_vocab_size} new embeddings (random, will be learned)")
+            # Check if vocab already matches (resuming from extended vocab training)
+            if old_vocab_size == new_vocab_size:
+                print(f" > ✅ Checkpoint already has extended vocab (size: {old_vocab_size})")
+                print(f" > Skipping vocab expansion, loading checkpoint directly")
+                # Load checkpoint normally
+                model.xtts.load_state_dict(state_dict, strict=False)
+                print(f" > ✅ Checkpoint loaded successfully!")
+                # Skip the expansion logic below
+                checkpoint_to_load = None  # Signal to skip
+            else:
+                # Proceed with expansion
+                print(f" > Checkpoint vocab size: {old_vocab_size}")
+                print(f" > Extended vocab size: {new_vocab_size}")
+                print(f" > Will add {new_vocab_size - old_vocab_size} new token embeddings")
+                
+                # Create new extended embedding layers
+                new_text_embedding = torch.nn.Embedding(new_vocab_size, embed_dim)
+                new_text_embedding.weight.data[:old_vocab_size] = state_dict[embed_key]
+                new_text_embedding.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * 0.02
+                
+                new_text_head = torch.nn.Linear(embed_dim, new_vocab_size)
+                new_text_head.weight.data[:old_vocab_size] = state_dict[head_w_key]
+                new_text_head.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * 0.02
+                new_text_head.bias.data[:old_vocab_size] = state_dict[head_b_key]
+                new_text_head.bias.data[old_vocab_size:] = torch.zeros(new_vocab_size - old_vocab_size)
+                
+                # Remove text embedding layers from state dict
+                filtered_state = {k: v for k, v in state_dict.items() 
+                                if 'text_embedding' not in k and 'text_head' not in k}
+                
+                # Load non-text layers
+                model.xtts.load_state_dict(filtered_state, strict=False)
+                
+                # Replace text embedding layers with extended versions
+                model.xtts.gpt.text_embedding = new_text_embedding
+                model.xtts.gpt.text_head = new_text_head
+                
+                print(f" > ✅ Checkpoint loaded and embeddings resized!")
+                print(f" > Copied {old_vocab_size} existing embeddings")
+                print(f" > Initialized {new_vocab_size - old_vocab_size} new embeddings (random, will be learned)")
             
         except Exception as e:
             print(f" > ΓÜá∩╕Å  Error in extended vocab checkpoint loading: {e}")

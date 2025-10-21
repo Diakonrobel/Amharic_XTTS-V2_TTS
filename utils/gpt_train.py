@@ -629,21 +629,28 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
                 print(f" > Will add {new_vocab_size - old_vocab_size} new token embeddings")
                 
                 # Create new extended embedding layers
-                # CRITICAL: Use MUCH smaller init scale for extended vocab (Ethiopic chars)
-                # Standard 0.02 causes NaN with FP16 + thousands of new tokens
-                # Reduced to 0.0001 for numerical stability with large vocabulary extensions
+                # CRITICAL FIX: Match pretrained embedding scale to prevent gradient explosion
+                # Calculate actual scale from pretrained embeddings
+                pretrained_embeddings = state_dict[embed_key]
+                pretrained_std = pretrained_embeddings.std().item()
+                # Use same scale for new tokens (typically ~0.02-0.05)
+                init_scale = pretrained_std
+                
+                print(f" > Detected pretrained embedding std: {pretrained_std:.6f}")
+                print(f" > Initializing {new_vocab_size - old_vocab_size} new tokens with matching scale")
+                
                 new_text_embedding = torch.nn.Embedding(new_vocab_size, embed_dim)
-                new_text_embedding.weight.data[:old_vocab_size] = state_dict[embed_key]
-                new_text_embedding.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * 0.0001
+                new_text_embedding.weight.data[:old_vocab_size] = pretrained_embeddings
+                new_text_embedding.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * init_scale
                 
                 new_text_head = torch.nn.Linear(embed_dim, new_vocab_size)
                 new_text_head.weight.data[:old_vocab_size] = state_dict[head_w_key]
-                new_text_head.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * 0.0001
+                new_text_head.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * init_scale
                 new_text_head.bias.data[:old_vocab_size] = state_dict[head_b_key]
                 new_text_head.bias.data[old_vocab_size:] = torch.zeros(new_vocab_size - old_vocab_size)
                 
-                print(f" > ✅ Using REDUCED init scale (0.0001) for {new_vocab_size - old_vocab_size} new tokens")
-                print(f" > This prevents NaN loss with FP16 mixed precision")
+                print(f" > ✅ Using MATCHED init scale ({init_scale:.6f}) for new tokens")
+                print(f" > This prevents gradient explosion at step 50+")
                 
                 # Remove text embedding layers from state dict
                 filtered_state = {k: v for k, v in state_dict.items() 
@@ -743,6 +750,42 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         train_samples=train_samples,
         eval_samples=eval_samples,
     )
+    
+    # ===================================================================
+    # CRITICAL FIX: Per-layer gradient clipping for extended vocab
+    # This prevents NaN at step 50 from new Amharic token gradients exploding
+    # ===================================================================
+    if extended_vocab_path and hasattr(model, 'xtts') and hasattr(model.xtts, 'gpt'):
+        try:
+            print("\n" + "="*70)
+            print("🛡️ ACTIVATING PER-LAYER GRADIENT CLIPPING")
+            print("="*70)
+            print(" > Embedding layers: max_norm=0.1 (strict)")
+            print(" > Other layers: max_norm=1.0 (normal)")
+            print("="*70 + "\n")
+            
+            original_train_step = trainer.train_step
+            
+            def train_step_with_per_layer_clip(*args, **kwargs):
+                result = original_train_step(*args, **kwargs)
+                
+                # Apply strict clipping to embedding layers after backward pass
+                if model.training:
+                    # Clip embedding gradients to 0.1 (10x stricter than normal)
+                    if hasattr(model.xtts.gpt, 'text_embedding'):
+                        torch.nn.utils.clip_grad_norm_(model.xtts.gpt.text_embedding.parameters(), max_norm=0.1)
+                    if hasattr(model.xtts.gpt, 'text_head'):
+                        torch.nn.utils.clip_grad_norm_(model.xtts.gpt.text_head.parameters(), max_norm=0.1)
+                
+                return result
+            
+            trainer.train_step = train_step_with_per_layer_clip
+            print(" > ✅ Per-layer gradient clipping ACTIVE")
+        except Exception as e:
+            print(f" > ⚠️  Could not apply per-layer clipping: {e}")
+            import traceback
+            traceback.print_exc()
+    # ===================================================================
     
     # ===================================================================
     # PATCH TOKENIZER FOR AMHARIC LANGUAGE CODE SUPPORT (BPE-ONLY MODE)
@@ -854,21 +897,8 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     # Proper fix requires modifying TTS Trainer library code directly.
     # ===================================================================
     
-    if enable_mixed_precision and torch.cuda.is_available():
-        print(f"\n{'='*70}")
-        print("⚠️  MIXED PRECISION TRAINING DISABLED")
-        print(f"{'='*70}")
-        print(f" > FP16 causes NaN losses with current TTS Trainer")
-        print(f" > Using FP32 (float32) for numerical stability")
-        print(f" > Training will be slower but stable")
-        print(f" > To enable FP16: Modify TTS Trainer library to integrate GradScaler")
-        print(f"{'='*70}\n")
-            
-        except Exception as e:
-            print(f" > ⚠️  Could not enable mixed precision: {e}")
-            print(f" > Training will continue in FP32 (no speedup)")
-            import traceback
-            traceback.print_exc()
+    # Note: Mixed precision is currently disabled for stability
+    # See training_patches.py for FP16/FP32 handling
     
     # Initialize training enhancements
     ema_model = None
@@ -885,14 +915,17 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
                 print(f" > ⚠️  Could not initialize EMA: {e}")
                 ema_model = None
         
-        # Initialize adaptive gradient clipper
-        try:
-            grad_clip_norm = XTTSSmallDatasetConfig.GRAD_CLIP_NORM if use_small_dataset_config else (0.5 if language_adaptation_mode else 1.0)
-            adaptive_clipper = AdaptiveGradientClipper(model, max_norm=grad_clip_norm)
-            print(f" > ✅ Adaptive gradient clipping enabled (max_norm={grad_clip_norm})")
-        except Exception as e:
-            print(f" > ⚠️  Could not enable adaptive clipping: {e}")
-            # Fallback to basic clipping
+        # Initialize adaptive gradient clipper (only for non-extended vocab case)
+        # Extended vocab uses per-layer clipping applied after trainer creation (line ~754)
+        if not extended_vocab_path:
+            try:
+                grad_clip_norm = XTTSSmallDatasetConfig.GRAD_CLIP_NORM if use_small_dataset_config else (0.5 if language_adaptation_mode else 1.0)
+                adaptive_clipper = AdaptiveGradientClipper(model, max_norm=grad_clip_norm)
+                print(f" > ✅ Adaptive gradient clipping enabled (max_norm={grad_clip_norm})")
+            except Exception as e:
+                print(f" > ⚠️  Could not enable adaptive clipping: {e}")
+        # Fallback to basic clipping
+        else:
             try:
                 import torch.nn.utils as nn_utils
                 original_train_step = trainer.train_step

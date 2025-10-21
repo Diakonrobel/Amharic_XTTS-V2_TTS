@@ -14,6 +14,16 @@ try:
 except Exception as e:
     print(f"Warning: Could not apply PyTorch 2.6 patches: {e}")
 
+# ============================================================================
+# CRITICAL: Apply training patches to fix NaN loss in mixed precision training
+# ============================================================================
+try:
+    from utils import training_patches
+    print("✅ Training patches loaded successfully")
+except Exception as e:
+    print(f"⚠️  Warning: Could not apply training patches: {e}")
+    print(f"   Training may experience NaN losses at step 50")
+
 import gradio as gr
 import librosa.display
 import numpy as np

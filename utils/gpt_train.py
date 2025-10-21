@@ -629,15 +629,21 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
                 print(f" > Will add {new_vocab_size - old_vocab_size} new token embeddings")
                 
                 # Create new extended embedding layers
+                # CRITICAL: Use MUCH smaller init scale for extended vocab (Ethiopic chars)
+                # Standard 0.02 causes NaN with FP16 + thousands of new tokens
+                # Reduced to 0.0001 for numerical stability with large vocabulary extensions
                 new_text_embedding = torch.nn.Embedding(new_vocab_size, embed_dim)
                 new_text_embedding.weight.data[:old_vocab_size] = state_dict[embed_key]
-                new_text_embedding.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * 0.02
+                new_text_embedding.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * 0.0001
                 
                 new_text_head = torch.nn.Linear(embed_dim, new_vocab_size)
                 new_text_head.weight.data[:old_vocab_size] = state_dict[head_w_key]
-                new_text_head.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * 0.02
+                new_text_head.weight.data[old_vocab_size:] = torch.randn(new_vocab_size - old_vocab_size, embed_dim) * 0.0001
                 new_text_head.bias.data[:old_vocab_size] = state_dict[head_b_key]
                 new_text_head.bias.data[old_vocab_size:] = torch.zeros(new_vocab_size - old_vocab_size)
+                
+                print(f" > ✅ Using REDUCED init scale (0.0001) for {new_vocab_size - old_vocab_size} new tokens")
+                print(f" > This prevents NaN loss with FP16 mixed precision")
                 
                 # Remove text embedding layers from state dict
                 filtered_state = {k: v for k, v in state_dict.items() 

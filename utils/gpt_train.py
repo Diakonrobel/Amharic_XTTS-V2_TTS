@@ -223,6 +223,35 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     if language == "ja":
         num_workers = 0
     
+    # ===================================================================
+    # AUTO-DETECT EXISTING EXTENDED VOCABULARY (Amharic/Ethiopic)
+    # ===================================================================
+    # Check for pre-existing extended vocab files that user may have created
+    # This allows BPE-only training with extended vocabulary (no G2P needed)
+    pre_existing_extended_vocab = None
+    if language in ["am", "amh"]:
+        import glob
+        vocab_patterns = [
+            os.path.join(READY_MODEL_PATH, "vocab_extended*.json"),
+            os.path.join(READY_MODEL_PATH, "vocab_*amharic*.json"),
+            os.path.join(READY_MODEL_PATH, "vocab_*ethiopic*.json"),
+        ]
+        
+        for pattern in vocab_patterns:
+            matches = glob.glob(pattern)
+            if matches:
+                pre_existing_extended_vocab = matches[0]
+                print(f"\n{'='*70}")
+                print(f"🔍 AUTO-DETECTED EXISTING EXTENDED VOCABULARY")
+                print(f"{'='*70}")
+                print(f" > Found: {os.path.basename(pre_existing_extended_vocab)}")
+                print(f" > Path: {pre_existing_extended_vocab}")
+                print(f" > This vocabulary will be used for training")
+                print(f" > Works with both G2P and BPE-only modes")
+                print(f"{'='*70}\n")
+                break
+    # ===================================================================
+    
     # Handle Amharic-specific preprocessing - ROBUST IMPLEMENTATION
     # Accept both 'am' and 'amh' for G2P
     amharic_g2p_enabled = use_amharic_g2p and language in ["am", "amh", "en"]
@@ -288,12 +317,28 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     )
     DATASETS_CONFIG_LIST = [config_dataset]
     
-    # Use extended vocabulary if available (Amharic G2P mode)
-    tokenizer_file_to_use = extended_vocab_path if extended_vocab_path else TOKENIZER_FILE
-    if extended_vocab_path:
-        print(f" > Using EXTENDED vocabulary for training: {tokenizer_file_to_use}")
+    # Use extended vocabulary with priority order:
+    # 1. Pre-existing extended vocab (auto-detected from ready/ folder)
+    # 2. Newly created extended vocab (G2P mode)
+    # 3. Standard vocabulary (default)
+    tokenizer_file_to_use = pre_existing_extended_vocab if pre_existing_extended_vocab else (extended_vocab_path if extended_vocab_path else TOKENIZER_FILE)
+    
+    print(f"\n{'='*70}")
+    print("📚 VOCABULARY SELECTION")
+    print(f"{'='*70}")
+    if pre_existing_extended_vocab:
+        print(f" > ✅ Using AUTO-DETECTED extended vocabulary")
+        print(f" > File: {os.path.basename(tokenizer_file_to_use)}")
+        print(f" > Mode: BPE-only with Ethiopic characters")
+    elif extended_vocab_path:
+        print(f" > ✅ Using NEWLY CREATED extended vocabulary")
+        print(f" > File: {os.path.basename(tokenizer_file_to_use)}")
+        print(f" > Mode: G2P with extended tokens")
     else:
-        print(f" > Using standard vocabulary for training: {tokenizer_file_to_use}")
+        print(f" > Using STANDARD vocabulary")
+        print(f" > File: {os.path.basename(tokenizer_file_to_use)}")
+        print(f" > Mode: Standard English BPE")
+    print(f"{'='*70}\n")
     
     # init args and config
     model_args = GPTArgs(

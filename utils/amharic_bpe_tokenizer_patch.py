@@ -137,7 +137,10 @@ def apply_global_amharic_bpe_patch():
                 In true BPE-only mode, Ethiopic characters will initially be UNK tokens.
                 This is EXPECTED - the model learns to associate these character patterns
                 with audio during training. The UNK assertion is too strict for new scripts.
+                
+                CRITICAL: Must return torch.Tensor, not list (dataset expects .shape attribute)
                 """
+                import torch
                 try:
                     base_lang = lang.split('-')[0].lower() if isinstance(lang, str) else str(lang).lower()
                 except Exception:
@@ -146,6 +149,9 @@ def apply_global_amharic_bpe_patch():
                 # For Amharic in BPE-only mode, skip UNK assertion
                 if base_lang in ('am', 'amh'):
                     tokens = self.tokenizer.encode(text, lang)
+                    # Convert list to tensor (required by dataset.__getitem__ line 173)
+                    if isinstance(tokens, list):
+                        return torch.LongTensor(tokens)
                     return tokens
                 
                 # For other languages, use original strict check

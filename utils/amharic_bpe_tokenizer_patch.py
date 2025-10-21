@@ -150,8 +150,9 @@ def apply_global_amharic_bpe_patch():
                 if base_lang in ('am', 'amh'):
                     tokens = self.tokenizer.encode(text, lang)
                     # Convert list to tensor (required by dataset.__getitem__ line 173)
+                    # MUST be IntTensor (int32) not LongTensor - collate_fn expects dtype=int
                     if isinstance(tokens, list):
-                        return torch.LongTensor(tokens)
+                        return torch.IntTensor(tokens)
                     return tokens
                 
                 # For other languages, use original strict check

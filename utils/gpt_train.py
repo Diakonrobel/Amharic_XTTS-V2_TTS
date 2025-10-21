@@ -19,6 +19,13 @@ from TTS.tts.layers.xtts.trainer.gpt_trainer import GPTArgs, GPTTrainer, GPTTrai
 from TTS.utils.manage import ModelManager
 import shutil
 
+# Apply global Amharic BPE tokenizer patch BEFORE any model initialization
+try:
+    from utils.amharic_bpe_tokenizer_patch import apply_global_amharic_bpe_patch
+    apply_global_amharic_bpe_patch()
+except Exception as e:
+    print(f" > Warning: Could not apply Amharic BPE patch: {e}")
+
 # Import training optimizations
 try:
     from utils.training_optimizations import TrainingOptimizer, UnslothStyleOptimizations

@@ -33,6 +33,13 @@ from faster_whisper import WhisperModel
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import Xtts
 
+# Apply global Amharic BPE tokenizer patch for BPE-only training
+try:
+    from utils.amharic_bpe_tokenizer_patch import apply_global_amharic_bpe_patch
+    apply_global_amharic_bpe_patch()
+except Exception as e:
+    print(f"Warning: Could not apply Amharic BPE patch: {e}")
+
 import requests
 from utils.lang_norm import canonical_lang, is_amharic
 try:

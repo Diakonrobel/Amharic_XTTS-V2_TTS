@@ -339,6 +339,19 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         print(f" > File: {os.path.basename(tokenizer_file_to_use)}")
         print(f" > Mode: Standard English BPE")
     print(f"{'='*70}\n")
+
+    # Ensure the vocab used for training is what inference will load.
+    # Always place the final tokenizer file at ready/vocab.json, overriding any earlier copy.
+    try:
+        final_ready_vocab = os.path.join(READY_MODEL_PATH, "vocab.json")
+        if os.path.abspath(tokenizer_file_to_use) != os.path.abspath(final_ready_vocab):
+            import shutil as _shutil
+            _shutil.copy(tokenizer_file_to_use, final_ready_vocab)
+            print(f" > ✅ Copied training tokenizer to ready/: {final_ready_vocab}")
+        # Update references so downstream code and return value use the ready path
+        tokenizer_file_to_use = final_ready_vocab
+    except Exception as _e:
+        print(f" > ⚠️  Warning: Could not synchronize tokenizer to ready/: {_e}")
     
     # init args and config
     model_args = GPTArgs(
@@ -1100,4 +1113,4 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     del model, trainer, train_samples, eval_samples
     gc.collect()
 
-    return XTTS_SPEAKER_FILE,XTTS_CONFIG_FILE, XTTS_CHECKPOINT, TOKENIZER_FILE, trainer_out_path, speaker_ref
+    return XTTS_SPEAKER_FILE,XTTS_CONFIG_FILE, XTTS_CHECKPOINT, tokenizer_file_to_use, trainer_out_path, speaker_ref

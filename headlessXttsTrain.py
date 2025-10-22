@@ -287,7 +287,7 @@ def preprocess_dataset_headless(audio_file_path, language, whisper_model_name, d
     return "Dataset Processed Successfully!", str(train_meta), str(eval_meta)
 
 
-def train_model_headless(language, train_csv_path, eval_csv_path, num_epochs, batch_size, grad_acumm, output_path_base, max_audio_length_sec, version="v2.0.2", custom_model="", use_g2p=False, g2p_backend="transphone"):
+def train_model_headless(language, train_csv_path, eval_csv_path, num_epochs, batch_size, grad_acumm, output_path_base, max_audio_length_sec, version="v2.0.2", custom_model="", use_g2p=False, g2p_backend="transphone", enable_sdpa=False, enable_grad_checkpoint=False, amp_mode="off", prefer_ema=True):
     """Headless version of train_model."""
     clear_gpu_cache()
     # Canonicalize language for training (ensure 'amh')
@@ -333,43 +333,53 @@ def train_model_headless(language, train_csv_path, eval_csv_path, num_epochs, ba
         max_audio_length_frames = int(max_audio_length_sec * 22050)
         print(f"Max audio length in frames: {max_audio_length_frames}")
 
+        # Determine AMP usage (metadata only; core trainer remains FP32 unless supported)
+        enable_mixed_precision = str(amp_mode).lower() in ("fp16","bf16","auto")
+
         # Call the core training function
         # Pass the FULL paths for train_csv and eval_csv.
         # Pass the BASE output path (e.g., xtts_finetuned_models/Death) resolved to absolute.
         speaker_xtts_path, config_path, _, vocab_file, exp_path, speaker_wav = train_gpt(
-            custom_model=custom_model, # Path to custom model or ""
-            version=version,           # Base model version
+            custom_model=custom_model,  # Path to custom model or ""
+            version=version,            # Base model version
             language=language,
             num_epochs=num_epochs,
             batch_size=batch_size,
             grad_acumm=grad_acumm,
-            train_csv=train_csv_full_path,  # Pass FULL absolute path
-            eval_csv=eval_csv_full_path,    # Pass FULL absolute path
-            output_path=str(output_path_base.resolve()), # Base directory for 'run' and 'ready' folders
+            train_csv=train_csv_full_path,   # FULL absolute path
+            eval_csv=eval_csv_full_path,     # FULL absolute path
+            output_path=str(output_path_base.resolve()),  # Base directory
             max_audio_length=max_audio_length_frames,
-            use_amharic_g2p=bool(use_g2p or language in ["am","amh"])  # Enable G2P for Amharic if requested or language detected
-        )
+            use_amharic_g2p=bool(use_g2p or language in ["am","amh"]),  # Amharic G2P if requested or language detected
+            enable_grad_checkpoint=enable_grad_checkpoint,
+            enable_sdpa=enable_sdpa,
+            enable_mixed_precision=enable_mixed_precision
         )
 
         # --- Find the best model checkpoint from the experiment path ---
         exp_path_obj = Path(exp_path) # exp_path is usually output_path_base/run/training_run_XXX
-        best_model_path = exp_path_obj / "best_model.pth"
-        if not best_model_path.exists():
-             # Fallback: Check for models like epoch_X.pth sorted by modification time
-             pth_files = sorted(list(exp_path_obj.glob("*.pth")), key=os.path.getmtime, reverse=True) # Get latest first
-             if pth_files:
-                 # Exclude optimizer checkpoints if they exist
-                 model_files = [p for p in pth_files if "optimizer" not in p.name.lower() and "dvae" not in p.name.lower()]
-                 if model_files:
-                     best_model_path = model_files[0] # Latest model file
-                     print(f"Warning: 'best_model.pth' not found. Using latest model checkpoint: {best_model_path}")
-                 elif pth_files: # If only optimizer files were found somehow, use the latest of those (less ideal)
-                     best_model_path = pth_files[0]
-                     print(f"Warning: 'best_model.pth' not found and no other model checkpoints. Using latest .pth file: {best_model_path}")
-                 else: # Should not happen if pth_files was not empty, but defensively check
-                     raise FileNotFoundError(f"No model checkpoints (best_model.pth or epoch_*.pth) found in {exp_path_obj}")
-             else:
-                 raise FileNotFoundError(f"No '.pth' model checkpoint found in {exp_path_obj}")
+        best_model_path = None
+        ema_path = exp_path_obj / "best_model_ema.pth"
+        default_best_path = exp_path_obj / "best_model.pth"
+        if prefer_ema and ema_path.exists():
+            best_model_path = ema_path
+            print(f"Using EMA checkpoint: {best_model_path}")
+        elif default_best_path.exists():
+            best_model_path = default_best_path
+            print(f"Using best checkpoint: {best_model_path}")
+        else:
+            # Fallback: latest non-optimizer, non-dvae .pth
+            pth_files = sorted(list(exp_path_obj.glob("*.pth")), key=os.path.getmtime, reverse=True)
+            if pth_files:
+                model_files = [p for p in pth_files if "optimizer" not in p.name.lower() and "dvae" not in p.name.lower()]
+                if model_files:
+                    best_model_path = model_files[0]
+                    print(f"Warning: No best_model found. Using latest checkpoint: {best_model_path}")
+                else:
+                    best_model_path = pth_files[0]
+                    print(f"Warning: Only optimizer/DVAE checkpoints found. Using: {best_model_path}")
+            else:
+                raise FileNotFoundError(f"No '.pth' model checkpoint found in {exp_path_obj}")
 
 
         # Copy the best model to the 'ready' directory as 'unoptimize_model.pth'
@@ -545,9 +555,50 @@ def create_reference_wavs(original_ref_wav_path, output_dir, output_basename):
     if not run_ffmpeg(cmd_24k):
         print("Failed to create 24kHz reference WAV.")
         # Continue anyway
-
     print("--- Reference WAV Creation Completed ---")
     return True
+
+
+# --- Inference-time tokenizer patch for Amharic (mirrors training-time patch) ---
+# Ensures BPE-only Ethiopic text and IPA phonemes both work without errors
+# - Adds 'am' and 'amh' to char_limits
+# - Maps preprocess_text('am'/'amh') to English preprocessing (returns raw text) unless text looks like IPA
+# This prevents KeyError in text splitting and NotImplemented errors in preprocess.
+
+def _patch_tokenizer_for_amharic(tokenizer):
+    try:
+        if not tokenizer:
+            return
+        # Add language codes to char_limits if missing
+        if hasattr(tokenizer, 'char_limits'):
+            if 'am' not in tokenizer.char_limits:
+                tokenizer.char_limits['am'] = 200
+            if 'amh' not in tokenizer.char_limits:
+                tokenizer.char_limits['amh'] = 200
+        # Patch preprocess_text to be Amharic-safe
+        if hasattr(tokenizer, 'preprocess_text'):
+            _original_preprocess = tokenizer.preprocess_text
+            ipa_markers = ('ə', 'ɨ', 'ʔ', 'ʕ', 'ʷ', 'ː', 'ʼ', 'ʃ', 'ʧ', 'ʤ', 'ɲ')
+            def _amharic_safe_preprocess(txt, lang):
+                try:
+                    base_lang = lang.split('-')[0].lower() if isinstance(lang, str) else lang
+                except Exception:
+                    base_lang = lang
+                if base_lang in ('am', 'amh'):
+                    # If looks like IPA already, keep as-is
+                    if txt and any(marker in txt for marker in ipa_markers):
+                        return txt
+                    # Otherwise reuse English preprocessing (returns raw text)
+                    try:
+                        return _original_preprocess(txt, 'en')
+                    except Exception:
+                        return txt
+                return _original_preprocess(txt, lang)
+            tokenizer.preprocess_text = _amharic_safe_preprocess
+    except Exception:
+        # Best-effort patch; ignore failures
+        pass
+
 
 def load_model_headless(xtts_checkpoint, xtts_config, xtts_vocab, xtts_speaker):
     """Headless version of load_model."""
@@ -576,6 +627,12 @@ def load_model_headless(xtts_checkpoint, xtts_config, xtts_vocab, xtts_speaker):
         print("Initializing XTTS model from configuration...")
         XTTS_MODEL = Xtts.init_from_config(config)
 
+        # Patch tokenizer for Amharic at inference time (BPE-only and G2P-safe)
+        try:
+            _patch_tokenizer_for_amharic(getattr(XTTS_MODEL, 'tokenizer', None))
+        except Exception as e:
+            print(f"Warning: Could not patch tokenizer for Amharic: {e}")
+
         print("Loading checkpoint and speaker data...")
         XTTS_MODEL.load_checkpoint(
              config,
@@ -600,7 +657,7 @@ def load_model_headless(xtts_checkpoint, xtts_config, xtts_vocab, xtts_speaker):
         return f"Model loading failed: {e}"
 
 
-def run_tts_headless(lang, tts_text, speaker_audio_file, output_wav_path, temperature=0.75, length_penalty=1.0, repetition_penalty=5.0, top_k=50, top_p=0.85, sentence_split=True):
+def run_tts_headless(lang, tts_text, speaker_audio_file, output_wav_path, temperature=0.75, length_penalty=1.0, repetition_penalty=5.0, top_k=50, top_p=0.85, sentence_split=True, streaming=False, speed=1.0):
     """Headless version of run_tts."""
     # Canonicalize language for inference (ensure 'amh')
     lang = canonical_lang(lang)
@@ -609,7 +666,7 @@ def run_tts_headless(lang, tts_text, speaker_audio_file, output_wav_path, temper
     print(f"Text: '{tts_text}'")
     print(f"Reference Speaker WAV: {speaker_audio_file}")
     print(f"Output Path: {output_wav_path}")
-    print(f"Settings: Temp={temperature}, LenPenalty={length_penalty}, RepPenalty={repetition_penalty}, TopK={top_k}, TopP={top_p}, Split={sentence_split}")
+    print(f"Settings: Temp={temperature}, LenPenalty={length_penalty}, RepPenalty={repetition_penalty}, TopK={top_k}, TopP={top_p}, Split={sentence_split}, Streaming={streaming}, Speed={speed}")
 
     if XTTS_MODEL is None:
         print("Error: Model is not loaded. Cannot run TTS.")
@@ -658,34 +715,60 @@ def run_tts_headless(lang, tts_text, speaker_audio_file, output_wav_path, temper
 
         print("Conditioning latents obtained.")
 
-        print("Running TTS inference...")
-        # Ensure inference parameters match the model's expected signature
-        out = XTTS_MODEL.inference(
-            text=tts_text,
-            language=lang,
-            gpt_cond_latent=gpt_cond_latent,
-            speaker_embedding=speaker_embedding,
-            temperature=temperature,
-            length_penalty=length_penalty,
-            repetition_penalty=float(repetition_penalty),
-            top_k=top_k,
-            top_p=top_p,
-            enable_text_splitting=sentence_split
-            # Add other potential args like `speed` if supported/needed by your XTTS version
-        )
-        print("Inference completed.")
-
-        print(f"Saving generated audio to {output_wav_path}...")
-        # Ensure output is tensor and correct shape before saving
-        if isinstance(out["wav"], (list, np.ndarray)):
-            wav_tensor = torch.tensor(out["wav"]).unsqueeze(0)
-        elif isinstance(out["wav"], torch.Tensor):
-            # Ensure it has batch and channel dims if needed, though torchaudio usually handles [samples] or [batch, samples]
-            wav_tensor = out["wav"] if out["wav"].dim() > 1 else out["wav"].unsqueeze(0)
+        if streaming:
+            print("Running streaming TTS inference...")
+            chunks = XTTS_MODEL.inference_stream(
+                text=tts_text,
+                language=lang,
+                gpt_cond_latent=gpt_cond_latent,
+                speaker_embedding=speaker_embedding,
+                temperature=temperature,
+                length_penalty=length_penalty,
+                repetition_penalty=float(repetition_penalty),
+                top_k=top_k,
+                top_p=top_p,
+                enable_text_splitting=sentence_split,
+                speed=speed
+            )
+            wav_chunks = []
+            for chunk in chunks:
+                # chunk is [samples] tensor; move to CPU
+                if isinstance(chunk, torch.Tensor):
+                    wav_chunks.append(chunk.detach().cpu())
+                else:
+                    wav_chunks.append(torch.tensor(chunk))
+            if not wav_chunks:
+                raise RuntimeError("Streaming inference produced no audio chunks")
+            wav = torch.cat(wav_chunks, dim=0).unsqueeze(0)
+            torchaudio.save(str(output_wav_path), wav, 24000)
+            print("Streaming inference completed.")
         else:
-            raise TypeError(f"Unexpected type for output waveform: {type(out['wav'])}")
+            print("Running TTS inference...")
+            # Ensure inference parameters match the model's expected signature
+            out = XTTS_MODEL.inference(
+                text=tts_text,
+                language=lang,
+                gpt_cond_latent=gpt_cond_latent,
+                speaker_embedding=speaker_embedding,
+                temperature=temperature,
+                length_penalty=length_penalty,
+                repetition_penalty=float(repetition_penalty),
+                top_k=top_k,
+                top_p=top_p,
+                enable_text_splitting=sentence_split
+            )
+            print("Inference completed.")
 
-        torchaudio.save(str(output_wav_path), wav_tensor.cpu(), 24000) # XTTS output is 24kHz, ensure tensor is on CPU
+            print(f"Saving generated audio to {output_wav_path}...")
+            # Ensure output is tensor and correct shape before saving
+            if isinstance(out["wav"], (list, np.ndarray)):
+                wav_tensor = torch.tensor(out["wav"]).unsqueeze(0)
+            elif isinstance(out["wav"], torch.Tensor):
+                wav_tensor = out["wav"] if out["wav"].dim() > 1 else out["wav"].unsqueeze(0)
+            else:
+                raise TypeError(f"Unexpected type for output waveform: {type(out['wav'])}")
+
+            torchaudio.save(str(output_wav_path), wav_tensor.cpu(), 24000) # XTTS output is 24kHz
 
         print(f"--- Step 4: Example TTS Generation Completed ---")
         return "Speech generated successfully!", str(output_wav_path)
@@ -739,8 +822,18 @@ def main():
     parser.add_argument("--top_p", type=float, default=0.85, help="TTS inference top P.")
     parser.add_argument("--no_sentence_split", action="store_true", help="Disable sentence splitting during TTS inference.")
 
+    # Optimization/Training toggles
+    parser.add_argument("--amp", type=str, choices=["off","fp16","bf16","auto"], default="off", help="Mixed precision mode for training (metadata only; training remains FP32 unless enabled internally).")
+    parser.add_argument("--enable_sdpa", action="store_true", help="Enable PyTorch SDPA fast attention during training.")
+    parser.add_argument("--enable_grad_checkpoint", action="store_true", help="Enable gradient checkpointing during training.")
+    parser.add_argument("--prefer_ema", action="store_true", help="Prefer EMA checkpoint if available when selecting best model.")
 
-args = parser.parse_args()
+    # Inference options
+    parser.add_argument("--streaming", action="store_true", help="Use streaming inference and stitch chunks.")
+    parser.add_argument("--speed", type=float, default=1.0, help="Streaming inference speed scale (1.0 = normal).")
+
+
+    args = parser.parse_args()
     
     # Canonicalize primary language early (keeps youtube_transcript_lang unchanged)
     args.lang = canonical_lang(args.lang)
@@ -978,7 +1071,11 @@ args = parser.parse_args()
              version=args.xtts_base_version,
              custom_model=args.custom_model,
              use_g2p=args.use_g2p,
-             g2p_backend=args.g2p_backend
+             g2p_backend=args.g2p_backend,
+             enable_sdpa=args.enable_sdpa,
+             enable_grad_checkpoint=args.enable_grad_checkpoint,
+             amp_mode=args.amp,
+             prefer_ema=args.prefer_ema
         )
         if "failed" in status.lower() or "error" in status.lower():
              print(f"Error during training: {status}")
@@ -1041,7 +1138,9 @@ args = parser.parse_args()
             repetition_penalty=args.repetition_penalty,
             top_k=args.top_k,
             top_p=args.top_p,
-            sentence_split=not args.no_sentence_split
+            sentence_split=not args.no_sentence_split,
+            streaming=args.streaming,
+            speed=args.speed
         )
         if "failed" in status.lower() or "error" in status.lower():
             print(f"Error generating example TTS: {status}")

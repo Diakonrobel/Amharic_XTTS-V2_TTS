@@ -377,13 +377,14 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
             XTTS_MODEL.tokenizer.char_limits['amh'] = 200  # Amharic (ISO 639-3)
             print(" > ✅ Patched tokenizer to support 'amh' language code")
 
-        # Patch tokenizer preprocessing to protect IPA for Amharic phoneme mode
+        # Patch tokenizer preprocessing to match training configuration
         try:
             if hasattr(XTTS_MODEL.tokenizer, 'preprocess_text'):
                 _orig_preprocess = XTTS_MODEL.tokenizer.preprocess_text
 
-                def _preprocess_text_ipa_safe(txt, lang):
-                    # Normalize to base code without region (e.g., zh-cn -> zh)
+                def _preprocess_text_training_aware(txt, lang):
+                    """Preprocessing that matches training configuration."""
+                    # Normalize to base code without region
                     try:
                         base_lang = lang.split('-')[0].lower() if isinstance(lang, str) else lang
                     except Exception:
@@ -392,27 +393,30 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
                     # IPA markers to detect phoneme strings
                     ipa_markers = ('ə', 'ɨ', 'ʔ', 'ʕ', 'ʷ', 'ː', 'ʼ', 'ʃ', 'ʧ', 'ʤ', 'ɲ')
 
-                    # Treat Amharic codes ('am','amh') and 'en' specially
+                    # For ALL processing of Amharic/English, use 'en' preprocessing
+                    # This matches the training configuration for BPE-only mode
                     if base_lang in ('am', 'amh', 'en'):
-                        # If looks like IPA, return unchanged (already phonemized)
+                        # If text contains IPA, it's already processed - return as-is
                         try:
                             if txt and any(marker in txt for marker in ipa_markers):
                                 return txt
                         except Exception:
                             pass
-                        # Fallback: use English cleaner to avoid NotImplementedError for 'amh'/'am'
+                        
+                        # For raw text (BPE-only mode), use English cleaner
+                        # This preserves Ethiopic characters for BPE tokenization
                         try:
                             return _orig_preprocess(txt, 'en')
                         except Exception:
                             return txt
 
-                    # Default behavior for all other cases
+                    # Default behavior for all other languages
                     return _orig_preprocess(txt, lang)
 
-                XTTS_MODEL.tokenizer.preprocess_text = _preprocess_text_ipa_safe
-                print(" > ✅ Patched tokenizer preprocessing to preserve IPA (for 'am' and phoneme 'en')")
+                XTTS_MODEL.tokenizer.preprocess_text = _preprocess_text_training_aware
+                print(" > ✅ Patched tokenizer to match training configuration (BPE-only compatible)")
         except Exception as e:
-            print(f" > ⚠️ Could not patch tokenizer preprocess_text IPA protection: {e}")
+            print(f" > ⚠️ Could not patch tokenizer preprocess_text: {e}")
 
     print("Model Loaded!")
     return "Model Loaded!"
@@ -424,9 +428,30 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
     # Canonicalize language early (ensures 'amh')
     lang = normalize_xtts_lang(lang)
 
+    # ===================================================================
+    # CRITICAL FIX: Check if model was trained with G2P or BPE-only
+    # ===================================================================
+    # Read training_meta.json to determine training mode
+    model_trained_with_g2p = False
+    try:
+        from pathlib import Path
+        import json
+        if speaker_audio_file:
+            ready_dir = Path(speaker_audio_file).parent
+            meta_path = ready_dir / "training_meta.json"
+            if meta_path.exists():
+                with open(meta_path, 'r', encoding='utf-8') as f:
+                    meta = json.load(f)
+                    amharic_meta = meta.get('amharic', {})
+                    model_trained_with_g2p = amharic_meta.get('g2p_training_enabled', False)
+                    print(f" > Model training mode detected: {'G2P' if model_trained_with_g2p else 'BPE-only'}")
+    except Exception as e:
+        print(f" > Could not detect training mode: {e}")
+    
     # Apply G2P preprocessing if enabled for Amharic text
+    # BUT ONLY if model was trained with G2P!
     g2p_active = False
-    if use_g2p_inference and lang in ["am", "amh"]:
+    if use_g2p_inference and lang in ["am", "amh"] and model_trained_with_g2p:
         try:
             # Choose backend: UI prefer, otherwise training meta if available, else transphone
             resolved_backend = g2p_backend_infer
@@ -488,22 +513,36 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
             print(f" > ❌ Error: G2P preprocessing failed: {e}")
             print(f" > 🔄 Falling back to original text")
             print(f" > 💡 Tip: For best results, install Transphone: pip install transphone")
-
-# Normalize language code for XTTS (already canonicalized above)
-    lang_norm = normalize_xtts_lang(lang)
     
-    # FIXED: Don't override Amharic to English for G2P
-    # This was causing the pronunciation issues by making the model
-    # interpret Amharic phonemes as English
-    if g2p_active:
-        print(f" > Using language: {lang_norm} with phoneme mode")
-    elif lang != lang_norm:
-        print(f" > Language normalization: {lang} → {lang_norm}")
+    # Critical warning if G2P requested but model is BPE-only
+    if use_g2p_inference and lang in ["am", "amh"] and not model_trained_with_g2p:
+        print(f" > ⚠️  WARNING: G2P requested but model was trained BPE-only!")
+        print(f" > Skipping G2P to match training configuration")
+        print(f" > For best results, disable G2P in inference UI")    # ===================================================================
+    # CRITICAL FIX: Match inference language to training configuration
+    # ===================================================================
+    # For BPE-only trained models, must use 'en' to match training tokenizer
+    # For G2P trained models, use 'am' with phoneme text
+    
+    if lang in ["am", "amh"]:
+        if model_trained_with_g2p and g2p_active:
+            # G2P mode: phoneme text with 'en' language (matches training)
+            _inference_lang = 'en'
+            print(f" > Inference mode: G2P (phonemes + 'en' language code)")
+        elif not model_trained_with_g2p:
+            # BPE-only mode: raw Ethiopic with 'en' language (matches training)
+            _inference_lang = 'en'
+            print(f" > Inference mode: BPE-only (raw Ethiopic + 'en' language code)")
+            print(f" > This matches training configuration for correct pronunciation")
+        else:
+            # Fallback for edge cases
+            _inference_lang = 'am'
+            print(f" > Inference mode: Standard Amharic")
     else:
-        print(f" > Using language: {lang_norm}")
-
-    # Use 'am' for XTTS inference API when Amharic selected to avoid upstream NotImplementedError
-    _inference_lang = 'am' if lang_norm in ('am', 'amh') else lang_norm
+        # Non-Amharic languages
+        lang_norm = normalize_xtts_lang(lang)
+        _inference_lang = lang_norm
+        print(f" > Using language: {_inference_lang}")
 
     # Pass audio_path as list (XTTS API expects list)
     gpt_cond_latent, speaker_embedding = XTTS_MODEL.get_conditioning_latents(

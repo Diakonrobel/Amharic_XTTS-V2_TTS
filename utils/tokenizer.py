@@ -671,12 +671,13 @@ class VoiceBpeTokenizer:
                 txt = korean_transliterate(txt)
         elif lang == "ja":
             txt = japanese_cleaners(txt, self.katsu)
-        elif lang == "amh":
+        elif lang in ("am", "amh"):
             # Amharic preprocessing
             try:
                 from amharic_tts.preprocessing import normalize_amharic_text
                 txt = normalize_amharic_text(txt)
-                txt = multilingual_cleaners(txt, lang)
+                # Use 'amh' tag for cleaners to avoid surprises
+                txt = multilingual_cleaners(txt, "amh")
             except ImportError:
                 txt = basic_cleaners(txt)
         elif lang == "hi":

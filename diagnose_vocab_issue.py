@@ -22,17 +22,33 @@ vocab_extended = ready_dir / "vocab_extended_amharic.json"
 vocab_base = ready_dir / "vocab.json"
 
 print("\n1. VOCABULARY FILES:")
+def _count_tokens(tokenizer_json):
+    try:
+        mv = tokenizer_json.get('model', {}).get('vocab', {})
+        if isinstance(mv, dict):
+            base = len(mv)
+        elif isinstance(mv, list):
+            base = len(mv)
+        else:
+            base = 0
+        added = len(tokenizer_json.get('added_tokens', []))
+        return base + added, base, added
+    except Exception:
+        return 0, 0, 0
+
 if vocab_extended.exists():
     with open(vocab_extended, 'r', encoding='utf-8') as f:
         vocab_ext = json.load(f)
-    print(f"   ✅ Extended vocab found: {len(vocab_ext)} tokens")
+    total, base, added = _count_tokens(vocab_ext)
+    print(f"   ✅ Extended vocab found: {total} tokens (base={base}, added={added})")
 else:
     print(f"   ❌ Extended vocab NOT found at {vocab_extended}")
 
 if vocab_base.exists():
     with open(vocab_base, 'r', encoding='utf-8') as f:
         vocab_b = json.load(f)
-    print(f"   ✅ Base vocab found: {len(vocab_b)} tokens")
+    total_b, base_b, added_b = _count_tokens(vocab_b)
+    print(f"   ✅ Base vocab found: {total_b} tokens (base={base_b}, added={added_b})")
 else:
     print(f"   ⚠️  Base vocab not found")
 

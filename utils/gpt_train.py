@@ -306,6 +306,28 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
             import traceback
             traceback.print_exc()
     
+    # If BPE-only mode for Amharic, still extend vocab with Ethiopic chars
+    if (not amharic_g2p_enabled) and (language in ["am", "amh"]) and (pre_existing_extended_vocab is None):
+        try:
+            print(" > Amharic detected without G2P: creating minimal extended vocab (Ethiopic chars)...")
+            from utils.vocab_extension import extend_xtts_vocab_for_amharic
+            minimal_output = os.path.join(READY_MODEL_PATH, "vocab_extended_amharic.json")
+            _v = extend_xtts_vocab_for_amharic(
+                original_vocab_path=TOKENIZER_FILE,
+                output_vocab_path=minimal_output,
+                dataset_csv_path=train_csv,
+                include_ethiopic_chars=True,
+                include_ipa_phonemes=False,
+                include_subword_units=False,
+                include_dataset_analysis=False,
+            )
+            extended_vocab_path = minimal_output
+            print(" > ✅ Minimal extended vocab ready (BPE-only training)")
+        except Exception as e:
+            print(f" > ⚠️  Could not create minimal extended vocab: {e}")
+            import traceback as _tb
+            _tb.print_exc()
+    
     # Create dataset config with effective language
     config_dataset = BaseDatasetConfig(
         formatter="coqui",

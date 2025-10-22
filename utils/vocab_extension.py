@@ -141,13 +141,8 @@ def analyze_dataset_for_tokens(
 
 def load_xtts_vocab(vocab_path: str) -> Dict:
     """
-    Load XTTS vocab.json file
-    
-    Args:
-        vocab_path: Path to vocab.json
-        
-    Returns:
-        Vocabulary dictionary
+    Load XTTS vocab.json (Hugging Face Tokenizers JSON) and normalize schema.
+    Ensures model.vocab is a dict mapping token -> id.
     """
     logger.info(f"Loading XTTS vocabulary from: {vocab_path}")
     
@@ -155,10 +150,24 @@ def load_xtts_vocab(vocab_path: str) -> Dict:
         raise FileNotFoundError(f"Vocabulary file not found: {vocab_path}")
     
     with open(vocab_path, 'r', encoding='utf-8') as f:
-        # XTTS vocab.json is a tokenizers JSON format
         vocab_data = json.load(f)
     
-    logger.info(f"Loaded vocabulary with {len(vocab_data.get('model', {}).get('vocab', {}))} tokens")
+    # Normalize schema: some tokenizers store vocab as list; convert to dict
+    model = vocab_data.get('model', {})
+    vocab = model.get('vocab')
+    if vocab is None:
+        raise ValueError("Invalid vocab.json format: missing model.vocab")
+    
+    if isinstance(vocab, list):
+        # Convert list of tokens to dict token->id
+        logger.info("Normalizing vocab: converting list -> dict mapping")
+        model['vocab'] = {tok: idx for idx, tok in enumerate(vocab)}
+        vocab_data['model'] = model
+    elif not isinstance(vocab, dict):
+        raise ValueError(f"Unsupported model.vocab type: {type(vocab)}")
+    
+    normalized_size = len(vocab_data['model']['vocab'])
+    logger.info(f"Loaded vocabulary (normalized) with {normalized_size} base tokens")
     return vocab_data
 
 
@@ -199,7 +208,12 @@ def extend_xtts_vocab_for_amharic(
     
     vocab = vocab_data['model']['vocab']
     original_size = len(vocab)
-    next_id = max(vocab.values()) + 1
+    # Determine next id robustly
+    try:
+        next_id = max(int(i) for i in vocab.values()) + 1
+    except Exception:
+        # Fallback if ids are not numeric or empty
+        next_id = original_size
     
     logger.info(f"Original vocabulary size: {original_size}")
     logger.info(f"Starting new token ID: {next_id}")
@@ -267,6 +281,12 @@ def extend_xtts_vocab_for_amharic(
     
     with open(output_vocab_path, 'w', encoding='utf-8') as f:
         json.dump(vocab_data, f, ensure_ascii=False, indent=2)
+    
+    # Quick integrity check: ensure model.vocab is dict and contains Ethiopic
+    sanity_ok = isinstance(vocab_data.get('model', {}).get('vocab', {}), dict)
+    sample_chars = ['ሀ', 'ሁ', 'ለ', 'ሐ', 'መ', 'ዐ']
+    present = sum(1 for ch in sample_chars if ch in vocab_data['model']['vocab'])
+    logger.info(f"Sanity check: model.vocab is dict={sanity_ok}, Ethiopic samples present={present}/{len(sample_chars)}")
     
     logger.info("✅ Vocabulary extension complete!")
     logger.info("=" * 80)

@@ -78,7 +78,13 @@ if checkpoint_path.exists():
         print(f"   Checkpoint vocab size: {vocab_size}")
         
         if vocab_extended.exists():
-            expected_size = len(vocab_ext)
+            # Use robust token count (model.vocab + added_tokens)
+            def _count_tokens(tok_json):
+                mv = tok_json.get('model', {}).get('vocab', {})
+                base = len(mv) if isinstance(mv, (dict, list)) else 0
+                added = len(tok_json.get('added_tokens', []))
+                return base + added
+            expected_size = _count_tokens(vocab_ext)
             if vocab_size == expected_size:
                 print(f"   ✅ MATCH: Checkpoint has extended vocab ({vocab_size} tokens)")
             else:

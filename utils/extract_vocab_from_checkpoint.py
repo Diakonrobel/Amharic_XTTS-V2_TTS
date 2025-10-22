@@ -31,25 +31,61 @@ def extract_vocab_from_checkpoint(checkpoint_path, base_vocab_path, output_path)
     print("🔧 Extended Vocabulary Extraction Tool")
     print("=" * 70)
     
-    # Load checkpoint
+    # Load checkpoint (robust to different layouts)
     print(f"\n📂 Loading checkpoint: {checkpoint_path}")
     try:
-        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-        checkpoint_vocab_size = checkpoint["model"]["gpt.text_embedding.weight"].shape[0]
+        ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+        # Determine model dict
+        if isinstance(ckpt, dict) and "model" in ckpt:
+            model_dict = ckpt["model"]
+        elif isinstance(ckpt, dict) and "state_dict" in ckpt:
+            model_dict = ckpt["state_dict"]
+        else:
+            model_dict = ckpt
+        
+        # Find embedding key across known variants
+        def _find_embedding_key(keys):
+            candidates = []
+            for k in keys:
+                lk = k.lower()
+                if lk.endswith("text_embedding.weight"):
+                    candidates.append((0, k))
+                elif lk.endswith("wte.weight") and ("gpt" in lk or "transformer" in lk):
+                    candidates.append((1, k))
+                elif lk.endswith("embeddings.weight") and ("gpt" in lk or "transformer" in lk):
+                    candidates.append((2, k))
+            return sorted(candidates, key=lambda x: x[0])[0][1] if candidates else None
+        
+        emb_key = _find_embedding_key(list(model_dict.keys()))
+        if emb_key is None:
+            print("   ❌ Could not locate text embedding weight in checkpoint")
+            return False
+        
+        emb_weight = model_dict[emb_key]
+        checkpoint_vocab_size = emb_weight.shape[0]
         print(f"   ✅ Checkpoint loaded")
+        print(f"   🔎 Embedding key: {emb_key}")
         print(f"   📊 Checkpoint vocabulary size: {checkpoint_vocab_size}")
     except Exception as e:
         print(f"   ❌ Failed to load checkpoint: {e}")
         return False
     
-    # Load base vocabulary
+    # Load base vocabulary (normalize schema)
     print(f"\n📂 Loading base vocabulary: {base_vocab_path}")
     try:
         with open(base_vocab_path, 'r', encoding='utf-8') as f:
             base_vocab = json.load(f)
-        base_vocab_size = len(base_vocab['model']['vocab'])
+        mv = base_vocab.get('model', {}).get('vocab', {})
+        if isinstance(mv, list):
+            mv = {tok: idx for idx, tok in enumerate(mv)}
+            base_vocab['model']['vocab'] = mv
+        elif not isinstance(mv, dict):
+            print("   ❌ Unexpected model.vocab type in base vocab")
+            return False
+        base_added = len(base_vocab.get('added_tokens', []))
+        base_vocab_size = len(mv) + base_added
         print(f"   ✅ Base vocabulary loaded")
-        print(f"   📊 Base vocabulary size: {base_vocab_size}")
+        print(f"   📊 Base vocabulary size: {base_vocab_size} (base={len(mv)}, added={base_added})")
     except Exception as e:
         print(f"   ❌ Failed to load base vocabulary: {e}")
         return False
@@ -73,65 +109,58 @@ def extract_vocab_from_checkpoint(checkpoint_path, base_vocab_path, output_path)
     
     # Create extended vocabulary
     print(f"\n🔨 Creating extended vocabulary...")
-    extended_vocab = base_vocab.copy()
+    import copy
+    extended_vocab = copy.deepcopy(base_vocab)
     
     # Get existing vocab dictionary
     vocab_dict = extended_vocab['model']['vocab']
     
-    # Add placeholder tokens for the extended vocabulary
-    # These represent Amharic-specific characters and IPA phonemes
     print(f"   Adding {num_new_tokens} extended tokens...")
+    start_idx = max(int(i) for i in vocab_dict.values()) + 1 if vocab_dict else 0
     
-    # Generate token names for extended vocabulary
-    # These will be used during inference when the model sees Amharic text
-    start_idx = base_vocab_size
+    # Generate Ethiopic character set (comprehensive)
+    ethiopic_chars = []
+    ethiopic_chars += [chr(cp) for cp in range(0x1200, 0x1380)]  # Main
+    ethiopic_chars += [chr(cp) for cp in range(0x1380, 0x13A0)]  # Supplement
+    ethiopic_chars += [chr(cp) for cp in range(0x2D80, 0x2DE0)]  # Extended
+    ethiopic_chars += [chr(cp) for cp in range(0xAB00, 0xAB30)]  # Extended-A
     
-    # Common Amharic/IPA tokens that were likely added during training
+    # IPA symbols commonly used in Amharic G2P
+    ipa_symbols = ['ɨ','ə','ʔ','ʕ','ʃ','ʒ','ʷ','ʼ','ː','ɲ','ŋ','ɾ','ɡ','ʤ','ʧ']
+    
     extended_tokens = []
-    
-    # Ethiopic Unicode range: U+1200 to U+137F
-    ethiopic_start = 0x1200
-    ethiopic_end = 0x137F
-    
-    # Add Ethiopic characters
-    for code in range(ethiopic_start, min(ethiopic_end + 1, ethiopic_start + num_new_tokens)):
-        char = chr(code)
-        if char not in vocab_dict:
-            extended_tokens.append(char)
-    
-    # Add IPA phoneme symbols commonly used in Amharic G2P
-    ipa_symbols = [
-        'ɨ', 'ə', 'ʔ', 'ʕ', 'ʃ', 'ʒ', 'ʷ', 'ʼ', 'ː',
-        'ɲ', 'ŋ', 'ɾ', 'ɡ', 'ʤ', 'ʧ',
-    ]
-    
-    for symbol in ipa_symbols:
-        if symbol not in vocab_dict and len(extended_tokens) < num_new_tokens:
-            extended_tokens.append(symbol)
-    
-    # If we still need more tokens, add numbered placeholders
+    # Prioritize Ethiopic
+    for ch in ethiopic_chars:
+        if ch not in vocab_dict and len(extended_tokens) < num_new_tokens:
+            extended_tokens.append(ch)
+    # Then IPA
+    for sym in ipa_symbols:
+        if sym not in vocab_dict and len(extended_tokens) < num_new_tokens:
+            extended_tokens.append(sym)
+    # Fill remaining
     while len(extended_tokens) < num_new_tokens:
         token_name = f"<ext_{len(extended_tokens)}>"
-        extended_tokens.append(token_name)
+        if token_name not in vocab_dict:
+            extended_tokens.append(token_name)
     
-    # Add tokens to vocabulary
-    for i, token in enumerate(extended_tokens[:num_new_tokens]):
+    # Add tokens to vocabulary with sequential ids starting at start_idx
+    for i, token in enumerate(extended_tokens):
         vocab_dict[token] = start_idx + i
     
     print(f"   ✅ Added {len(extended_tokens[:num_new_tokens])} tokens")
     print(f"   📊 New vocabulary size: {len(vocab_dict)}")
     
-    # Verify size
+    # Verify size and adjust if needed
     if len(vocab_dict) != checkpoint_vocab_size:
         print(f"\n⚠️  Warning: Vocabulary size mismatch!")
         print(f"   Expected: {checkpoint_vocab_size}")
         print(f"   Got: {len(vocab_dict)}")
         print(f"   Adjusting...")
         
-        # Add remaining tokens if needed
         while len(vocab_dict) < checkpoint_vocab_size:
             token_name = f"<pad_{len(vocab_dict)}>"
-            vocab_dict[token_name] = len(vocab_dict)
+            if token_name not in vocab_dict:
+                vocab_dict[token_name] = len(vocab_dict)
     
     # Save extended vocabulary
     print(f"\n💾 Saving extended vocabulary...")

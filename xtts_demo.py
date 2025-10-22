@@ -195,34 +195,35 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
 
                 # Replace layers
                 XTTS_MODEL.gpt.text_embedding = new_text_embedding
-                XTTS_MODEL.gpt.text_head = new_text_head                    # Ensure internal tokenizer is initialized from vocab
+                XTTS_MODEL.gpt.text_head = new_text_head
+                # Ensure internal tokenizer is initialized from vocab
+                try:
+                    if HFTokenizer and hasattr(XTTS_MODEL, 'tokenizer') and getattr(XTTS_MODEL.tokenizer, 'tokenizer', None) is None:
+                        XTTS_MODEL.tokenizer.tokenizer = HFTokenizer.from_file(xtts_vocab)
+                        print(" > ✅ Initialized internal tokenizer from vocab file")
+                except Exception as _e:
+                    print(f" > ⚠️ Could not init internal tokenizer from vocab file: {_e}")
+                    print(f" > 🔄 Attempting to initialize from checkpoint vocab...")
                     try:
-                        if HFTokenizer and hasattr(XTTS_MODEL, 'tokenizer') and getattr(XTTS_MODEL.tokenizer, 'tokenizer', None) is None:
-                            XTTS_MODEL.tokenizer.tokenizer = HFTokenizer.from_file(xtts_vocab)
-                            print(" > ✅ Initialized internal tokenizer from vocab file")
-                    except Exception as _e:
-                        print(f" > ⚠️ Could not init internal tokenizer from vocab file: {_e}")
-                        print(f" > 🔄 Attempting to initialize from checkpoint vocab...")
-                        try:
-                            # Try to extract vocab from checkpoint's state_dict
-                            import json
-                            checkpoint = torch.load(xtts_checkpoint, map_location="cpu", weights_only=False)
-                            # For extended vocab, we need to build a minimal vocab JSON
-                            vocab_size = checkpoint["model"]["gpt.text_embedding.weight"].shape[0]
-                            print(f" > Building minimal vocab with {vocab_size} tokens...")
-                            # Create a simple vocab mapping (minimal but functional)
-                            vocab_dict = {"model": {"vocab": {str(i): i for i in range(vocab_size)}}}
-                            # Save temp vocab and load
-                            import tempfile
-                            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
-                                json.dump(vocab_dict, f)
-                                temp_vocab_path = f.name
-                            XTTS_MODEL.tokenizer.tokenizer = HFTokenizer.from_file(temp_vocab_path)
-                            print(" > ✅ Initialized tokenizer from checkpoint vocab (fallback)")
-                        except Exception as _e2:
-                            print(f" > ❌ Fallback tokenizer init failed: {_e2}")
-                            print(f" > Will use raw BPE encoding without vocab file")
-                    # Ensure gpt_inference compatibility proxy exists and properly initialized
+                        # Try to extract vocab from checkpoint's state_dict
+                        import json
+                        checkpoint = torch.load(xtts_checkpoint, map_location="cpu", weights_only=False)
+                        # For extended vocab, we need to build a minimal vocab JSON
+                        vocab_size = checkpoint["model"]["gpt.text_embedding.weight"].shape[0]
+                        print(f" > Building minimal vocab with {vocab_size} tokens...")
+                        # Create a simple vocab mapping (minimal but functional)
+                        vocab_dict = {"model": {"vocab": {str(i): i for i in range(vocab_size)}}}
+                        # Save temp vocab and load
+                        import tempfile
+                        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+                            json.dump(vocab_dict, f)
+                            temp_vocab_path = f.name
+                        XTTS_MODEL.tokenizer.tokenizer = HFTokenizer.from_file(temp_vocab_path)
+                        print(" > ✅ Initialized tokenizer from checkpoint vocab (fallback)")
+                    except Exception as _e2:
+                        print(f" > ❌ Fallback tokenizer init failed: {_e2}")
+                        print(f" > Will use raw BPE encoding without vocab file")
+                # Ensure gpt_inference compatibility proxy exists and properly initialized
                 try:
                     if hasattr(XTTS_MODEL, 'gpt'):
                         # The gpt module needs init_gpt_for_inference() to be called

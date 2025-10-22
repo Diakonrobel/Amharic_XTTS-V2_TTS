@@ -431,55 +431,71 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
     # ===================================================================
     # CRITICAL FIX: Check if model was trained with G2P or BPE-only
     # ===================================================================
-    # Read training_meta.json to determine training mode
+    # ALWAYS check dataset directly - metadata can be wrong!
     model_trained_with_g2p = False
     try:
         from pathlib import Path
         import json
         if speaker_audio_file:
             ready_dir = Path(speaker_audio_file).parent
-            meta_path = ready_dir / "training_meta.json"
-            if meta_path.exists():
-                with open(meta_path, 'r', encoding='utf-8') as f:
-                    meta = json.load(f)
-                    amharic_meta = meta.get('amharic', {})
-                    model_trained_with_g2p = amharic_meta.get('g2p_training_enabled', False)
-                    
-                    # SMART FALLBACK: If metadata says G2P but no backend specified, likely BPE-only
-                    # This handles cases where metadata was incorrectly written
-                    if model_trained_with_g2p and not amharic_meta.get('g2p_backend'):
-                        print(f" > ⚠️  Metadata inconsistency detected: G2P enabled but no backend specified")
-                        print(f" > Checking vocabulary to determine actual training mode...")
+            
+            # PRIORITY: Check actual dataset text format (most reliable)
+            print(f" > Analyzing dataset to detect training mode...")
+            try:
+                dataset_dir = ready_dir.parent / "dataset"
+                train_csv = dataset_dir / "metadata_train.csv"
+                if train_csv.exists():
+                    import pandas as pd
+                    df = pd.read_csv(train_csv, sep='|', nrows=10)
+                    if len(df) > 0 and 'text' in df.columns:
+                        # Check multiple samples for reliability
+                        ethiopic_count = 0
+                        ipa_count = 0
                         
-                        # Check if dataset contains raw Ethiopic (BPE-only) or phonemes (G2P)
-                        try:
-                            # Read a sample from training metadata CSV to check text format
-                            dataset_dir = ready_dir.parent / "dataset"
-                            train_csv = dataset_dir / "metadata_train.csv"
-                            if train_csv.exists():
-                                import pandas as pd
-                                df = pd.read_csv(train_csv, sep='|', nrows=5)
-                                if len(df) > 0 and 'text' in df.columns:
-                                    sample_text = df.iloc[0]['text']
-                                    # Check for Ethiopic characters (BPE-only) vs IPA (G2P)
-                                    has_ethiopic = any(0x1200 <= ord(c) <= 0x137F for c in sample_text[:100])
-                                    has_ipa = any(c in sample_text for c in ['ə', 'ɨ', 'ʔ', 'ː'])
-                                    
-                                    if has_ethiopic and not has_ipa:
-                                        model_trained_with_g2p = False
-                                        print(f" > ✅ Dataset contains raw Ethiopic → BPE-only mode confirmed")
-                                    elif has_ipa:
-                                        model_trained_with_g2p = True
-                                        print(f" > ✅ Dataset contains IPA phonemes → G2P mode confirmed")
-                        except Exception as e:
-                            print(f" > Could not read dataset: {e}")
-                            # Default to BPE-only if uncertain
+                        for idx, row in df.iterrows():
+                            sample_text = str(row['text'])[:200]
+                            has_ethiopic = any(0x1200 <= ord(c) <= 0x137F for c in sample_text)
+                            has_ipa = any(c in sample_text for c in ['ə', 'ɨ', 'ʔ', 'ː', 'ʼ'])
+                            
+                            if has_ethiopic:
+                                ethiopic_count += 1
+                            if has_ipa:
+                                ipa_count += 1
+                        
+                        print(f" > Dataset analysis: {ethiopic_count}/10 samples have Ethiopic, {ipa_count}/10 have IPA")
+                        
+                        # If majority has Ethiopic and few/no IPA → BPE-only
+                        if ethiopic_count >= 7 and ipa_count <= 2:
                             model_trained_with_g2p = False
-                            print(f" > Defaulting to BPE-only mode (safer assumption)")
-                    
-                    print(f" > Model training mode detected: {'G2P' if model_trained_with_g2p else 'BPE-only'}")
+                            print(f" > ✅ Dataset contains raw Ethiopic → BPE-only mode CONFIRMED")
+                        # If majority has IPA → G2P
+                        elif ipa_count >= 7:
+                            model_trained_with_g2p = True
+                            print(f" > ✅ Dataset contains IPA phonemes → G2P mode CONFIRMED")
+                        else:
+                            # Mixed or unclear - default to BPE-only (safer)
+                            model_trained_with_g2p = False
+                            print(f" > ⚠️  Mixed format detected - defaulting to BPE-only mode")
+                else:
+                    print(f" > ⚠️  Dataset CSV not found - checking metadata fallback...")
+                    # Fall back to metadata
+                    meta_path = ready_dir / "training_meta.json"
+                    if meta_path.exists():
+                        with open(meta_path, 'r', encoding='utf-8') as f:
+                            meta = json.load(f)
+                            amharic_meta = meta.get('amharic', {})
+                            model_trained_with_g2p = amharic_meta.get('g2p_training_enabled', False)
+                            print(f" > Using metadata: {'G2P' if model_trained_with_g2p else 'BPE-only'}")
+            except Exception as e:
+                print(f" > Dataset analysis failed: {e}")
+                # Last resort: assume BPE-only (safest default)
+                model_trained_with_g2p = False
+                print(f" > Defaulting to BPE-only mode")
+            
+            print(f" > 🎯 FINAL MODE: {'G2P' if model_trained_with_g2p else 'BPE-only'}")
     except Exception as e:
-        print(f" > Could not detect training mode: {e}")
+        print(f" > Error in training mode detection: {e}")
+        model_trained_with_g2p = False
     
     # Apply G2P preprocessing if enabled for Amharic text
     # BUT ONLY if model was trained with G2P!

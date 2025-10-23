@@ -374,6 +374,56 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         tokenizer_file_to_use = final_ready_vocab
     except Exception as _e:
         print(f" > ⚠️  Warning: Could not synchronize tokenizer to ready/: {_e}")
+
+    # -------------------------------------------------------------------
+    # PRE-FLIGHT VALIDATION (hard fail if requirements are not met)
+    # Prevents starting fine-tuning with an incompatible tokenizer
+    # -------------------------------------------------------------------
+    try:
+        import json as __json
+        import csv as __csv
+
+        def __count_vocab_tokens(__path: str) -> int:
+            with open(__path, 'r', encoding='utf-8') as __f:
+                __tok = __json.load(__f)
+            __mv = __tok.get('model', {}).get('vocab', {})
+            __base = len(__mv) if isinstance(__mv, (dict, list)) else 0
+            __added = len(__tok.get('added_tokens', []))
+            return __base + __added
+
+        def __csv_has_ethiopic(__csv_path: str, __sample: int = 300) -> bool:
+            __cnt = 0
+            __ethiopic = 0
+            try:
+                with open(__csv_path, 'r', encoding='utf-8') as __f:
+                    __r = __csv.reader(__f, delimiter='|')
+                    for __row in __r:
+                        if len(__row) >= 2:
+                            __txt = str(__row[1])
+                            __cnt += 1
+                            if any(0x1200 <= ord(c) <= 0x137F for c in __txt):
+                                __ethiopic += 1
+                        if __cnt >= __sample:
+                            break
+            except Exception:
+                return False
+            # Consider extended vocab required if >=20% of sampled lines contain Ethiopic
+            return __ethiopic >= max(1, int(0.2 * max(1, __cnt)))
+
+        if str(language).lower() in ["am", "amh"]:
+            __vocab_total = __count_vocab_tokens(tokenizer_file_to_use)
+            __needs_extended = True
+            # Heuristic: decide by dataset content if we need Ethiopic tokens
+            if os.path.exists(train_csv):
+                __needs_extended = __csv_has_ethiopic(train_csv)
+            if __needs_extended and __vocab_total <= 6702:
+                raise RuntimeError(
+                    "Pre-flight check failed: Amharic dataset detected but tokenizer is not extended. "
+                    "Create or select 'ready/vocab_extended_amharic.json' and retry."
+                )
+    except Exception as __preflight_e:
+        print(f" > ❌ Pre-flight validation failed: {__preflight_e}")
+        raise
     
     # init args and config
     model_args = GPTArgs(

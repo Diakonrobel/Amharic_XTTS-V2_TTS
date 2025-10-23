@@ -29,6 +29,13 @@ from utils import audio_slicer
 
 from faster_whisper import WhisperModel # Keep for data processing
 
+# Apply Amharic BPE tokenizer patch BEFORE importing TTS; idempotent
+try:
+    from utils.amharic_bpe_tokenizer_patch import apply_global_amharic_bpe_patch
+    apply_global_amharic_bpe_patch()
+except Exception as e:
+    print(f"Warning: Could not apply Amharic BPE patch: {e}")
+
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import Xtts
 from utils.lang_norm import canonical_lang, to_transcript_code

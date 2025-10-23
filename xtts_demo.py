@@ -40,6 +40,13 @@ from webui import dataset_merger_ui
 
 from faster_whisper import WhisperModel
 
+# Apply Amharic BPE tokenizer patch BEFORE importing TTS; idempotent if called again later
+try:
+    from utils.amharic_bpe_tokenizer_patch import apply_global_amharic_bpe_patch
+    apply_global_amharic_bpe_patch()
+except Exception as e:
+    print(f"Warning: Could not apply Amharic BPE patch: {e}")
+
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import Xtts
 

@@ -549,13 +549,13 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         )
 
     # Handle extended vocabulary - temporarily disable checkpoint loading, then reload manually
-    checkpoint_to_load = None
-    if extended_vocab_path:
+    if pre_existing_extended_vocab or extended_vocab_path:
         print(" > Extended vocabulary detected - will handle checkpoint loading manually...")
         checkpoint_to_load = model_args.xtts_checkpoint
         model_args.xtts_checkpoint = None  # Temporarily disable auto-loading
     
     # Apply training optimizations BEFORE model initialization
+    optimization_status = {}
     optimization_status = {}
     if OPTIMIZATIONS_AVAILABLE and (enable_grad_checkpoint or enable_sdpa or enable_mixed_precision):
         print(" > Configuring training optimizations...")
@@ -665,7 +665,7 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         TrainingOptimizer.print_memory_stats()
     
     # If using extended vocabulary, manually load checkpoint and resize embeddings
-    if extended_vocab_path and checkpoint_to_load:
+    if (pre_existing_extended_vocab or extended_vocab_path) and checkpoint_to_load:
         print(f" > Loading checkpoint manually for vocab expansion: {checkpoint_to_load}")
         try:
             import json

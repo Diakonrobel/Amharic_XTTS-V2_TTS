@@ -1,0 +1,42 @@
+# Requirements for Google Colab
+# Optimized for Colab's pre-installed packages (Python 3.10, torch 2.1.0+cu121, CUDA 12.1)
+#
+# IMPORTANT: Do NOT install torch, torchvision, or torchaudio - they're pre-installed in Colab!
+# This file excludes them to avoid version conflicts.
+
+# Core dependencies
+faster-whisper==1.0.3
+gradio==4.44.1
+spacy==3.7.5
+
+# TTS Engine - using compatible version with Colab's torch
+# Note: Colab has torch 2.1.x, so we use coqui-tts that's compatible
+coqui-tts==0.24.2
+
+# Japanese language support
+cutlet==0.5.0
+fugashi[unidic-lite]==1.4.0
+
+# API and validation
+fastapi==0.103.1
+pydantic==2.3.0
+
+# Advanced dataset processing features
+pysrt>=1.1.2
+yt-dlp>=2024.12.13  # CRITICAL: 2024.12.13+ required for 2025 YouTube bypass
+youtube-transcript-api>=0.6.0
+soundfile>=0.12.1
+packaging>=21.0  # Required for version checking
+
+# Optional: Background music removal (recommended for YouTube datasets)
+# Uncomment if you want to use this feature
+# demucs>=4.0.0
+
+# Note: The following are pre-installed in Colab and should NOT be reinstalled:
+# - torch (2.1.0+cu121)
+# - torchvision (0.16.0+cu121)
+# - torchaudio (2.1.0+cu121)
+# - numpy
+# - pandas
+# - matplotlib
+# - scipy

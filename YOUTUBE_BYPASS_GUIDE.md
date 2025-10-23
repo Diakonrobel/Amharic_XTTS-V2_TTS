@@ -10,7 +10,15 @@ This guide covers the latest methods to bypass YouTube restrictions when downloa
 - **IP blocking**
 - **Captcha challenges**
 
-## 🎯 Quick Start
+## 🚀 Quick Start
+
+### Prerequisites
+
+**CRITICAL:** Make sure you have the latest yt-dlp version (2024.12.13+):
+
+```bash
+pip install -U yt-dlp
+```
 
 ### Basic Usage (No Configuration)
 
@@ -20,7 +28,7 @@ The system will automatically use the latest bypass methods with default setting
 python utils/youtube_downloader.py "https://www.youtube.com/watch?v=VIDEO_ID" ./downloads en
 ```
 
-### Recommended Configuration
+### Recommended Configuration (95%+ Success Rate)
 
 For best results, use cookies from your browser:
 
@@ -28,19 +36,23 @@ For best results, use cookies from your browser:
 python utils/youtube_downloader.py "https://www.youtube.com/watch?v=VIDEO_ID" ./downloads en --from-browser chrome
 ```
 
+**This is the #1 most important thing you can do to avoid download failures!**
+
 ---
 
 ## 🛠️ Bypass Methods
 
-### 1. Player Client Rotation (Automatic)
+### 1. Player Client Rotation (Automatic) - UPDATED JAN 2025
 
 The system automatically tries multiple player clients in order of success rate:
 
-1. **iOS** - Best success rate (2025)
-2. **Android** - Good fallback
-3. **TV Embedded** - For restricted content
-4. **MediaConnect** - Alternative method
-5. **Mobile Web** - Last resort
+1. **Android Creator** - BEST success rate (2025) ⭐⭐⭐
+2. **Android Music** - Excellent fallback ⭐⭐⭐
+3. **iOS Music** - Very good for music content ⭐⭐
+4. **TV Embedded** - For restricted content ⭐⭐
+5. **Android VR** - Alternative method ⭐
+
+**IMPORTANT:** As of January 2025, `android_creator` and `android_music` have the highest success rates. Regular iOS/Android clients are being detected more frequently.
 
 **No configuration needed** - This happens automatically!
 

@@ -12,9 +12,10 @@ torchaudio==2.1.2
 
 # Advanced dataset processing features
 pysrt>=1.1.2
-yt-dlp>=2024.1.0
+yt-dlp>=2024.12.13  # CRITICAL: 2024.12.13+ required for 2025 YouTube bypass
 youtube-transcript-api>=0.6.0
 soundfile>=0.12.1
+packaging>=21.0  # Required for version checking
 
 # Optional: Background music removal (recommended for YouTube datasets)
 # Install with: pip install demucs

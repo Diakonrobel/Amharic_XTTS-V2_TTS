@@ -12,25 +12,29 @@ from pathlib import Path
 from typing import Optional, Tuple, List, Dict
 import yt_dlp
 
-# Rotatable User-Agents (2025 latest versions)
+# Rotatable User-Agents (2025 latest versions - updated Jan 2025)
 USER_AGENTS = [
     # Chrome Windows (latest)
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     # Chrome macOS
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-    # Safari iPhone
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    # Safari iPhone (latest)
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1",
     # Safari iPad
-    "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPad; CPU OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1",
     # Android Chrome
-    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.58 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.6778.135 Mobile Safari/537.36",
     # Firefox Windows
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
     # Edge Windows
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
 ]
 
 DEFAULT_USER_AGENT = USER_AGENTS[0]
+
+# Latest YouTube client versions (updated Jan 2025)
+LATEST_IOS_VERSION = "19.45.4"
+LATEST_ANDROID_VERSION = "19.43.41"
 
 
 def get_random_user_agent() -> str:
@@ -47,19 +51,19 @@ def get_optimal_ytdlp_opts(
     user_agent: Optional[str] = None,
     po_token: Optional[str] = None,
     visitor_data: Optional[str] = None,
-    player_client: str = 'ios',
+    player_client: str = 'android_creator',
 ) -> dict:
     """
     Get optimal yt-dlp options with latest bypass techniques (2025).
     
     Args:
         cookies_path: Path to Netscape cookies file
-        cookies_from_browser: Browser to extract cookies from
+        cookies_from_browser: Browser to extract cookies from (RECOMMENDED)
         proxy: Proxy URL
         user_agent: Custom user agent (random if None)
         po_token: YouTube PO token for authentication bypass
         visitor_data: YouTube visitor data for enhanced authentication
-        player_client: Player client to use (ios, android, tv_embedded, mediaconnect, mweb)
+        player_client: Player client (android_creator, android_music, ios_music, tv_embedded)
         
     Returns:
         Optimized yt-dlp options dictionary
@@ -68,11 +72,11 @@ def get_optimal_ytdlp_opts(
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
-        # Latest bypass: Use iOS/Android clients which have better success rates
+        # Latest bypass: Use creator/music clients which have highest success rates in 2025
         'extractor_args': {
             'youtube': {
                 'player_client': [player_client],
-                'player_skip': ['webpage', 'configs'],
+                'player_skip': ['webpage', 'js', 'configs'],  # Skip all detection points
             }
         },
         # Network options
@@ -117,6 +121,33 @@ def get_optimal_ytdlp_opts(
     return opts
 
 
+def check_ytdlp_version():
+    """
+    Check if yt-dlp version is recent enough for 2025 YouTube bypass.
+    """
+    try:
+        result = subprocess.run(
+            ["python", "-m", "pip", "show", "yt-dlp"],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        version_line = [l for l in result.stdout.split('\n') if l.startswith('Version:')]
+        if version_line:
+            version = version_line[0].split(':')[1].strip()
+            print(f"📦 yt-dlp version: {version}")
+            # Check if version is at least 2024.12.13 (critical YouTube fixes)
+            from packaging import version as pkg_version
+            if pkg_version.parse(version) < pkg_version.parse('2024.12.13'):
+                print("⚠️  WARNING: yt-dlp version is outdated for 2025 YouTube bypass!")
+                print("   Please update: pip install -U yt-dlp")
+                return False
+            return True
+    except Exception as e:
+        print(f"Could not check yt-dlp version: {e}")
+        return None
+
+
 def update_ytdlp():
     """
     Update yt-dlp to the latest version.
@@ -159,22 +190,22 @@ def get_video_info(
     Returns:
         Dictionary with video metadata
     """
-    # Aggressive bypass settings (same as download)
+    # Aggressive bypass settings - 2025 updated clients
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
         'extractor_args': {
             'youtube': {
-                'player_client': ['ios', 'mweb', 'android'],
-                'player_skip': ['configs', 'webpage'],
+                'player_client': ['android_creator', 'android_music', 'ios_music', 'tv_embedded'],
+                'player_skip': ['webpage', 'js', 'configs'],  # Skip all detection points
                 'skip': ['hls', 'dash'],
             }
         },
         'http_headers': {
-            'User-Agent': 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
+            'User-Agent': f'com.google.ios.youtube/{LATEST_IOS_VERSION} (iPhone16,2; U; CPU iOS 18_2 like Mac OS X;)',
             'X-YouTube-Client-Name': '5',
-            'X-YouTube-Client-Version': '19.29.1',
+            'X-YouTube-Client-Version': LATEST_IOS_VERSION,
         },
         'age_limit': None,
     }
@@ -488,18 +519,18 @@ def download_subtitles_robust(
                 'quiet': True,
                 'no_warnings': True,
                 'ignoreerrors': True,
-                # Aggressive bypass settings
+                # Aggressive bypass settings - 2025 updated
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['ios', 'mweb', 'android'],
-                        'player_skip': ['configs', 'webpage'],
+                        'player_client': ['android_creator', 'android_music', 'ios_music', 'tv_embedded'],
+                        'player_skip': ['webpage', 'js', 'configs'],
                         'skip': ['hls', 'dash'],
                     }
                 },
                 'http_headers': {
-                    'User-Agent': 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
+                    'User-Agent': f'com.google.ios.youtube/{LATEST_IOS_VERSION} (iPhone16,2; U; CPU iOS 18_2 like Mac OS X;)',
                     'X-YouTube-Client-Name': '5',
-                    'X-YouTube-Client-Version': '19.29.1',
+                    'X-YouTube-Client-Version': LATEST_IOS_VERSION,
                 },
                 'age_limit': None,
             }
@@ -744,6 +775,9 @@ def download_youtube_video(
     if visitor_data is None:
         visitor_data = os.getenv("YTDLP_VISITOR_DATA")
     
+    # Check yt-dlp version
+    check_ytdlp_version()
+    
     # Auto-update yt-dlp
     if auto_update:
         update_ytdlp()
@@ -781,8 +815,7 @@ def download_youtube_video(
         print(f"Warning: Could not fetch video info: {e}")
         info = {}
     
-    # Aggressive yt-dlp options (works without cookies)
-    # Use iOS client with mobile headers for best bypass success
+    # Aggressive yt-dlp options - 2025 UPDATED with best bypass methods
     ydl_opts = {
         'format': 'bestaudio/best' if audio_only else 'bestvideo+bestaudio/best',
         'outtmpl': str(output_path / '%(title)s.%(ext)s'),
@@ -794,19 +827,19 @@ def download_youtube_video(
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }] if audio_only else [],
-        # Aggressive bypass settings
+        # CRITICAL: Use latest working clients (android_creator has highest success rate)
         'extractor_args': {
             'youtube': {
-                'player_client': ['ios', 'mweb', 'android'],
-                'player_skip': ['configs', 'webpage'],
+                'player_client': ['android_creator', 'android_music', 'ios_music', 'tv_embedded', 'android_vr'],
+                'player_skip': ['webpage', 'js', 'configs'],  # Skip ALL detection points
                 'skip': ['hls', 'dash'],
             }
         },
-        # iOS YouTube app headers
+        # Latest iOS YouTube app headers
         'http_headers': {
-            'User-Agent': 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
+            'User-Agent': f'com.google.ios.youtube/{LATEST_IOS_VERSION} (iPhone16,2; U; CPU iOS 18_2 like Mac OS X;)',
             'X-YouTube-Client-Name': '5',
-            'X-YouTube-Client-Version': '19.29.1',
+            'X-YouTube-Client-Version': LATEST_IOS_VERSION,
         },
         'age_limit': None,
         # Retry logic

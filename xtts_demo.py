@@ -614,7 +614,7 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
     if use_g2p_inference and lang in ["am", "amh"] and not model_trained_with_g2p:
         print(f" > ⚠️  WARNING: G2P requested but model was trained BPE-only!")
         print(f" > Skipping G2P to match training configuration")
-        print(f" > For best results, disable G2P in inference UI")    # ===================================================================
+        print(f" > For best results, disable G2P in inference UI")
     # CRITICAL FIX: Match inference language to training configuration
     # ===================================================================
     # For BPE-only trained models, must use 'en' to match training tokenizer

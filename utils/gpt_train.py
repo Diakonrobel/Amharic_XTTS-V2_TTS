@@ -211,10 +211,35 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
     XTTS_SPEAKER_FILE = NEW_XTTS_SPEAKER_FILE  # speakers_xtts.pth file
 
 
+    # ===================================================================
+    # CHECKPOINT RESUMPTION DETECTION
+    # ===================================================================
+    # Detect if we're resuming from a training checkpoint vs loading a base model
+    is_resuming_training = False
+    
     if custom_model != "":
         if os.path.exists(custom_model) and custom_model.endswith('.pth'):
             XTTS_CHECKPOINT = custom_model
-            print(f" > Loading custom model: {XTTS_CHECKPOINT}")
+            
+            # Check if this is a training checkpoint (has step number) vs base model
+            # Training checkpoints contain: checkpoint_XXXXX.pth or best_model.pth from training runs
+            checkpoint_filename = os.path.basename(custom_model)
+            is_training_checkpoint = (
+                "checkpoint_" in checkpoint_filename or 
+                ("best_model" in checkpoint_filename and "/run/training/" in custom_model.replace("\\", "/"))
+            )
+            
+            if is_training_checkpoint:
+                is_resuming_training = True
+                print(f"\n{'='*70}")
+                print("🔄 RESUMING TRAINING FROM CHECKPOINT")
+                print(f"{'='*70}")
+                print(f" > Checkpoint: {checkpoint_filename}")
+                print(f" > Will restore: model weights, optimizer state, epoch, step")
+                print(f" > Training will continue from where it stopped")
+                print(f"{'='*70}\n")
+            else:
+                print(f" > Loading custom model: {XTTS_CHECKPOINT}")
         else:
             print(" > Error: The specified custom model is not a valid .pth file path.")
 
@@ -552,10 +577,15 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         )
 
     # Handle extended vocabulary - temporarily disable checkpoint loading, then reload manually
-    if pre_existing_extended_vocab or extended_vocab_path:
+    # BUT: If resuming training, let Trainer handle full restoration instead
+    checkpoint_to_load = None
+    if (pre_existing_extended_vocab or extended_vocab_path) and not is_resuming_training:
         print(" > Extended vocabulary detected - will handle checkpoint loading manually...")
         checkpoint_to_load = model_args.xtts_checkpoint
         model_args.xtts_checkpoint = None  # Temporarily disable auto-loading
+    elif is_resuming_training:
+        print(" > Resuming mode: Trainer will handle full checkpoint restoration")
+        checkpoint_to_load = None  # Let Trainer handle it via restore_path
     
     # Apply training optimizations BEFORE model initialization
     optimization_status = {}
@@ -668,7 +698,8 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         TrainingOptimizer.print_memory_stats()
     
     # If using extended vocabulary, manually load checkpoint and resize embeddings
-    if (pre_existing_extended_vocab or extended_vocab_path) and checkpoint_to_load:
+    # SKIP if resuming - Trainer will load everything including trainer state
+    if (pre_existing_extended_vocab or extended_vocab_path) and checkpoint_to_load and not is_resuming_training:
         print(f" > Loading checkpoint manually for vocab expansion: {checkpoint_to_load}")
         try:
             import json
@@ -824,10 +855,21 @@ def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm
         print(f" > Language adaptation: increasing grad_accum_steps {GRAD_ACUMM_STEPS} -> 4 for stabler updates")
         GRAD_ACUMM_STEPS = 4
 
-    # init the trainer and ≡ƒÜÇ
+    # init the trainer and 🏗️
+    # CRITICAL FIX: Set restore_path when resuming to restore trainer state (epoch, step, optimizer)
+    trainer_restore_path = XTTS_CHECKPOINT if is_resuming_training else None
+    
+    if is_resuming_training:
+        print(f"\n{'='*70}")
+        print("🔄 TRAINER CONFIGURATION FOR RESUMPTION")
+        print(f"{'='*70}")
+        print(f" > restore_path: {trainer_restore_path}")
+        print(f" > This will restore: epoch, global_step, optimizer, scheduler")
+        print(f"{'='*70}\n")
+    
     trainer = Trainer(
         TrainerArgs(
-            restore_path=None,  # xtts checkpoint is restored via xtts_checkpoint key so no need of restore it using Trainer restore_path parameter
+            restore_path=trainer_restore_path,  # Restore full trainer state when resuming
             skip_train_epoch=False,
             start_with_eval=START_WITH_EVAL,
             grad_accum_steps=GRAD_ACUMM_STEPS,

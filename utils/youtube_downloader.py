@@ -203,17 +203,16 @@ def get_video_info(
     Returns:
         Dictionary with video metadata
     """
-        # Aggressive bypass settings - using universally supported clients
+        # Use Android clients which bypass nsig extraction
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
         'extractor_args': {
             'youtube': {
-                # Use ios, android, mweb, web - supported across all yt-dlp versions
-                'player_client': ['ios', 'android', 'mweb', 'web'],
+                # Android clients don't require nsig - most reliable
+                'player_client': ['android_creator', 'android', 'ios'],
                 'player_skip': ['webpage', 'configs'],  # Skip detection points
-                'skip': ['hls', 'dash'],
             }
         },
         'http_headers': {
@@ -845,13 +844,12 @@ def download_youtube_video(
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }] if audio_only else [],
-        # Use client strategy based on authentication
+        # Use Android clients which bypass nsig extraction entirely
         'extractor_args': {
             'youtube': {
-                # When using cookies: mweb works best with authentication (per yt-dlp 2024 docs)
-                # Without cookies: tv_simply,tv,web for guest access
-                'player_client': ['mweb', 'tv'] if (cookies_path or cookies_from_browser) else ['tv_simply', 'tv', 'web'],
-                'player_skip': ['webpage'],  # Skip webpage to avoid VISITOR_INFO1_LIVE cookie interference
+                # Android clients don't require nsig - most reliable for downloads
+                'player_client': ['android_creator', 'android', 'ios'],
+                'player_skip': ['webpage'],  # Skip webpage to avoid detection
             }
         },
         # Standard web browser headers

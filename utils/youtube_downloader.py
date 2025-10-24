@@ -774,11 +774,17 @@ def download_youtube_video(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
+    # TEMPORARY WORKAROUND: Disable cookies to force Android clients
+    # yt-dlp 2024.12.23 has broken nsig extraction - cookie clients all fail
+    # Android clients work but don't support cookies
+    print("⚠️  TEMPORARY: Disabling cookies to use Android clients (nsig bypass)")
+    cookies_path = None
+    cookies_from_browser = None
     # Only use env variables if explicitly set (don't force cookies)
-    if cookies_path is None:
-        cookies_path = os.getenv("YTDLP_COOKIES")
-    if cookies_from_browser is None:
-        cookies_from_browser = os.getenv("YTDLP_COOKIES_FROM_BROWSER")
+    # if cookies_path is None:
+    #     cookies_path = os.getenv("YTDLP_COOKIES")
+    # if cookies_from_browser is None:
+    #     cookies_from_browser = os.getenv("YTDLP_COOKIES_FROM_BROWSER")
     if proxy is None:
         proxy = os.getenv("YTDLP_PROXY")
     if user_agent is None:

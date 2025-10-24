@@ -190,15 +190,16 @@ def get_video_info(
     Returns:
         Dictionary with video metadata
     """
-    # Aggressive bypass settings - 2025 updated clients
+        # Aggressive bypass settings - using universally supported clients
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android_creator', 'android_music', 'ios_music', 'tv_embedded'],
-                'player_skip': ['webpage', 'js', 'configs'],  # Skip all detection points
+                # Use ios, android, mweb, web - supported across all yt-dlp versions
+                'player_client': ['ios', 'android', 'mweb', 'web'],
+                'player_skip': ['webpage', 'configs'],  # Skip detection points
                 'skip': ['hls', 'dash'],
             }
         },
@@ -519,11 +520,11 @@ def download_subtitles_robust(
                 'quiet': True,
                 'no_warnings': True,
                 'ignoreerrors': True,
-                # Aggressive bypass settings - 2025 updated
+                # Aggressive bypass settings - universally supported clients
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['android_creator', 'android_music', 'ios_music', 'tv_embedded'],
-                        'player_skip': ['webpage', 'js', 'configs'],
+                        'player_client': ['ios', 'android', 'mweb', 'web'],
+                        'player_skip': ['webpage', 'configs'],
                         'skip': ['hls', 'dash'],
                     }
                 },
@@ -827,11 +828,11 @@ def download_youtube_video(
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }] if audio_only else [],
-        # CRITICAL: Use latest working clients (android_creator has highest success rate)
+        # CRITICAL: Use universally supported clients across all yt-dlp versions
         'extractor_args': {
             'youtube': {
-                'player_client': ['android_creator', 'android_music', 'ios_music', 'tv_embedded', 'android_vr'],
-                'player_skip': ['webpage', 'js', 'configs'],  # Skip ALL detection points
+                'player_client': ['ios', 'android', 'mweb', 'web'],
+                'player_skip': ['webpage', 'configs'],  # Skip detection points
                 'skip': ['hls', 'dash'],
             }
         },

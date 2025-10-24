@@ -203,16 +203,16 @@ def get_video_info(
     Returns:
         Dictionary with video metadata
     """
-        # Client strategy for info extraction
+        # Client strategy for info extraction (2025 fix)
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
         'extractor_args': {
             'youtube': {
-                # tv_embedded most reliable, fallback to web/mweb with cookies, android without
-                'player_client': ['tv_embedded', 'web', 'mweb'] if (cookies_path or cookies_from_browser) else ['android_creator', 'android', 'ios'],
-                'player_skip': ['webpage', 'configs'],  # Skip detection points
+                # Use Android/iOS clients that bypass nsig (same as download)
+                'player_client': ['android_creator', 'android_music', 'ios_music', 'android'],
+                'player_skip': ['webpage', 'js', 'configs'],  # Skip all detection points
             }
         },
         'http_headers': {
@@ -850,14 +850,14 @@ def download_youtube_video(
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }] if audio_only else [],
-        # Client strategy: maximize compatibility
+        # Client strategy: Use Android/iOS clients that bypass nsig (2025 fix)
         'extractor_args': {
             'youtube': {
-                # tv_embedded is most reliable but may have nsig issues
-                # With cookies: tv_embedded → web → mweb (all support cookies)
-                # Without cookies: android_creator → android → ios (no nsig needed)
-                'player_client': ['tv_embedded', 'web', 'mweb'] if (cookies_path or cookies_from_browser) else ['android_creator', 'android', 'ios'],
-                'player_skip': ['webpage'],  # Skip webpage to avoid detection
+                # CRITICAL: Use android_creator/android_music/ios_music clients
+                # These clients work WITH cookies but bypass nsig extraction entirely
+                # nsig extraction is broken in yt-dlp 2024.12.23 causing "Only images available" error
+                'player_client': ['android_creator', 'android_music', 'ios_music', 'android'],
+                'player_skip': ['webpage', 'js', 'configs'],  # Skip all detection points
             }
         },
         # Standard web browser headers

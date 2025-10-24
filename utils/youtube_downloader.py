@@ -537,10 +537,9 @@ def download_subtitles_robust(
                 'no_warnings': True,
                 'ignoreerrors': True,
                 # Aggressive bypass settings - universally supported clients
-                has_sub_cookies = bool(cookies_path or cookies_from_browser)
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['mweb', 'tv_embedded', 'web'] if has_sub_cookies else ['ios', 'android', 'mweb'],
+                        'player_client': ['mweb', 'tv_embedded', 'web'] if (cookies_path or cookies_from_browser) else ['ios', 'android', 'mweb'],
                         'player_skip': ['webpage', 'configs'],
                         'skip': ['hls', 'dash'],
                     }
@@ -859,7 +858,6 @@ def download_youtube_video(
             'preferredquality': '192',
         }] if audio_only else [],
         # Client strategy: Use web clients with cookies, android clients without (2025 fix)
-        has_cookies = bool(cookies_path or cookies_from_browser)
         'extractor_args': {
             'youtube': {
                 # CRITICAL: Use web/mweb clients when cookies present (they support cookies)

@@ -210,8 +210,8 @@ def get_video_info(
         'extract_flat': False,
         'extractor_args': {
             'youtube': {
-                # Android clients don't require nsig - most reliable
-                'player_client': ['android_creator', 'android', 'ios'],
+                # When cookies present: use web clients (android doesn't support cookies)
+                'player_client': ['web', 'mweb'] if (cookies_path or cookies_from_browser) else ['android_creator', 'android', 'ios'],
                 'player_skip': ['webpage', 'configs'],  # Skip detection points
             }
         },
@@ -847,8 +847,9 @@ def download_youtube_video(
         # Use Android clients which bypass nsig extraction entirely
         'extractor_args': {
             'youtube': {
-                # Android clients don't require nsig - most reliable for downloads
-                'player_client': ['android_creator', 'android', 'ios'],
+                # When NO cookies: use android clients (no nsig required)
+                # When cookies present: android clients don't support cookies, so use web/mweb
+                'player_client': ['web', 'mweb', 'android_creator'] if (cookies_path or cookies_from_browser) else ['android_creator', 'android', 'ios'],
                 'player_skip': ['webpage'],  # Skip webpage to avoid detection
             }
         },

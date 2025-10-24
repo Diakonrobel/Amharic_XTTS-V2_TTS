@@ -875,7 +875,9 @@ def download_youtube_video(
         ydl_opts['http_headers']['User-Agent'] = user_agent
     if proxy:
         ydl_opts['proxy'] = proxy
+        print(f"  Using proxy: {proxy}")
     if cookies_path:
+        print(f"  Using cookies file: {cookies_path}")
         ydl_opts['cookiefile'] = cookies_path
     elif cookies_from_browser:
         # Only add if explicitly provided

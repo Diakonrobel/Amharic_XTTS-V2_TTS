@@ -816,9 +816,10 @@ def download_youtube_video(
         print(f"Warning: Could not fetch video info: {e}")
         info = {}
     
-    # Aggressive yt-dlp options - 2025 UPDATED with best bypass methods
+    # Aggressive yt-dlp options - Compatible with all versions
     ydl_opts = {
-        'format': 'bestaudio/best' if audio_only else 'bestvideo+bestaudio/best',
+        # Use flexible format selection that works even with limited formats
+        'format': 'bestaudio/best/worst' if audio_only else 'bestvideo+bestaudio/best/worst',
         'outtmpl': str(output_path / '%(title)s.%(ext)s'),
         'quiet': False,
         'no_warnings': False,
@@ -828,25 +829,26 @@ def download_youtube_video(
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }] if audio_only else [],
-        # CRITICAL: Use universally supported clients across all yt-dlp versions
+        # Use only 'web' client - most reliable across all yt-dlp versions
         'extractor_args': {
             'youtube': {
-                'player_client': ['ios', 'android', 'mweb', 'web'],
-                'player_skip': ['webpage', 'configs'],  # Skip detection points
-                'skip': ['hls', 'dash'],
+                'player_client': ['web'],  # Web client works without cookies
+                'player_skip': ['webpage'],  # Minimal skip to avoid issues
             }
         },
-        # Latest iOS YouTube app headers
+        # Standard web browser headers
         'http_headers': {
-            'User-Agent': f'com.google.ios.youtube/{LATEST_IOS_VERSION} (iPhone16,2; U; CPU iOS 18_2 like Mac OS X;)',
-            'X-YouTube-Client-Name': '5',
-            'X-YouTube-Client-Version': LATEST_IOS_VERSION,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
         },
         'age_limit': None,
         # Retry logic
         'retries': 10,
         'fragment_retries': 10,
         'socket_timeout': 30,
+        # Allow any available format to avoid "format not available" errors
+        'ignoreerrors': False,
     }
     
     # Add optional authentication/networking (only if provided)

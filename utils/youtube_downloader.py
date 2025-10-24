@@ -140,15 +140,12 @@ def check_ytdlp_version():
             from packaging import version as pkg_version
             ver = pkg_version.parse(version)
             
-            # Block broken 2025.x development versions
+            # Warn about potential issues with 2025.x versions but don't block
             if ver >= pkg_version.parse('2025.0.0'):
-                print("❌ CRITICAL ERROR: yt-dlp 2025.x versions are BROKEN!")
-                print("   nsig extraction fails, SABR streaming bug, no video formats available")
-                print("   ")
-                print("   FIX: Downgrade to stable version:")
-                print("   pip install 'yt-dlp>=2024.11.18,<2025.0.0' --force-reinstall")
+                print("⚠️  WARNING: yt-dlp 2025.x detected - some issues reported")
+                print("   If downloads fail, consider: pip install 'yt-dlp>=2024.11.18,<2025.0.0' --force-reinstall")
+                print("   Proceeding anyway...")
                 print("")
-                raise RuntimeError(f"yt-dlp {version} is broken - please downgrade to 2024.x")
             
             # Warn if too old
             if ver < pkg_version.parse('2024.11.18'):

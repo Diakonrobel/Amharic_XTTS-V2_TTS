@@ -843,6 +843,9 @@ def download_youtube_video(
         print(f"Warning: Could not fetch video info: {e}")
         info = {}
     
+    # Determine client strategy based on cookie availability
+    has_cookies = bool(cookies_path or cookies_from_browser)
+    
     # Aggressive yt-dlp options - Compatible with all versions
     ydl_opts = {
         # CRITICAL: Accept ANY available format (even if not ideal)
@@ -891,8 +894,8 @@ def download_youtube_video(
     if proxy:
         ydl_opts['proxy'] = proxy
         print(f"  Using proxy: {proxy}")
+    
     # Log client strategy
-    has_cookies = bool(cookies_path or cookies_from_browser)
     if has_cookies:
         print(f"  Using web clients (mweb, tv_embedded, web) with cookie authentication")
     else:

@@ -7,6 +7,7 @@ import os
 import re
 import tempfile
 import traceback
+import time
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
 import pandas as pd
@@ -32,10 +33,58 @@ def parse_youtube_urls(input_text: str) -> List[str]:
     youtube_urls = []
     for url in urls:
         url = url.strip()
+        # Strip surrounding quotes (single or double)
+        url = url.strip('"\'')
         if url and ('youtube.com' in url or 'youtu.be' in url):
             youtube_urls.append(url)
     
     return youtube_urls
+
+
+def parse_url_file(file_path: str) -> List[str]:
+    """
+    Parse YouTube URLs from uploaded text file.
+    
+    Args:
+        file_path: Path to uploaded .txt file
+        
+    Returns:
+        List of valid YouTube URLs
+        
+    Format:
+        - One URL per line
+        - Lines starting with # are comments (ignored)
+        - Empty lines are ignored
+        - Whitespace is trimmed
+    """
+    urls = []
+    
+    if not file_path:
+        return urls
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                # Strip surrounding quotes (single or double) - handles Excel/CSV exports
+                line = line.strip('"\'')
+                
+                # Skip empty lines and comments
+                if not line or line.startswith('#'):
+                    continue
+                
+                # Validate YouTube URL
+                if 'youtube.com' in line or 'youtu.be' in line:
+                    urls.append(line)
+                else:
+                    print(f"⚠ Line {line_num}: Invalid YouTube URL (skipped): {line[:50]}")
+        
+        print(f"✓ Loaded {len(urls)} URL(s) from file")
+        return urls
+        
+    except Exception as e:
+        print(f"❌ Error reading URL file: {e}")
+        return []
 
 
 def merge_datasets(
@@ -236,7 +285,14 @@ def process_youtube_batch(
     video_infos = []
     failed_videos = []  # Track failed videos
     
+    # Rate limiting to avoid YouTube bot detection
+    # With cookies: ~2000 videos/hour = 1.8s/video minimum
+    # We use 7 seconds for safety (514 videos/hour)
+    RATE_LIMIT_DELAY = 7  # seconds between downloads
+    
     print(f"🎬 Batch Processing {len(urls)} YouTube Videos...")
+    print(f"⏱️ Rate Limiting: {RATE_LIMIT_DELAY}s delay between videos to prevent bot detection")
+    print(f"📅 Estimated time: ~{(len(urls) * RATE_LIMIT_DELAY) / 60:.1f} minutes (+ download time)\n")
     
     for idx, url in enumerate(urls, 1):
         try:
@@ -306,6 +362,12 @@ def process_youtube_batch(
                 pass
             
             print(f"  ✓ Video {idx} processed: {info.get('title', 'Unknown')}")
+            
+            # Rate limiting: Sleep between requests to avoid YouTube bot detection
+            # Skip delay after last video
+            if idx < len(urls):
+                print(f"  ⏳ Waiting {RATE_LIMIT_DELAY}s before next video (YouTube rate limit protection)...")
+                time.sleep(RATE_LIMIT_DELAY)
         
         except Exception as e:
             print(f"  ❌ Error processing video {idx}: {e}")

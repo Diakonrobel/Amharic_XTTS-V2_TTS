@@ -995,6 +995,11 @@ if __name__ == "__main__":
                         lines=2,
                         max_lines=5
                     )
+                    youtube_url_file = gr.File(
+                        label="📎 Or upload URL list (.txt file, one URL per line)",
+                        file_types=[".txt"],
+                        type="filepath"
+                    )
                     with gr.Row():
                         youtube_transcript_lang = gr.Dropdown(
                             label="🌐 Transcript Language",
@@ -1531,17 +1536,33 @@ if __name__ == "__main__":
                     traceback.print_exc()
                     return f"❌ Error in batch processing: {str(e)}"
             
-            def download_youtube_video(url, transcript_lang, language, out_path, batch_mode, incremental_mode, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, buffer_padding, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, remove_bg, bg_quality, bg_model, progress=gr.Progress(track_tqdm=True)):
-                """Download YouTube video(s) and extract transcripts"""
+            def download_youtube_video(url, url_file, transcript_lang, language, out_path, batch_mode, incremental_mode, check_duplicates, cookies_path, cookies_from_browser, proxy, user_agent, buffer_padding, use_vad, vad_threshold, vad_min_speech, vad_min_silence, vad_pad, use_enhanced_vad, amharic_mode, remove_bg, bg_quality, bg_model, progress=gr.Progress(track_tqdm=True)):
+                """Download YouTube video(s) and extract transcripts - supports text input and file upload"""
                 try:
-                    if not url:
-                        return "Please enter a YouTube URL!"
+                    # Collect URLs from both sources
+                    urls_from_text = []
+                    urls_from_file = []
                     
-                    # Parse URLs
-                    urls = batch_processor.parse_youtube_urls(url)
+                    # Parse text input
+                    if url and url.strip():
+                        urls_from_text = batch_processor.parse_youtube_urls(url)
+                    
+                    # Parse uploaded file
+                    if url_file:
+                        urls_from_file = batch_processor.parse_url_file(url_file)
+                    
+                    # Combine and deduplicate
+                    urls = list(set(urls_from_text + urls_from_file))
                     
                     if not urls:
-                        return "❌ No valid YouTube URLs found. Please check your input."
+                        return "❌ No valid YouTube URLs found in text or file!"
+                    
+                    # Show summary if multiple sources
+                    if urls_from_text and urls_from_file:
+                        print(f"📋 URL Sources:")
+                        print(f"  - {len(urls_from_text)} from text input")
+                        print(f"  - {len(urls_from_file)} from uploaded file")
+                        print(f"  - {len(urls)} total (after removing duplicates)")
                     
                     # Prepare auth parameters (empty strings -> None)
                     cookies_file = cookies_path.strip() if cookies_path and cookies_path.strip() else None
@@ -2720,6 +2741,7 @@ if __name__ == "__main__":
                 fn=download_youtube_video,
                 inputs=[
                     youtube_url,
+                    youtube_url_file,  # NEW: File upload parameter
                     youtube_transcript_lang,
                     lang,
                     out_path,

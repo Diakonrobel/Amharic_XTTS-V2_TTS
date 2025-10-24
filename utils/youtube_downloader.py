@@ -851,10 +851,10 @@ def download_youtube_video(
         # Use client strategy based on authentication
         'extractor_args': {
             'youtube': {
-                # When using cookies: tv,web_safari,web (per yt-dlp docs)
-                # Without cookies: tv_simply,tv,web
-                'player_client': ['tv', 'web_safari', 'web'] if (cookies_path or cookies_from_browser) else ['tv_simply', 'tv', 'web'],
-                'player_skip': ['webpage'],  # Skip webpage to avoid detection
+                # When using cookies: mweb works best with authentication (per yt-dlp 2024 docs)
+                # Without cookies: tv_simply,tv,web for guest access
+                'player_client': ['mweb', 'tv'] if (cookies_path or cookies_from_browser) else ['tv_simply', 'tv', 'web'],
+                'player_skip': ['webpage'],  # Skip webpage to avoid VISITOR_INFO1_LIVE cookie interference
             }
         },
         # Standard web browser headers

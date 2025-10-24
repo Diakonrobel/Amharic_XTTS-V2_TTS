@@ -774,17 +774,20 @@ def download_youtube_video(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # FIX: Enable cookie authentication to bypass bot detection
-    # YouTube now requires authentication even for Android clients
-    # Use cookies from browser if not explicitly provided
+    # Cookie handling: Make cookies truly optional
+    # Android clients work WITHOUT cookies, so don't force them
     if cookies_path is None:
         cookies_path = os.getenv("YTDLP_COOKIES")
+    # Validate cookie file exists before using it
+    if cookies_path and not os.path.exists(cookies_path):
+        print(f"⚠️  Cookie file not found: {cookies_path}")
+        print(f"   Continuing without cookies (using Android clients)...")
+        cookies_path = None
+    
     if cookies_from_browser is None:
         cookies_from_browser = os.getenv("YTDLP_COOKIES_FROM_BROWSER")
-        # Default to Chrome if no cookies provided
-        if cookies_from_browser is None and cookies_path is None:
-            cookies_from_browser = "chrome"
-            print("🔐 Using cookies from Chrome browser for authentication")
+        # DON'T default to Chrome - let it work without cookies
+    
     if proxy is None:
         proxy = os.getenv("YTDLP_PROXY")
     if user_agent is None:

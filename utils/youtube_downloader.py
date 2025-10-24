@@ -203,15 +203,15 @@ def get_video_info(
     Returns:
         Dictionary with video metadata
     """
-        # Use Android clients which bypass nsig extraction
+        # Client strategy for info extraction
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
         'extractor_args': {
             'youtube': {
-                # When cookies present: use web clients (android doesn't support cookies)
-                'player_client': ['web', 'mweb'] if (cookies_path or cookies_from_browser) else ['android_creator', 'android', 'ios'],
+                # tv_embedded most reliable, fallback to web/mweb with cookies, android without
+                'player_client': ['tv_embedded', 'web', 'mweb'] if (cookies_path or cookies_from_browser) else ['android_creator', 'android', 'ios'],
                 'player_skip': ['webpage', 'configs'],  # Skip detection points
             }
         },
@@ -844,12 +844,13 @@ def download_youtube_video(
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }] if audio_only else [],
-        # Use Android clients which bypass nsig extraction entirely
+        # Client strategy: maximize compatibility
         'extractor_args': {
             'youtube': {
-                # When NO cookies: use android clients (no nsig required)
-                # When cookies present: android clients don't support cookies, so use web/mweb
-                'player_client': ['web', 'mweb', 'android_creator'] if (cookies_path or cookies_from_browser) else ['android_creator', 'android', 'ios'],
+                # tv_embedded is most reliable but may have nsig issues
+                # With cookies: tv_embedded → web → mweb (all support cookies)
+                # Without cookies: android_creator → android → ios (no nsig needed)
+                'player_client': ['tv_embedded', 'web', 'mweb'] if (cookies_path or cookies_from_browser) else ['android_creator', 'android', 'ios'],
                 'player_skip': ['webpage'],  # Skip webpage to avoid detection
             }
         },

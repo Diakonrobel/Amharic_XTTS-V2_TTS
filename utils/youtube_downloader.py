@@ -848,11 +848,13 @@ def download_youtube_video(
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }] if audio_only else [],
-        # Use only 'web' client - most reliable across all yt-dlp versions
+        # Use client strategy based on authentication
         'extractor_args': {
             'youtube': {
-                'player_client': ['web'],  # Web client works without cookies
-                'player_skip': ['webpage'],  # Minimal skip to avoid issues
+                # When using cookies: tv,web_safari,web (per yt-dlp docs)
+                # Without cookies: tv_simply,tv,web
+                'player_client': ['tv', 'web_safari', 'web'] if (cookies_path or cookies_from_browser) else ['tv_simply', 'tv', 'web'],
+                'player_skip': ['webpage'],  # Skip webpage to avoid detection
             }
         },
         # Standard web browser headers

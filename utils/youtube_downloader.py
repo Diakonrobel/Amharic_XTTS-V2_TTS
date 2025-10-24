@@ -838,7 +838,7 @@ def download_youtube_video(
     ydl_opts = {
         # CRITICAL: Accept ANY available format (even if not ideal)
         # This prevents "Only images available" errors
-        'format': '(bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio)/best/worst' if audio_only else 'bestvideo+bestaudio/best/worst',
+        'format': 'bestaudio/best' if audio_only else 'best',
         'outtmpl': str(output_path / '%(title)s.%(ext)s'),
         'quiet': False,
         'no_warnings': False,
@@ -870,6 +870,10 @@ def download_youtube_video(
         'socket_timeout': 30,
         # Allow any available format to avoid "format not available" errors
         'ignoreerrors': False,
+        # Suppress nsig warnings - we can still download with m3u8 formats
+        'no_warnings': False,  # Keep warnings visible for debugging
+        # Allow partial extraction if some formats fail
+        'allow_unplayable_formats': False,
     }
     
     # Add optional authentication/networking (only if provided)

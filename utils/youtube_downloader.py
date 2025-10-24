@@ -213,9 +213,8 @@ def get_video_info(
         'extract_flat': False,
         'extractor_args': {
             'youtube': {
-                # Use web/mweb clients when cookies present (they support cookies)
-                # Use android/ios clients when no cookies (they bypass nsig)
-                'player_client': ['mweb', 'tv_embedded', 'web'] if has_cookies else ['android_creator', 'android_music', 'ios_music', 'android'],
+                # Always use Android clients - they bypass nsig without needing cookies
+                'player_client': ['android_creator', 'android_music', 'ios_music', 'android'],
                 'player_skip': ['webpage', 'js', 'configs'],  # Skip all detection points
             }
         },
@@ -539,7 +538,7 @@ def download_subtitles_robust(
                 # Aggressive bypass settings - universally supported clients
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['mweb', 'tv_embedded', 'web'] if (cookies_path or cookies_from_browser) else ['ios', 'android', 'mweb'],
+                        'player_client': ['android_creator', 'android_music', 'ios', 'android'],
                         'player_skip': ['webpage', 'configs'],
                         'skip': ['hls', 'dash'],
                     }
@@ -843,9 +842,6 @@ def download_youtube_video(
         print(f"Warning: Could not fetch video info: {e}")
         info = {}
     
-    # Determine client strategy based on cookie availability
-    has_cookies = bool(cookies_path or cookies_from_browser)
-    
     # Aggressive yt-dlp options - Compatible with all versions
     ydl_opts = {
         # CRITICAL: Accept ANY available format (even if not ideal)
@@ -860,12 +856,11 @@ def download_youtube_video(
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }] if audio_only else [],
-        # Client strategy: Use web clients with cookies, android clients without (2025 fix)
+        # Client strategy: Always use Android clients - they bypass nsig extraction (2025 fix)
+        # CRITICAL: Android clients work WITHOUT cookies and bypass nsig decryption issues
         'extractor_args': {
             'youtube': {
-                # CRITICAL: Use web/mweb clients when cookies present (they support cookies)
-                # Use android clients when no cookies (they bypass nsig but don't support cookies)
-                'player_client': ['mweb', 'tv_embedded', 'web'] if has_cookies else ['android_creator', 'android_music', 'ios_music', 'android'],
+                'player_client': ['android_creator', 'android_music', 'ios_music', 'android'],
                 'player_skip': ['webpage', 'js', 'configs'],  # Skip all detection points
             }
         },
@@ -896,17 +891,17 @@ def download_youtube_video(
         print(f"  Using proxy: {proxy}")
     
     # Log client strategy
-    if has_cookies:
-        print(f"  Using web clients (mweb, tv_embedded, web) with cookie authentication")
-    else:
-        print(f"  Using Android clients (cookieless mode)")
+    print(f"  Using Android clients (bypass nsig, cookieless mode)")
+    print(f"  Note: Cookies are not used with Android clients - they don't support authentication")
     
-    if cookies_path:
-        print(f"  Using cookies file: {cookies_path}")
-        ydl_opts['cookiefile'] = cookies_path
-    elif cookies_from_browser:
-        # Only add if explicitly provided
-        ydl_opts['cookiesfrombrowser'] = (cookies_from_browser, None, None, None)
+    # Note: We intentionally do NOT add cookies here because:
+    # 1. Android clients don't support cookie authentication
+    # 2. They bypass nsig extraction which causes "Only images available" errors
+    # 3. Most public videos work fine without cookies
+    # if cookies_path:
+    #     ydl_opts['cookiefile'] = cookies_path
+    # elif cookies_from_browser:
+    #     ydl_opts['cookiesfrombrowser'] = (cookies_from_browser, None, None, None)
     if po_token:
         ydl_opts['extractor_args']['youtube']['po_token'] = [po_token]
     if visitor_data:

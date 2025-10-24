@@ -123,7 +123,7 @@ def get_optimal_ytdlp_opts(
 
 def check_ytdlp_version():
     """
-    Check if yt-dlp version is recent enough for 2025 YouTube bypass.
+    Check if yt-dlp version is compatible (blocks broken 2025.x dev versions).
     """
     try:
         result = subprocess.run(
@@ -136,13 +136,29 @@ def check_ytdlp_version():
         if version_line:
             version = version_line[0].split(':')[1].strip()
             print(f"📦 yt-dlp version: {version}")
-            # Check if version is at least 2024.12.13 (critical YouTube fixes)
+            
             from packaging import version as pkg_version
-            if pkg_version.parse(version) < pkg_version.parse('2024.12.13'):
-                print("⚠️  WARNING: yt-dlp version is outdated for 2025 YouTube bypass!")
-                print("   Please update: pip install -U yt-dlp")
+            ver = pkg_version.parse(version)
+            
+            # Block broken 2025.x development versions
+            if ver >= pkg_version.parse('2025.0.0'):
+                print("❌ CRITICAL ERROR: yt-dlp 2025.x versions are BROKEN!")
+                print("   nsig extraction fails, SABR streaming bug, no video formats available")
+                print("   ")
+                print("   FIX: Downgrade to stable version:")
+                print("   pip install 'yt-dlp>=2024.11.18,<2025.0.0' --force-reinstall")
+                print("")
+                raise RuntimeError(f"yt-dlp {version} is broken - please downgrade to 2024.x")
+            
+            # Warn if too old
+            if ver < pkg_version.parse('2024.11.18'):
+                print("⚠️  WARNING: yt-dlp version is outdated")
+                print("   Please update: pip install 'yt-dlp>=2024.11.18,<2025.0.0'")
                 return False
+            
             return True
+    except RuntimeError:
+        raise  # Re-raise version block errors
     except Exception as e:
         print(f"Could not check yt-dlp version: {e}")
         return None

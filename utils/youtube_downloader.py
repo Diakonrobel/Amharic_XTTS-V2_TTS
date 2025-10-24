@@ -836,8 +836,9 @@ def download_youtube_video(
     
     # Aggressive yt-dlp options - Compatible with all versions
     ydl_opts = {
-        # Use flexible format selection that works even with limited formats
-        'format': 'bestaudio/best/worst' if audio_only else 'bestvideo+bestaudio/best/worst',
+        # CRITICAL: Accept ANY available format (even if not ideal)
+        # This prevents "Only images available" errors
+        'format': '(bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio)/best/worst' if audio_only else 'bestvideo+bestaudio/best/worst',
         'outtmpl': str(output_path / '%(title)s.%(ext)s'),
         'quiet': False,
         'no_warnings': False,
@@ -957,11 +958,30 @@ def download_youtube_video(
     except Exception as e:
         error_str = str(e)
         print(f"\n❌ Error downloading from YouTube: {error_str}")
-        print(f"\nTroubleshooting:")
-        print(f"  1. Make sure yt-dlp is updated: pip install -U yt-dlp")
-        print(f"  2. Try with cookies: --from-browser chrome")
-        print(f"  3. Try with a proxy: --proxy http://proxy:port")
-        print(f"  4. Check if the video is available and not region-locked")
+        
+        # Check for specific error patterns
+        if "Only images are available" in error_str or "nsig extraction failed" in str(e):
+            print(f"\n🚫 CRITICAL: YouTube is blocking unauthenticated access!")
+            print(f"")
+            print(f"   These videos REQUIRE authentication (cookies).")
+            print(f"   They may be:")
+            print(f"   - Age-restricted")
+            print(f"   - Require sign-in")
+            print(f"   - Region-locked")
+            print(f"")
+            print(f"   SOLUTION: Download videos manually and upload them:")
+            print(f"   1. On your local machine with browser logged in:")
+            print(f"      yt-dlp --cookies-from-browser chrome {url}")
+            print(f"   2. Upload the audio file to Lightning AI")
+            print(f"   3. Process locally downloaded files instead")
+            print(f"")
+        else:
+            print(f"\nTroubleshooting:")
+            print(f"  1. Make sure yt-dlp is updated: pip install -U yt-dlp")
+            print(f"  2. Try with cookies: --from-browser chrome")
+            print(f"  3. Try with a proxy: --proxy http://proxy:port")
+            print(f"  4. Check if the video is available and not region-locked")
+        
         import traceback
         traceback.print_exc()
         raise

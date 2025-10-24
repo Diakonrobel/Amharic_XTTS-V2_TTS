@@ -204,14 +204,18 @@ def get_video_info(
         Dictionary with video metadata
     """
         # Client strategy for info extraction (2025 fix)
+    # Use web clients if cookies available, android clients otherwise
+    has_cookies = bool(cookies_path or cookies_from_browser)
+    
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
         'extractor_args': {
             'youtube': {
-                # Use Android/iOS clients that bypass nsig (same as download)
-                'player_client': ['android_creator', 'android_music', 'ios_music', 'android'],
+                # Use web/mweb clients when cookies present (they support cookies)
+                # Use android/ios clients when no cookies (they bypass nsig)
+                'player_client': ['mweb', 'tv_embedded', 'web'] if has_cookies else ['android_creator', 'android_music', 'ios_music', 'android'],
                 'player_skip': ['webpage', 'js', 'configs'],  # Skip all detection points
             }
         },
@@ -533,9 +537,10 @@ def download_subtitles_robust(
                 'no_warnings': True,
                 'ignoreerrors': True,
                 # Aggressive bypass settings - universally supported clients
+                has_sub_cookies = bool(cookies_path or cookies_from_browser)
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['ios', 'android', 'mweb', 'web'],
+                        'player_client': ['mweb', 'tv_embedded', 'web'] if has_sub_cookies else ['ios', 'android', 'mweb'],
                         'player_skip': ['webpage', 'configs'],
                         'skip': ['hls', 'dash'],
                     }
@@ -853,13 +858,13 @@ def download_youtube_video(
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }] if audio_only else [],
-        # Client strategy: Use Android/iOS clients that bypass nsig (2025 fix)
+        # Client strategy: Use web clients with cookies, android clients without (2025 fix)
+        has_cookies = bool(cookies_path or cookies_from_browser)
         'extractor_args': {
             'youtube': {
-                # CRITICAL: Use android_creator/android_music/ios_music clients
-                # These clients work WITH cookies but bypass nsig extraction entirely
-                # nsig extraction is broken in yt-dlp 2024.12.23 causing "Only images available" error
-                'player_client': ['android_creator', 'android_music', 'ios_music', 'android'],
+                # CRITICAL: Use web/mweb clients when cookies present (they support cookies)
+                # Use android clients when no cookies (they bypass nsig but don't support cookies)
+                'player_client': ['mweb', 'tv_embedded', 'web'] if has_cookies else ['android_creator', 'android_music', 'ios_music', 'android'],
                 'player_skip': ['webpage', 'js', 'configs'],  # Skip all detection points
             }
         },
@@ -888,6 +893,13 @@ def download_youtube_video(
     if proxy:
         ydl_opts['proxy'] = proxy
         print(f"  Using proxy: {proxy}")
+    # Log client strategy
+    has_cookies = bool(cookies_path or cookies_from_browser)
+    if has_cookies:
+        print(f"  Using web clients (mweb, tv_embedded, web) with cookie authentication")
+    else:
+        print(f"  Using Android clients (cookieless mode)")
+    
     if cookies_path:
         print(f"  Using cookies file: {cookies_path}")
         ydl_opts['cookiefile'] = cookies_path

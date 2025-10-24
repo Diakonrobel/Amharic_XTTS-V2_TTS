@@ -795,9 +795,11 @@ def download_youtube_video(
     # Check yt-dlp version
     check_ytdlp_version()
     
-    # Auto-update yt-dlp
+    # DO NOT auto-update - it can corrupt installation
+    # Users should manually reinstall if needed
     if auto_update:
-        update_ytdlp()
+        print("⚠️  Auto-update disabled to prevent corruption")
+        print("   To update manually: pip install 'yt-dlp>=2024.11.18,<2025.0.0' --force-reinstall")
     
     # Get video info first
     print(f"Fetching video information from {url}...")

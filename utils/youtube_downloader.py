@@ -758,12 +758,21 @@ def download_youtube_video(
         print("\n🔐 Authentication: ENABLED (cookies detected)")
         if cookies_from_browser:
             print(f"  Using cookies from browser: {cookies_from_browser}")
-        else:
+            print(f"  ⚠️  Note: Browser must be installed on this machine!")
+            print(f"  If on Lightning.AI, export cookies from local browser instead.")
+        elif cookies_path:
             print(f"  Using cookies file: {cookies_path}")
     else:
         print("\n⚠️  Authentication: DISABLED (no cookies provided)")
-        print("  TIP: For 95%+ success rate, use browser cookies:")
-        print("  --from-browser chrome")
+        print("  ⚠️  CRITICAL: Downloads will likely fail on Lightning.AI without cookies!")
+        print("")
+        print("  SOLUTION:")
+        print("  1. On your local PC: Install 'Get cookies.txt' browser extension")
+        print("  2. Log into YouTube on your local browser")
+        print("  3. Export cookies to youtube_cookies.txt")
+        print("  4. Upload file to Lightning.AI")
+        print("  5. Pass cookies_path='/path/to/youtube_cookies.txt'")
+        print("")
     
     # === CONFIGURE YT-DLP OPTIONS WITH 2025 BYPASS ===
     print("\n⚙️  Configuring download with 2025 bypass methods...")
@@ -794,8 +803,8 @@ def download_youtube_video(
         },
         
         # === AUTHENTICATION ===
+        # Only use cookiefile if it exists, cookiesfrombrowser will be handled with try/except
         'cookiefile': cookies_path if cookies_path and Path(cookies_path).exists() else None,
-        'cookiesfrombrowser': (cookies_from_browser,) if cookies_from_browser else None,
         
         # === NETWORK OPTIONS ===
         'proxy': proxy or None,
@@ -859,6 +868,23 @@ def download_youtube_video(
                 # Remove subtitle options for first attempt
                 for key in ['writesubtitles', 'writeautomaticsub', 'subtitleslangs', 'subtitlesformat']:
                     opts_audio_only.pop(key, None)
+            
+            # Try to add cookies_from_browser, but make it optional
+            if cookies_from_browser and not opts_audio_only.get('cookiefile'):
+                try:
+                    # Test if browser cookies are available
+                    test_opts = {'cookiesfrombrowser': (cookies_from_browser,), 'quiet': True}
+                    with yt_dlp.YoutubeDL(test_opts) as test_ydl:
+                        pass  # Just test initialization
+                    # If successful, add to options
+                    opts_audio_only['cookiesfrombrowser'] = (cookies_from_browser,)
+                    if attempt == 0:
+                        print(f"  ✓ Browser cookies loaded successfully")
+                except Exception as e:
+                    if attempt == 0:
+                        print(f"  ⚠️  Could not load browser cookies: {str(e)[:100]}")
+                        print(f"  Continuing without cookies (downloads may fail)")
+                    # Don't add cookiesfrombrowser to options
             
             with yt_dlp.YoutubeDL(opts_audio_only) as ydl:
                 print("  Downloading audio...")

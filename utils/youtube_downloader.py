@@ -26,14 +26,9 @@ LATEST_IOS_VERSION = "19.45.4"
 LATEST_ANDROID_VERSION = "19.43.41"
 MINIMUM_YTDLP_VERSION = "2024.12.13"
 
-# Player clients ordered by 2025 success rate (highest first)
-PLAYER_CLIENTS = [
-    'android_creator',   # ⭐⭐⭐ Best success rate in 2025
-    'android_music',     # ⭐⭐⭐ Excellent fallback
-    'ios_music',         # ⭐⭐ Very good for music
-    'tv_embedded',       # ⭐⭐ Good for restricted content
-    'android_vr',        # ⭐ Alternative method
-]
+# Player clients - use 'default' to let yt-dlp choose automatically
+# The newer yt-dlp versions handle client selection intelligently
+PLAYER_CLIENTS = ['default']  # Let yt-dlp auto-select best client
 
 # Modern user agents for rotation (2025 versions)
 USER_AGENTS = [
@@ -774,10 +769,9 @@ def download_youtube_video(
         print("  5. Pass cookies_path='/path/to/youtube_cookies.txt'")
         print("")
     
-    # === CONFIGURE YT-DLP OPTIONS WITH 2025 BYPASS ===
-    print("\n⚙️  Configuring download with 2025 bypass methods...")
-    print(f"  Player clients: {', '.join(PLAYER_CLIENTS)}")
-    print(f"  Detection bypass: ENABLED (player_skip)")
+    # === CONFIGURE YT-DLP OPTIONS ===
+    print("\n⚙️  Configuring download with latest yt-dlp...")
+    print(f"  Auto client selection: ENABLED")
     print(f"  User-agent rotation: ENABLED ({len(USER_AGENTS)} agents)")
     
     ydl_opts = {
@@ -793,14 +787,8 @@ def download_youtube_video(
         }] if audio_only else [],
         
         # === 2025 BYPASS METHODS ===
-        'extractor_args': {
-            'youtube': {
-                'player_client': PLAYER_CLIENTS,  # Latest client order
-                'player_skip': ['webpage', 'js', 'configs'],  # CRITICAL for bypass
-                'po_token': po_token if po_token else None,
-                'visitor_data': visitor_data if visitor_data else None,
-            }
-        },
+        # Let yt-dlp handle client selection automatically
+        # Simpler and more reliable with latest yt-dlp versions
         
         # === AUTHENTICATION ===
         # Only use cookiefile if it exists, cookiesfrombrowser will be handled with try/except
@@ -860,7 +848,7 @@ def download_youtube_video(
                 print(f"  Rotated user-agent for attempt {attempt + 1}")
             
             print(f"\n📥 Download attempt {attempt + 1}/{max_attempts}")
-            print(f"  Trying with player clients: {', '.join(PLAYER_CLIENTS[:2])}...")
+            print(f"  Using yt-dlp auto-selection...")
             
             # First, try downloading without subtitles to ensure audio download works
             opts_audio_only = ydl_opts.copy()
@@ -889,6 +877,10 @@ def download_youtube_video(
             with yt_dlp.YoutubeDL(opts_audio_only) as ydl:
                 print("  Downloading audio...")
                 result = ydl.extract_info(url, download=True)
+                
+                # Check if result is None (download failed)
+                if result is None:
+                    raise RuntimeError("Download failed - no video data returned")
                 
                 # Find downloaded files
                 title = result.get('title', 'video')

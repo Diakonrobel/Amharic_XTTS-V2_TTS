@@ -536,7 +536,17 @@ def download_youtube_video(
     language: str = 'en',
     audio_only: bool = True,
     download_subtitles: bool = True,
-    auto_update: bool = True
+    auto_update: bool = True,
+    # Additional parameters for compatibility (ignored in this version)
+    cookies_path: Optional[str] = None,
+    cookies_from_browser: Optional[str] = None,
+    proxy: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    po_token: Optional[str] = None,
+    visitor_data: Optional[str] = None,
+    remove_background_music: bool = False,
+    background_removal_model: str = "htdemucs",
+    background_removal_quality: str = "balanced",
 ) -> Tuple[Optional[str], Optional[str], Dict]:
     """
     Download YouTube video/audio and subtitles.
@@ -548,6 +558,15 @@ def download_youtube_video(
         audio_only: If True, download only audio
         download_subtitles: If True, attempt to download subtitles
         auto_update: If True, update yt-dlp before downloading
+        cookies_path: (Ignored - for compatibility only)
+        cookies_from_browser: (Ignored - for compatibility only)
+        proxy: (Ignored - for compatibility only)
+        user_agent: (Ignored - for compatibility only)
+        po_token: (Ignored - for compatibility only)
+        visitor_data: (Ignored - for compatibility only)
+        remove_background_music: (Ignored - for compatibility only)
+        background_removal_model: (Ignored - for compatibility only)
+        background_removal_quality: (Ignored - for compatibility only)
         
     Returns:
         Tuple of (audio_path, subtitle_path, video_info)

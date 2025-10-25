@@ -305,13 +305,12 @@ def process_youtube_batch(
             # Create temporary directory for this video
             temp_dir = tempfile.mkdtemp(prefix=f"yt_batch_{idx}_")
             
-            # Download video with enhanced bypass
-            audio_path, srt_path, info = youtube_downloader.download_youtube_video(
+            # Download video with 2025 bypass methods
+            audio_path, srt_path, info = youtube_downloader.download_and_process_youtube(
                 url=url,
                 output_dir=temp_dir,
                 language=transcript_lang,
-                audio_only=True,
-                download_subtitles=True,
+                use_whisper_if_no_srt=True,
                 auto_update=False,  # Don't update for each video
                 cookies_path=cookies_path,
                 cookies_from_browser=cookies_from_browser,

@@ -2636,7 +2636,12 @@ if __name__ == "__main__":
                 with gr.Column(scale=1):
                     with gr.Group():
                         gr.Markdown("### 🎙️ **Generation Settings**")
-                        speaker_reference_audio = gr.Textbox(label="Reference Audio Path", placeholder="Auto-filled")
+                        speaker_reference_audio = gr.Audio(
+                            label="Reference Speaker Audio",
+                            sources=["upload", "microphone"],
+                            type="filepath",
+                            info="Upload an audio file or record directly to use as reference speaker voice"
+                        )
                         tts_language = gr.Dropdown(
                             label="Language",
                             value="en",

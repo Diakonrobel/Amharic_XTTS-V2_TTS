@@ -101,6 +101,75 @@ reference_audio = gr.Audio(label="Reference Audio Used", type="filepath")
 
 No new dependencies added. Uses existing Gradio functionality.
 
+## Bug Fixes Applied
+
+### Issue 1: Uploaded/Recorded Audio Not Being Used
+**Problem**: The inference wasn't using the audio uploaded or recorded via the UI.
+
+**Root Cause**: The Audio component was passing the file path correctly, but error handling wasn't clear.
+
+**Solution**:
+- Added debug logging to track audio file path and type
+- Separated model loading check from audio check
+- Improved error messages:
+  - "You need to run the previous step to load the model!!" (if model not loaded)
+  - "Please upload or record a reference audio first!" (if audio missing)
+
+### Issue 2: No Download Button for Generated Audio
+**Problem**: Generated audio didn't show a download button in Gradio 5.49.0.
+
+**Root Cause**: While Audio components with `type="filepath"` should provide download, it may not always be visible.
+
+**Solution**:
+- Added explicit `gr.File` component labeled "📥 Download Generated Audio"
+- Made it always visible for immediate access
+- Updated `run_tts()` to return 4 values:
+  1. Status message
+  2. Generated audio (for playback)
+  3. Reference audio used
+  4. Download file path (for File component)
+- Both Audio and File components receive the generated audio path
+
+### Code Changes Made:
+
+```python
+# Updated function signature and returns
+def run_tts(...):
+    # Debug logging
+    print(f" > DEBUG: speaker_audio_file type: {type(speaker_audio_file)}")
+    print(f" > DEBUG: speaker_audio_file value: {speaker_audio_file}")
+    
+    # Clearer error handling
+    if XTTS_MODEL is None:
+        return "You need to run the previous step to load the model !!", None, None, None
+    
+    if not speaker_audio_file:
+        return "Please upload or record a reference audio first!", None, None, None
+    
+    # ... processing ...
+    
+    # Return 4 values including download file
+    return "Speech generated !", out_path, speaker_audio_file, out_path
+```
+
+```python
+# Added File component in UI
+generated_audio_download = gr.File(label="📥 Download Generated Audio", visible=True)
+
+# Updated event handler
+tts_btn.click(
+    fn=run_tts,
+    inputs=[...],
+    outputs=[progress_gen, tts_output_audio, reference_audio, generated_audio_download]
+)
+```
+
 ## Conclusion
 
-This enhancement significantly improves user experience while maintaining 100% backward compatibility with existing functionality. Users can now easily upload or record reference audio, and download generated speech, making the interface more intuitive and professional.
+This enhancement significantly improves user experience while maintaining 100% backward compatibility with existing functionality. Users can now:
+- ✅ Easily upload or record reference audio
+- ✅ See clear error messages if something is missing
+- ✅ Download generated speech via explicit download button
+- ✅ Debug issues with helpful console output
+
+The interface is now more intuitive, professional, and user-friendly.

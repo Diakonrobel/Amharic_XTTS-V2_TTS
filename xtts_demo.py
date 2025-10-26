@@ -474,10 +474,10 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
     print(f" > DEBUG: speaker_audio_file value: {speaker_audio_file}")
     
     if XTTS_MODEL is None:
-        return "You need to run the previous step to load the model !!", None, None, None
+        return "You need to run the previous step to load the model !!", None, None
     
     if not speaker_audio_file:
-        return "Please upload or record a reference audio first!", None, None, None
+        return "Please upload or record a reference audio first!", None, None
 
     # Canonicalize language early (ensures 'amh')
     lang = normalize_xtts_lang(lang)
@@ -687,7 +687,7 @@ def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repe
         out_path = fp.name
         torchaudio.save(out_path, out["wav"], 24000)
 
-    return "Speech generated !", out_path, speaker_audio_file, out_path
+    return "Speech generated !", out_path, speaker_audio_file
 
 
 def load_params_tts(out_path,version):
@@ -2702,9 +2702,18 @@ if __name__ == "__main__":
                     with gr.Group():
                         gr.Markdown("### 🔊 **Output**")
                         progress_gen = gr.Label(label="Status", value="Ready")
-                        tts_output_audio = gr.Audio(label="Generated Audio (Play here)", type="filepath")
-                        generated_audio_download = gr.File(label="📥 Download Generated Audio", visible=True)
-                        reference_audio = gr.Audio(label="Reference Audio Used", type="filepath")
+                        tts_output_audio = gr.Audio(
+                            label="Generated Audio",
+                            type="filepath",
+                            show_download_button=True,
+                            show_share_button=False
+                        )
+                        reference_audio = gr.Audio(
+                            label="Reference Audio Used",
+                            type="filepath",
+                            show_download_button=True,
+                            show_share_button=False
+                        )
 
             prompt_compute_btn.click(
                 fn=preprocess_dataset,
@@ -3318,7 +3327,7 @@ if __name__ == "__main__":
                     g2p_backend_infer,
                     num_gpt_outputs,
                 ],
-                outputs=[progress_gen, tts_output_audio, reference_audio, generated_audio_download],
+                outputs=[progress_gen, tts_output_audio, reference_audio],
             )
 
             load_params_tts_btn.click(

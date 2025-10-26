@@ -2637,10 +2637,9 @@ if __name__ == "__main__":
                     with gr.Group():
                         gr.Markdown("### 🎙️ **Generation Settings**")
                         speaker_reference_audio = gr.Audio(
-                            label="Reference Speaker Audio",
+                            label="Reference Speaker Audio (Upload or Record)",
                             sources=["upload", "microphone"],
-                            type="filepath",
-                            info="Upload an audio file or record directly to use as reference speaker voice"
+                            type="filepath"
                         )
                         tts_language = gr.Dropdown(
                             label="Language",

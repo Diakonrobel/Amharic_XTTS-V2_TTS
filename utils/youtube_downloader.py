@@ -799,9 +799,13 @@ def download_youtube_video(
     
     # === CONFIGURE YT-DLP OPTIONS ===
     print("\n⚙️  Configuring download with latest yt-dlp...")
-    print(f"  🚀 2025 No-Cookies Bypass: ENABLED")
+    if has_cookies:
+        print(f"  🔐 Cookies mode: Using web client for authentication")
+    else:
+        print(f"  🚀 2025 No-Cookies Bypass: ENABLED")
     print(f"  User-agent rotation: ENABLED ({len(USER_AGENTS)} agents)")
     
+    # Build base options
     ydl_opts = {
         'format': 'bestaudio/best' if audio_only else 'bestvideo+bestaudio/best',
         'outtmpl': str(output_path / '%(title)s.%(ext)s'),
@@ -814,23 +818,7 @@ def download_youtube_video(
             'preferredquality': '192',
         }] if audio_only else [],
         
-        # === 2025 BYPASS METHODS (NO COOKIES REQUIRED) ===
-        # Use mobile/TV clients to bypass bot detection
-        'extractor_args': {
-            'youtube': {
-                # Try multiple client types - these emulate mobile/TV apps
-                # and often bypass restrictions without cookies
-                'player_client': ['android', 'ios', 'tv_embedded'],
-                
-                # Skip requests that may trigger bot detection
-                'player_skip': ['webpage', 'configs'],
-                
-                # Skip problematic manifest formats
-                'skip': ['hls', 'dash'],
-            }
-        },
-        
-        # === AUTHENTICATION (FALLBACK ONLY) ===
+        # === AUTHENTICATION ===
         # Only use cookiefile if it exists, cookiesfrombrowser will be handled with try/except
         'cookiefile': cookies_path if cookies_path and Path(cookies_path).exists() else None,
         
@@ -859,6 +847,23 @@ def download_youtube_video(
             'Upgrade-Insecure-Requests': '1',
         }
     }
+    
+    # === CONDITIONAL 2025 BYPASS (ONLY WHEN NO COOKIES) ===
+    # Android/iOS clients DON'T support cookies, so only use them when no cookies
+    if not has_cookies:
+        ydl_opts['extractor_args'] = {
+            'youtube': {
+                # Try multiple client types - these emulate mobile/TV apps
+                # WARNING: These clients don't support cookies!
+                'player_client': ['android', 'ios', 'tv_embedded'],
+                
+                # Skip requests that may trigger bot detection
+                'player_skip': ['webpage', 'configs'],
+                
+                # Skip problematic manifest formats
+                'skip': ['hls', 'dash'],
+            }
+        }
     
     # Add subtitle options - make them optional with error handling
     if download_subtitles:

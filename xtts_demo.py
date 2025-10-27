@@ -1472,7 +1472,9 @@ if __name__ == "__main__":
                     
                     # Prepare auth parameters (empty strings -> None)
                     cookies_file = cookies_path.strip() if cookies_path and cookies_path.strip() else None
-                    cookies_browser = cookies_from_browser.strip() if cookies_from_browser and cookies_from_browser.strip() else None
+                    # IMPORTANT: Disable cookies_from_browser on Lightning AI (browser not installed)
+                    # Use cookies.txt file instead - it will be auto-detected
+                    cookies_browser = None  # Force disable browser cookies
                     proxy_url = proxy.strip() if proxy and proxy.strip() else None
                     ua = user_agent.strip() if user_agent and user_agent.strip() else None
                     
@@ -1573,7 +1575,9 @@ if __name__ == "__main__":
                     
                     # Prepare auth parameters (empty strings -> None)
                     cookies_file = cookies_path.strip() if cookies_path and cookies_path.strip() else None
-                    cookies_browser = cookies_from_browser.strip() if cookies_from_browser and cookies_from_browser.strip() else None
+                    # IMPORTANT: Disable cookies_from_browser on Lightning AI (browser not installed)
+                    # Use cookies.txt file instead - it will be auto-detected
+                    cookies_browser = None  # Force disable browser cookies
                     proxy_url = proxy.strip() if proxy and proxy.strip() else None
                     ua = user_agent.strip() if user_agent and user_agent.strip() else None
                     

@@ -748,25 +748,45 @@ def download_youtube_video(
         info = {}
     
     # === AUTHENTICATION SETUP ===
+    # Auto-detect cookies file in project root if not specified
+    if not cookies_path and not cookies_from_browser:
+        # Check for cookies file in common locations
+        possible_cookie_paths = [
+            Path('/teamspace/studios/this_studio/Amharic_XTTS-V2_TTS/cookies.txt'),
+            Path('/teamspace/studios/this_studio/Amharic_XTTS-V2_TTS/youtube_cookies.txt'),
+            Path.cwd() / 'cookies.txt',
+            Path.cwd() / 'youtube_cookies.txt',
+        ]
+        
+        for cookie_file in possible_cookie_paths:
+            if cookie_file.exists():
+                cookies_path = str(cookie_file)
+                print(f"\n✅ Auto-detected cookies file: {cookies_path}")
+                break
+    
     has_cookies = bool(cookies_path or cookies_from_browser)
     if has_cookies:
         print("\n🔐 Authentication: ENABLED (cookies detected)")
         if cookies_from_browser:
             print(f"  Using cookies from browser: {cookies_from_browser}")
             print(f"  ⚠️  Note: Browser must be installed on this machine!")
-            print(f"  If on Lightning.AI, export cookies from local browser instead.")
+            print(f"  ⚠️  LIGHTNING AI USERS: Browser cookies won't work on remote servers!")
+            print(f"  📝 Instead, export cookies to 'cookies.txt' and place in project root.")
         elif cookies_path:
             print(f"  Using cookies file: {cookies_path}")
+            if not Path(cookies_path).exists():
+                print(f"  ⚠️  WARNING: Cookies file not found at: {cookies_path}")
     else:
         print("\n⚠️  Authentication: DISABLED (no cookies provided)")
         print("  ⚠️  CRITICAL: Downloads will likely fail on Lightning.AI without cookies!")
         print("")
-        print("  SOLUTION:")
-        print("  1. On your local PC: Install 'Get cookies.txt' browser extension")
+        print("  SOLUTION FOR LIGHTNING AI USERS:")
+        print("  1. On your LOCAL PC: Install 'Get cookies.txt LOCALLY' browser extension")
+        print("     Chrome: https://chrome.google.com/webstore/detail/cclelndahbckbenkjhflpdbgdldlbecc")
         print("  2. Log into YouTube on your local browser")
-        print("  3. Export cookies to youtube_cookies.txt")
-        print("  4. Upload file to Lightning.AI")
-        print("  5. Pass cookies_path='/path/to/youtube_cookies.txt'")
+        print("  3. Click extension and export to 'cookies.txt'")
+        print("  4. Upload 'cookies.txt' to: /teamspace/studios/this_studio/Amharic_XTTS-V2_TTS/")
+        print("  5. Re-run this script (cookies will be auto-detected)")
         print("")
     
     # === CONFIGURE YT-DLP OPTIONS ===

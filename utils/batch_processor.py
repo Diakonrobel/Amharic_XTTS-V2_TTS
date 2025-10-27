@@ -229,7 +229,7 @@ def process_youtube_batch(
     incremental: bool = False,
     check_duplicates: bool = True,
     cookies_path: Optional[str] = None,
-    cookies_from_browser: Optional[str] = None,
+    cookies_from_browser: Optional[str] = None,  # Deprecated: Use cookies.txt file instead
     proxy: Optional[str] = None,
     user_agent: Optional[str] = None,
     po_token: Optional[str] = None,

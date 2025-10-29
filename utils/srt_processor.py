@@ -283,33 +283,25 @@ def extract_segments_from_audio(
             print(f"Skipping segment {idx+1}: duration {duration:.2f}s out of range")
             continue
         
-        # CRITICAL FIX: Don't let previous segment block current segment's start time
-        # The previous merged segment might end AFTER the current merged segment starts
-        # (due to out-of-order merging or gaps). We must respect the current start time!
+        # CRITICAL FIX FOR TEXT-AUDIO MISMATCH:
+        # The merge_short_subtitles() function already ensures segments are non-overlapping
+        # and properly spaced. We should TRUST these merged timestamps and simply add
+        # buffer without any overlap prevention logic.
+        # 
+        # Previous implementation tried to prevent buffer overlaps by forcing buffered_start
+        # to be >= previous segment's end. This caused MISALIGNMENT because:
+        # 1. Audio was cut starting from prev_end (missing the beginning)
+        # 2. But metadata text contained the FULL merged segment text
+        # 3. Result: Audio doesn't match text!
+        # 
+        # Solution: Let each segment's audio be cut based on ITS OWN timestamps.
+        # If buffers from adjacent segments overlap slightly, that's OKAY because
+        # they're in continuous speech regions anyway. The critical thing is that
+        # we capture ALL audio for each segment's text.
         
-        # Start buffer: Go back by buffer amount, but check for actual overlaps
-        desired_start = start_time - buffer
-        
-        if idx > 0:
-            prev_end = srt_segments[idx - 1][1]
-            # Only block if prev_end is AFTER our desired start (actual overlap)
-            # AND the gap is small (< 0.3s = likely continuous speech)
-            if prev_end > desired_start and (prev_end - desired_start) < 0.3:
-                buffered_start = max(prev_end, 0)
-            else:
-                buffered_start = max(desired_start, 0)
-        else:
-            # First segment: can safely go back by buffer amount
-            buffered_start = max(desired_start, 0)
-        
-        # End buffer: Extend by buffer amount, but don't overlap with next
-        if idx < len(srt_segments) - 1:
-            next_start = srt_segments[idx + 1][0]
-            # Only enforce no-overlap if segments are actually close
-            buffered_end = min(next_start, end_time + buffer)
-        else:
-            # Last segment: can safely extend by buffer amount
-            buffered_end = min(len(wav) / sr, end_time + buffer)
+        # Simple, trust-based buffer logic:
+        buffered_start = max(0, start_time - buffer)
+        buffered_end = min(len(wav) / sr, end_time + buffer)
         
         # Convert to samples
         start_sample = int(buffered_start * sr)

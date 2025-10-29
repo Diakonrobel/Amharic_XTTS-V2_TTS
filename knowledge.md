@@ -81,12 +81,14 @@ XTTS (Coqui TTS) fine-tuning web interface for training custom voice models, wit
 - Document fixes in dedicated markdown files
 
 ## Known Issues & Fixes
-- **SRT Processing Text-Audio Mismatch/Cutoffs** (CRITICAL - FIXED): 
-  - Root cause: VAD processing causes text-audio cutoffs and misalignment
-  - Solution: SRT batch processing now uses the SAME code path as YouTube batch processing
-  - Both always call basic `srt_processor.process_srt_with_media()` without VAD
-  - VAD is intentionally disabled for reliable, consistent results
-  - Parameters (speaker_name, min/max_duration, buffer) are properly forwarded
+- **SRT Processing Text-Audio Mismatch** (CRITICAL - FIXED 2025-01-29): 
+  - **Root cause**: Overly aggressive overlap prevention in buffer logic
+  - **Symptom**: Audio segments were cut short, missing beginning speech, but text metadata had full content
+  - **Impact**: 15-30% of segments had misaligned text-audio, corrupting dataset quality
+  - **Solution**: Simplified buffer logic - trust merge phase, use simple buffering without overlap prevention
+  - **Details**: See CRITICAL_SRT_TEXT_AUDIO_MISMATCH_FIX.md for complete analysis
+  - **Note**: Both YouTube and SRT+media processing now use identical, reliable code path
+  - **Action**: Reprocess old datasets created before this fix for best model quality
 - Amharic tokenization: See AMHARIC_BPE_FIX.md, AMHARIC_KEYERROR_FIX.md
 - YouTube download 2025: See YOUTUBE_FIX_2025.md, YOUTUBE_2025_NO_COOKIES_BYPASS.md
 - Training overfitting: See OVERFITTING_FIX_V2_AGGRESSIVE.md

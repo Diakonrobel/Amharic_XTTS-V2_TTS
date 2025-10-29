@@ -5,6 +5,8 @@ Handles extraction of audio segments from media files based on SRT subtitle time
 
 import os
 import subprocess
+import time
+import random
 from pathlib import Path
 from typing import List, Tuple, Optional
 import pysrt
@@ -13,6 +15,14 @@ import torch
 import pandas as pd
 from tqdm import tqdm
 from utils.lang_norm import canonical_lang
+
+# Import background removal if available
+try:
+    from utils.audio_background_remover import remove_background_music, is_available as bgremoval_available
+    BACKGROUND_REMOVAL_AVAILABLE = bgremoval_available()
+except ImportError:
+    BACKGROUND_REMOVAL_AVAILABLE = False
+    remove_background_music = None
 
 def parse_srt_file(srt_path: str) -> List[Tuple[float, float, str]]:
     """
@@ -139,44 +149,67 @@ def merge_short_subtitles(
     return merged
 
 
-def extract_audio_from_video(video_path: str, output_audio_path: str) -> bool:
+def extract_audio_from_video(
+    video_path: str,
+    output_audio_path: str,
+    max_retries: int = 3
+) -> bool:
     """
-    Extract audio from video file using FFmpeg.
+    Extract audio from video file using FFmpeg with retry logic.
     
     Args:
         video_path: Path to video file
         output_audio_path: Path to save extracted audio (WAV format)
+        max_retries: Maximum number of retry attempts
         
     Returns:
         True if successful, False otherwise
     """
-    try:
-        cmd = [
-            "ffmpeg", "-i", str(video_path),
-            "-vn",  # No video
-            "-acodec", "pcm_s16le",  # PCM 16-bit
-            "-ar", "22050",  # Sample rate for TTS
-            "-ac", "1",  # Mono
-            "-y",  # Overwrite
-            str(output_audio_path)
-        ]
-        
-        print(f"Extracting audio from {video_path}...")
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            print(f"FFmpeg error: {result.stderr}")
+    
+    for attempt in range(max_retries):
+        try:
+            if attempt > 0:
+                delay = (2 ** attempt) + random.uniform(0.5, 1.5)
+                print(f"  ⏳ Retrying in {delay:.1f}s... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(delay)
+            
+            cmd = [
+                "ffmpeg", "-i", str(video_path),
+                "-vn",  # No video
+                "-acodec", "pcm_s16le",  # PCM 16-bit
+                "-ar", "22050",  # Sample rate for TTS
+                "-ac", "1",  # Mono
+                "-y",  # Overwrite
+                str(output_audio_path)
+            ]
+            
+            print(f"Extracting audio from {video_path}...")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode != 0:
+                print(f"FFmpeg error: {result.stderr}")
+                if attempt < max_retries - 1:
+                    continue
+                return False
+            
+            print(f"Audio extracted to {output_audio_path}")
+            return True
+            
+        except subprocess.TimeoutExpired:
+            print(f"  ⚠ FFmpeg timeout on attempt {attempt + 1}")
+            if attempt < max_retries - 1:
+                continue
             return False
-        
-        print(f"Audio extracted to {output_audio_path}")
-        return True
-        
-    except FileNotFoundError:
-        print("Error: FFmpeg not found. Please install FFmpeg and add to PATH.")
-        return False
-    except Exception as e:
-        print(f"Error extracting audio: {e}")
-        return False
+        except FileNotFoundError:
+            print("Error: FFmpeg not found. Please install FFmpeg and add to PATH.")
+            return False
+        except Exception as e:
+            print(f"Error extracting audio: {e}")
+            if attempt < max_retries - 1:
+                continue
+            return False
+    
+    return False
 
 
 def extract_segments_from_audio(
@@ -349,7 +382,12 @@ def process_srt_with_media(
     language: str = "en",
     min_duration: float = 1.0,
     max_duration: float = 20.0,
-    buffer: float = 0.4,  # Increased from 0.2s to 0.4s to prevent cutoffs
+    buffer: float = 0.4,
+    # Background music removal
+    remove_background_music_flag: bool = False,
+    background_removal_model: str = "htdemucs",
+    background_removal_quality: str = "balanced",
+    # Progress tracking
     gradio_progress=None
 ) -> Tuple[str, str, float]:
     """
@@ -358,8 +396,9 @@ def process_srt_with_media(
     This function:
     1. Parses the SRT subtitle file
     2. Intelligently merges short subtitle segments (< 1s) into longer ones
-    3. Extracts audio segments matching the (merged) subtitle timestamps
-    4. Creates train/eval split with metadata CSVs
+    3. Optionally removes background music from audio
+    4. Extracts audio segments matching the (merged) subtitle timestamps
+    5. Creates train/eval split with metadata CSVs
     
     Args:
         srt_path: Path to SRT subtitle file
@@ -369,6 +408,10 @@ def process_srt_with_media(
         language: Language code
         min_duration: Minimum segment duration (after merging)
         max_duration: Maximum segment duration
+        buffer: Audio buffer at segment boundaries
+        remove_background_music_flag: Remove background music using Demucs
+        background_removal_model: Demucs model to use
+        background_removal_quality: Quality preset (fast/balanced/best)
         gradio_progress: Optional Gradio progress tracker
         
     Returns:
@@ -381,19 +424,26 @@ def process_srt_with_media(
     language = canonical_lang(language)
     
     # Parse SRT file
+    if gradio_progress:
+        gradio_progress(0.1, desc="Parsing SRT file...")
     print("Step 1: Parsing SRT file...")
-    srt_segments = parse_srt_file(srt_path)
+    try:
+        srt_segments = parse_srt_file(srt_path)
+    except Exception as e:
+        raise ValueError(f"Failed to parse SRT file: {e}. Please ensure the file is valid SRT format.")
     
     if not srt_segments:
-        raise ValueError("No segments found in SRT file")
+        raise ValueError("No segments found in SRT file. Please check the file content.")
     
-    # Merge short subtitles with AGGRESSIVE settings for languages like Amharic
+    # Merge short subtitles
+    if gradio_progress:
+        gradio_progress(0.25, desc="Merging short segments...")
     print("Step 1b: Merging short subtitle segments...")
     srt_segments = merge_short_subtitles(
         srt_segments,
-        min_duration=3.0,  # Merge segments shorter than 3 seconds (AGGRESSIVE)
+        min_duration=3.0,
         max_duration=max_duration,
-        max_gap=3.0  # Allow gaps up to 3s when merging (AGGRESSIVE)
+        max_gap=3.0
     )
     
     # Check if media is video or audio
@@ -401,13 +451,21 @@ def process_srt_with_media(
     video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.wmv']
     audio_extensions = ['.wav', '.mp3', '.flac', '.ogg', '.m4a']
     
+    if gradio_progress:
+        gradio_progress(0.4, desc="Extracting audio...")
+    
     if media_ext in video_extensions:
         # Extract audio from video
         print("Step 2: Extracting audio from video...")
         temp_audio_path = output_path / f"{Path(media_path).stem}_audio.wav"
         
         if not extract_audio_from_video(media_path, str(temp_audio_path)):
-            raise RuntimeError("Failed to extract audio from video")
+            raise RuntimeError(
+                "Failed to extract audio from video. Please ensure:\n"
+                "1. FFmpeg is installed and in PATH\n"
+                "2. Video file is not corrupted\n"
+                "3. You have write permissions to output directory"
+            )
         
         audio_path = str(temp_audio_path)
     elif media_ext in audio_extensions:
@@ -417,35 +475,84 @@ def process_srt_with_media(
             temp_audio_path = output_path / f"{Path(media_path).stem}_converted.wav"
             
             if not extract_audio_from_video(media_path, str(temp_audio_path)):
-                raise RuntimeError("Failed to convert audio")
+                raise RuntimeError("Failed to convert audio. FFmpeg may not support this format.")
             
             audio_path = str(temp_audio_path)
         else:
             audio_path = media_path
     else:
-        raise ValueError(f"Unsupported media format: {media_ext}")
+        raise ValueError(
+            f"Unsupported media format: {media_ext}\n"
+            f"Supported video: {', '.join(video_extensions)}\n"
+            f"Supported audio: {', '.join(audio_extensions)}"
+        )
+    
+    # Background music removal
+    if remove_background_music_flag:
+        if not BACKGROUND_REMOVAL_AVAILABLE:
+            print("⚠ Background music removal requested but Demucs not installed.")
+            print("  Install with: pip install demucs")
+            print("  Continuing without background removal...")
+        else:
+            if gradio_progress:
+                gradio_progress(0.5, desc="Removing background music...")
+            print("Step 2b: Removing background music with Demucs...")
+            try:
+                clean_audio_path = output_path / f"{Path(audio_path).stem}_vocals.wav"
+                remove_background_music(
+                    input_audio=audio_path,
+                    output_audio=str(clean_audio_path),
+                    model=background_removal_model,
+                    quality=background_removal_quality,
+                    verbose=True
+                )
+                audio_path = str(clean_audio_path)
+                print("  ✓ Background music removed successfully")
+            except Exception as e:
+                print(f"  ⚠ Background removal failed: {e}")
+                print("  Continuing with original audio...")
     
     # Extract segments
+    if gradio_progress:
+        gradio_progress(0.7, desc="Extracting audio segments...")
     print("Step 3: Extracting audio segments based on SRT timestamps...")
-    train_csv, eval_csv = extract_segments_from_audio(
-        audio_path=audio_path,
-        srt_segments=srt_segments,
-        output_dir=output_dir,
-        speaker_name=speaker_name,
-        language=language,
-        min_duration=min_duration,
-        max_duration=max_duration,
-        buffer=buffer,
-        gradio_progress=gradio_progress
-    )
+    try:
+        train_csv, eval_csv = extract_segments_from_audio(
+            audio_path=audio_path,
+            srt_segments=srt_segments,
+            output_dir=output_dir,
+            speaker_name=speaker_name,
+            language=language,
+            min_duration=min_duration,
+            max_duration=max_duration,
+            buffer=buffer,
+            gradio_progress=gradio_progress
+        )
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to extract audio segments: {e}\n"
+            "Please check:\n"
+            "1. Audio file is valid\n"
+            "2. SRT timestamps are within audio duration\n"
+            "3. Sufficient disk space available"
+        )
     
     # Calculate total audio duration
-    wav, sr = torchaudio.load(audio_path)
-    total_duration = wav.shape[1] / sr
+    try:
+        wav, sr = torchaudio.load(audio_path)
+        total_duration = wav.shape[1] / sr
+    except Exception as e:
+        print(f"⚠ Could not calculate audio duration: {e}")
+        total_duration = 0.0
+    
+    if gradio_progress:
+        gradio_progress(1.0, desc="Complete!")
     
     print(f"\n✓ SRT processing complete!")
     print(f"  Output directory: {output_dir}")
     print(f"  Total audio duration: {total_duration:.2f} seconds")
+    if remove_background_music_flag and BACKGROUND_REMOVAL_AVAILABLE:
+        print(f"  Background music: Removed")
     
     return train_csv, eval_csv, total_duration
 

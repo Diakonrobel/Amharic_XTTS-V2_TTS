@@ -1,0 +1,11 @@
+{
+  "description": "Template configuration for this project. See https://www.codebuff.com/config for all options.",
+  "startupProcesses": [
+    {
+      "name": "tensorboard",
+      "command": "tensorboard --logdir=run --host=0.0.0.0 --port=6006",
+      "stdoutFile": "logs/tensorboard.log"
+    }
+  ],
+  "fileChangeHooks": []
+}

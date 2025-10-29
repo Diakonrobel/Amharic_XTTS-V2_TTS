@@ -410,6 +410,7 @@ def pair_srt_with_media(srt_files: List[str], media_files: List[str]) -> List[Tu
     Pair SRT files with media files based on filename similarity.
     
     Matches based on case-insensitive filename stems (without extension).
+    Language suffixes (e.g., 'am', '2025am', 'en') are stripped before matching.
     
     Args:
         srt_files: List of SRT file paths
@@ -418,6 +419,8 @@ def pair_srt_with_media(srt_files: List[str], media_files: List[str]) -> List[Tu
     Returns:
         List of tuples (srt_path, media_path) for matched pairs
     """
+    import re
+    
     pairs = []
     
     # Create lookup dict for media files by stem name
@@ -430,11 +433,21 @@ def pair_srt_with_media(srt_files: List[str], media_files: List[str]) -> List[Tu
     for srt_path in srt_files:
         srt_stem = Path(srt_path).stem.lower()
         
+        # Try exact match first
         if srt_stem in media_lookup:
             pairs.append((srt_path, media_lookup[srt_stem]))
             print(f"✓ Paired: {Path(srt_path).name} <-> {Path(media_lookup[srt_stem]).name}")
         else:
-            print(f"⚠ No media file found for SRT: {Path(srt_path).name}")
+            # Strip common language suffixes and try again
+            # Matches patterns like: 2025am, am, en, 2024en, etc.
+            # Strips from the end: optional year (2024-2099) + 2-3 letter language code
+            stem_without_lang = re.sub(r'[._-]?(20\d{2})?(am|amh|en|eng|ar|es|fr|de|it|pt|ru|zh|ja|ko|hi|bn|ur|pa|sw|ha|yo|ig|zu|xh|so|om)$', '', srt_stem)
+            
+            if stem_without_lang != srt_stem and stem_without_lang in media_lookup:
+                pairs.append((srt_path, media_lookup[stem_without_lang]))
+                print(f"✓ Paired (language suffix stripped): {Path(srt_path).name} <-> {Path(media_lookup[stem_without_lang]).name}")
+            else:
+                print(f"⚠ No media file found for SRT: {Path(srt_path).name}")
     
     return pairs
 

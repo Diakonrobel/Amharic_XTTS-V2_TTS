@@ -14,6 +14,7 @@ import pandas as pd
 import shutil
 from utils.lang_norm import canonical_lang
 from utils.incremental_dataset_merger import merge_datasets_incremental
+from utils import srt_processor_vad
 
 
 def parse_youtube_urls(input_text: str) -> List[str]:
@@ -461,7 +462,11 @@ def process_srt_media_batch(
     progress_callback=None,
     incremental: bool = False,
     check_duplicates: bool = True,
-    buffer: float = 0.4
+    buffer: float = 0.4,
+    speaker_name: str = "speaker",
+    min_duration: float = 1.0,
+    max_duration: float = 20.0,
+    use_vad_refinement: bool = False
 ) -> Tuple[str, str, List[Dict]]:
     """
     Process multiple SRT+media file pairs in batch mode and merge into single dataset.
@@ -475,6 +480,11 @@ def process_srt_media_batch(
         progress_callback: Optional progress callback function
         incremental: If True, add to existing dataset; if False, create new dataset
         check_duplicates: If True, skip duplicate audio files (only for incremental mode)
+        buffer: Audio buffer at segment boundaries (seconds)
+        speaker_name: Speaker identifier for dataset
+        min_duration: Minimum segment duration (seconds)
+        max_duration: Maximum segment duration (seconds)
+        use_vad_refinement: Use VAD-enhanced processing for better text-audio alignment
         
     Returns:
         Tuple of (train_csv, eval_csv, list of file info dicts)
@@ -502,13 +512,32 @@ def process_srt_media_batch(
             temp_dataset_dir = os.path.join(out_path, f"temp_srt_dataset_{idx}")
             os.makedirs(temp_dataset_dir, exist_ok=True)
             
-            train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
-                srt_path=srt_path,
-                media_path=media_path,
-                output_dir=temp_dataset_dir,
-                language=canonical_lang(language),
-                buffer=buffer
-            )
+            # Use VAD-enhanced processing if requested
+            if use_vad_refinement:
+                train_csv, eval_csv, duration, _quality_stats = srt_processor_vad.process_srt_with_media_vad(
+                    srt_path=srt_path,
+                    media_path=media_path,
+                    output_dir=temp_dataset_dir,
+                    speaker_name=speaker_name,
+                    language=canonical_lang(language),
+                    min_duration=min_duration,
+                    max_duration=max_duration,
+                    use_vad_refinement=True,
+                    vad_threshold=0.5,
+                    gradio_progress=None
+                )
+            else:
+                train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+                    srt_path=srt_path,
+                    media_path=media_path,
+                    output_dir=temp_dataset_dir,
+                    speaker_name=speaker_name,
+                    language=canonical_lang(language),
+                    min_duration=min_duration,
+                    max_duration=max_duration,
+                    buffer=buffer,
+                    gradio_progress=None
+                )
             
             temp_datasets.append(temp_dataset_dir)
             

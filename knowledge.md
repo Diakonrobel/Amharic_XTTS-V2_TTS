@@ -69,6 +69,7 @@ XTTS (Coqui TTS) fine-tuning web interface for training custom voice models, wit
 - Merge datasets: `merge_datasets_auto.py` or `merge_datasets_simple.py`
 - Incremental addition: `utils/incremental_dataset_merger.py`
 - Statistics: `utils/dataset_statistics.py`
+- **Always verify text-audio alignment**: Check metadata CSV matches WAV segments before training
 
 ## Style Preferences
 - Use Gradio for web interfaces
@@ -80,6 +81,7 @@ XTTS (Coqui TTS) fine-tuning web interface for training custom voice models, wit
 - Document fixes in dedicated markdown files
 
 ## Known Issues & Fixes
+- **SRT Processing Text-Audio Mismatch** (CRITICAL - FIXED): batch_processor.py was not passing speaker_name, min/max_duration to srt_processor, causing wrong defaults and text-audio misalignment. Fixed by properly forwarding parameters and using srt_processor_vad when VAD is enabled.
 - Amharic tokenization: See AMHARIC_BPE_FIX.md, AMHARIC_KEYERROR_FIX.md
 - YouTube download 2025: See YOUTUBE_FIX_2025.md, YOUTUBE_2025_NO_COOKIES_BYPASS.md
 - Training overfitting: See OVERFITTING_FIX_V2_AGGRESSIVE.md

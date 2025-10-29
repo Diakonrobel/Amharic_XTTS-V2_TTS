@@ -1316,7 +1316,11 @@ if __name__ == "__main__":
                         progress_callback=lambda p, desc: progress(p, desc=desc),
                         incremental=incremental,
                         check_duplicates=check_duplicates,
-                        buffer=buffer_padding
+                        buffer=buffer_padding,
+                        speaker_name=speaker_name,
+                        min_duration=min_seg_duration,
+                        max_duration=max_seg_duration,
+                        use_vad_refinement=use_vad_refinement
                     )
                     
                     # Count total segments

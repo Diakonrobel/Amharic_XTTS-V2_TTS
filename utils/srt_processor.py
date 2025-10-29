@@ -240,124 +240,157 @@ def extract_segments_from_audio(
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    
+
     wavs_dir = output_path / "wavs"
     wavs_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Load full audio
     print(f"Loading audio from {audio_path}...")
     wav, sr = torchaudio.load(str(audio_path))
-    
+
     # Convert to mono if stereo
     if wav.size(0) != 1:
         wav = torch.mean(wav, dim=0, keepdim=True)
-    
+
     wav = wav.squeeze()
-    
+
     # Resample to 22050 Hz if necessary for consistent XTTS training
     if sr != 22050:
         print(f"Resampling from {sr} Hz to 22050 Hz...")
         resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=22050)
         wav = resampler(wav)
         sr = 22050
-    
+
+    audio_len_sec = len(wav) / sr
+
     metadata = {
         "audio_file": [],
         "text": [],
         "speaker_name": []
     }
-    
+
     total_segments = len(srt_segments)
     iterator = enumerate(srt_segments)
-    
+
     if gradio_progress is not None:
         iterator = gradio_progress.tqdm(iterator, total=total_segments, desc="Extracting segments")
     else:
         iterator = tqdm(enumerate(srt_segments), total=total_segments, desc="Extracting segments")
-    
+
     segments_processed = 0
     segments_skipped = 0
-    
+
+    def _expand_to_min_duration(i: int, s: float, e: float) -> Tuple[float, float]:
+        """Expand a short segment toward available space to satisfy min_duration without changing text.
+        Prefers forward expansion for first segment and backward for last segment; otherwise split both sides.
+        Never crosses neighboring SRT boundaries.
+        """
+        dur = e - s
+        if dur >= min_duration:
+            return s, e
+        need = min_duration - dur
+        prev_end = srt_segments[i - 1][1] if i > 0 else 0.0
+        next_start = srt_segments[i + 1][0] if i < len(srt_segments) - 1 else audio_len_sec
+        # Available room on each side (excluding a tiny guard gap)
+        guard = 0.02  # 20ms guard to avoid touching neighbors exactly
+        back_room = max(0.0, (s - prev_end) - guard)
+        fwd_room = max(0.0, (next_start - e) - guard)
+        # Strategy: allocate more to the side with more room; special-case ends
+        if i == 0:
+            take_back = 0.0
+            take_fwd = min(need, fwd_room)
+        elif i == len(srt_segments) - 1:
+            take_fwd = 0.0
+            take_back = min(need, back_room)
+        else:
+            half = need / 2.0
+            take_back = min(back_room, half)
+            take_fwd = min(fwd_room, need - take_back)
+            # If still not satisfied, try remaining on either side if room exists
+            if take_back + take_fwd < need:
+                remaining = need - (take_back + take_fwd)
+                extra_back = min(back_room - take_back, remaining)
+                take_back += max(0.0, extra_back)
+                remaining = need - (take_back + take_fwd)
+                extra_fwd = min(fwd_room - take_fwd, remaining)
+                take_fwd += max(0.0, extra_fwd)
+        new_s = max(0.0, s - take_back)
+        new_e = min(audio_len_sec, e + take_fwd)
+        return new_s, new_e
+
     for idx, (start_time, end_time, text) in iterator:
-        duration = end_time - start_time
-        
-        # Filter by duration
-        if duration < min_duration or duration > max_duration:
-            print(f"Skipping segment {idx+1}: duration {duration:.2f}s out of range (min={min_duration}, max={max_duration})")
+        # Ensure we don't drop first/last tiny cues: expand if needed before filtering
+        adj_start, adj_end = _expand_to_min_duration(idx, start_time, end_time)
+        duration = adj_end - adj_start
+
+        # Filter by duration (only for extreme outliers; expanded shorts already handled)
+        if duration > max_duration:
+            print(f"Skipping segment {idx+1}: duration {duration:.2f}s exceeds max={max_duration}")
             print(f"  Text preview: {text[:50]}..." if len(text) > 50 else f"  Text: {text}")
             segments_skipped += 1
             continue
-        
+
         # CRITICAL FIX FOR TEXT-AUDIO MISMATCH:
-        # The merge_short_subtitles() function already ensures segments are non-overlapping
-        # and properly spaced. We should TRUST these merged timestamps and simply add
-        # buffer without any overlap prevention logic.
-        # 
-        # Previous implementation tried to prevent buffer overlaps by forcing buffered_start
-        # to be >= previous segment's end. This caused MISALIGNMENT because:
-        # 1. Audio was cut starting from prev_end (missing the beginning)
-        # 2. But metadata text contained the FULL merged segment text
-        # 3. Result: Audio doesn't match text!
-        # 
-        # Solution: Let each segment's audio be cut based on ITS OWN timestamps.
-        # If buffers from adjacent segments overlap slightly, that's OKAY because
-        # they're in continuous speech regions anyway. The critical thing is that
-        # we capture ALL audio for each segment's text.
-        
-        # Simple, trust-based buffer logic:
-        buffered_start = max(0, start_time - buffer)
-        buffered_end = min(len(wav) / sr, end_time + buffer)
-        
+        # Trust merged timestamps; add symmetric buffer without overlap prevention.
+        # Slight overlaps are acceptable and improve capture of complete speech.
+        # Use a slightly larger buffer on the very first/last segment for safety.
+        is_edge = (idx == 0) or (idx == len(srt_segments) - 1)
+        edge_boost = 0.2 if is_edge else 0.0
+        eff_buffer = buffer + edge_boost
+
+        buffered_start = max(0, adj_start - eff_buffer)
+        buffered_end = min(audio_len_sec, adj_end + eff_buffer)
+
         # Convert to samples
         start_sample = int(buffered_start * sr)
         end_sample = int(buffered_end * sr)
-        
+
         # Ensure valid range
         start_sample = max(0, start_sample)
         end_sample = min(len(wav), end_sample)
-        
+
         segment = wav[start_sample:end_sample]
-        
+
         # Verify segment is not too short (at least 0.2 second)
         if segment.shape[0] < sr / 5:
             print(f"Skipping segment {idx+1}: extracted audio too short ({segment.shape[0]/sr:.2f}s)")
             continue
-        
+
         # Save segment
         segment_filename = f"{Path(audio_path).stem}_{str(idx).zfill(6)}.wav"
         segment_path = wavs_dir / segment_filename
-        
+
         torchaudio.save(
             str(segment_path),
             segment.unsqueeze(0),
             sr
         )
-        
-        # Add to metadata
+
+        # Add to metadata (preserve original text unchanged)
         metadata["audio_file"].append(f"wavs/{segment_filename}")
         metadata["text"].append(text)
         metadata["speaker_name"].append(speaker_name)
         segments_processed += 1
-    
+
     if not metadata["audio_file"]:
         raise ValueError("No valid segments extracted. Check duration filters and SRT content.")
-    
+
     # Create DataFrame and save metadata
     df = pd.DataFrame(metadata)
-    
+
     # Shuffle and split into train/eval (85/15)
     df_shuffled = df.sample(frac=1, random_state=42).reset_index(drop=True)
     split_idx = int(len(df_shuffled) * 0.85)
-    
+
     train_df = df_shuffled[:split_idx]
     eval_df = df_shuffled[split_idx:]
-    
+
     train_path = output_path / "metadata_train.csv"
     eval_path = output_path / "metadata_eval.csv"
-    
+
     train_df.to_csv(train_path, sep="|", index=False)
     eval_df.to_csv(eval_path, sep="|", index=False)
-    
+
     print(f"\n{'='*60}")
     print(f"Segment Extraction Summary:")
     print(f"  Total merged segments: {total_segments}")

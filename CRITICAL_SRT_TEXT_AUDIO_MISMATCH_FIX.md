@@ -74,7 +74,7 @@ The `merge_short_subtitles()` function **already ensures** segments are non-over
 
 ## ✅ The Fix
 
-### New Implementation
+### Fix #1: Simplified Buffer Logic (2025-01-29)
 
 ```python
 # CRITICAL FIX FOR TEXT-AUDIO MISMATCH:
@@ -86,6 +86,28 @@ The `merge_short_subtitles()` function **already ensures** segments are non-over
 buffered_start = max(0, start_time - buffer)
 buffered_end = min(len(wav) / sr, end_time + buffer)
 ```
+
+### Fix #2: Parameter Consistency (2025-01-29 - CRITICAL)
+
+```python
+# BUG: Hardcoded min_duration=3.0 in merge phase
+srt_segments = merge_short_subtitles(
+    srt_segments,
+    min_duration=3.0,  # ❌ HARDCODED!
+    max_duration=max_duration,
+    max_gap=3.0
+)
+
+# FIX: Use parameter value for consistency
+srt_segments = merge_short_subtitles(
+    srt_segments,
+    min_duration=min_duration,  # ✅ Uses same threshold as extraction
+    max_duration=max_duration,
+    max_gap=3.0
+)
+```
+
+**Why this was critical:** The merge phase used a hardcoded 3.0s threshold while the extraction phase used the parameter value (default 1.0s). This inconsistency meant segments were merged with one threshold but filtered with another, causing misalignment.
 
 ### Why This Works
 

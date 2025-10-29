@@ -275,12 +275,17 @@ def extract_segments_from_audio(
     else:
         iterator = tqdm(enumerate(srt_segments), total=total_segments, desc="Extracting segments")
     
+    segments_processed = 0
+    segments_skipped = 0
+    
     for idx, (start_time, end_time, text) in iterator:
         duration = end_time - start_time
         
         # Filter by duration
         if duration < min_duration or duration > max_duration:
-            print(f"Skipping segment {idx+1}: duration {duration:.2f}s out of range")
+            print(f"Skipping segment {idx+1}: duration {duration:.2f}s out of range (min={min_duration}, max={max_duration})")
+            print(f"  Text preview: {text[:50]}..." if len(text) > 50 else f"  Text: {text}")
+            segments_skipped += 1
             continue
         
         # CRITICAL FIX FOR TEXT-AUDIO MISMATCH:
@@ -332,6 +337,7 @@ def extract_segments_from_audio(
         metadata["audio_file"].append(f"wavs/{segment_filename}")
         metadata["text"].append(text)
         metadata["speaker_name"].append(speaker_name)
+        segments_processed += 1
     
     if not metadata["audio_file"]:
         raise ValueError("No valid segments extracted. Check duration filters and SRT content.")
@@ -352,9 +358,14 @@ def extract_segments_from_audio(
     train_df.to_csv(train_path, sep="|", index=False)
     eval_df.to_csv(eval_path, sep="|", index=False)
     
-    print(f"\nExtracted {len(metadata['audio_file'])} segments:")
+    print(f"\n{'='*60}")
+    print(f"Segment Extraction Summary:")
+    print(f"  Total merged segments: {total_segments}")
+    print(f"  Successfully extracted: {segments_processed}")
+    print(f"  Skipped (out of range): {segments_skipped}")
     print(f"  Training: {len(train_df)} samples")
     print(f"  Evaluation: {len(eval_df)} samples")
+    print(f"={'='*60}")
     
 # Save language file with correct language
     lang_file = output_path / "lang.txt"
@@ -431,9 +442,10 @@ def process_srt_with_media(
     if gradio_progress:
         gradio_progress(0.25, desc="Merging short segments...")
     print("Step 1b: Merging short subtitle segments...")
+    print(f"  Using min_duration={min_duration}s for both merging and extraction (ensures consistency)")
     srt_segments = merge_short_subtitles(
         srt_segments,
-        min_duration=3.0,
+        min_duration=min_duration,  # CRITICAL: Use parameter value, not hardcoded 3.0
         max_duration=max_duration,
         max_gap=3.0
     )

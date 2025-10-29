@@ -914,12 +914,6 @@ if __name__ == "__main__":
                             info="Process multiple file pairs as one dataset",
                             scale=1
                         )
-                        use_vad_refinement = gr.Checkbox(
-                            label="🎤 VAD Enhancement",
-                            value=False,
-                            info="AI-powered speech detection (+20% time)",
-                            scale=1
-                        )
                     
                     with gr.Row():
                         srt_incremental_mode = gr.Checkbox(
@@ -1063,15 +1057,7 @@ if __name__ == "__main__":
                         - **0.6-1.0s**: Maximum safety (may include extra silence)
                         """)
                     
-                    with gr.Row():
-                        youtube_use_vad = gr.Checkbox(
-                            label="🎤 VAD Enhancement",
-                            value=False,
-                            info="AI-powered speech detection (+20% time per video)",
-                            scale=1
-                        )
-                    
-                    with gr.Accordion("⚙️ VAD Settings", open=False):
+                    with gr.Accordion("⚙️ VAD Settings (Advanced - For Raw Audio Only)", open=False):
                         with gr.Row():
                             youtube_use_enhanced_vad = gr.Checkbox(
                                 label="✨ Enhanced VAD",
@@ -1298,13 +1284,13 @@ if __name__ == "__main__":
                     return result
                 except Exception as e:
                     return f"❌ Error clearing history: {str(e)}"
-            def process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, buffer_padding, incremental, check_duplicates, use_vad, progress):
+            def process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, buffer_padding, incremental, check_duplicates, progress):
                 """Handle batch processing of multiple SRT+media pairs"""
                 # Get parameters from outer scope
                 speaker_name = "speaker"  # Default speaker name for SRT processing
                 min_seg_duration = 1.0  # Default minimum segment duration
                 max_seg_duration = 20.0  # Default maximum segment duration
-                use_vad_refinement = use_vad  # VAD flag passed from UI
+                use_vad_refinement = False  # VAD disabled - causes text-audio mismatch issues
                 try:
                     # Canonicalize language for dataset artifacts
                     language = normalize_xtts_lang(language)
@@ -1368,7 +1354,6 @@ if __name__ == "__main__":
                 language, 
                 out_path, 
                 batch_mode, 
-                use_vad, 
                 buffer_padding=0.4,
                 vad_threshold_val=0.5,
                 vad_min_speech_ms=250,
@@ -1405,7 +1390,7 @@ if __name__ == "__main__":
                     
                     # Check if batch mode and multiple files
                     if batch_mode and (len(srt_files_list) > 1 or len(media_files_list) > 1):
-                        return process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, buffer_padding, incremental, check_duplicates, use_vad, progress)
+                        return process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, buffer_padding, incremental, check_duplicates, progress)
                     
                     # Single file processing
                     srt_file_path = srt_files_list[0]
@@ -2757,7 +2742,6 @@ if __name__ == "__main__":
                     lang,
                     out_path,
                     srt_batch_mode,
-                    use_vad_refinement,  # VAD enable/disable
                     srt_buffer_padding,  # Audio padding (seconds) to prevent cutoffs
                     vad_threshold,  # VAD threshold
                     vad_min_speech_duration,  # Min speech duration
@@ -2787,7 +2771,6 @@ if __name__ == "__main__":
                     youtube_proxy,  # Proxy URL
                     youtube_user_agent,  # Custom User-Agent
                     youtube_buffer_padding,  # Audio padding (seconds) to prevent cutoffs
-                    youtube_use_vad,  # VAD enable/disable
                     youtube_vad_threshold,  # VAD threshold
                     youtube_vad_min_speech,  # Min speech duration
                     youtube_vad_min_silence,  # Min silence duration

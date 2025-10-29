@@ -1298,8 +1298,13 @@ if __name__ == "__main__":
                     return result
                 except Exception as e:
                     return f"❌ Error clearing history: {str(e)}"
-            def process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, buffer_padding, incremental, check_duplicates, progress):
+            def process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, buffer_padding, incremental, check_duplicates, use_vad, progress):
                 """Handle batch processing of multiple SRT+media pairs"""
+                # Get parameters from outer scope
+                speaker_name = "speaker"  # Default speaker name for SRT processing
+                min_seg_duration = 1.0  # Default minimum segment duration
+                max_seg_duration = 20.0  # Default maximum segment duration
+                use_vad_refinement = use_vad  # VAD flag passed from UI
                 try:
                     # Canonicalize language for dataset artifacts
                     language = normalize_xtts_lang(language)
@@ -1400,7 +1405,7 @@ if __name__ == "__main__":
                     
                     # Check if batch mode and multiple files
                     if batch_mode and (len(srt_files_list) > 1 or len(media_files_list) > 1):
-                        return process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, buffer_padding, incremental, check_duplicates, progress)
+                        return process_srt_media_batch_handler(srt_files_list, media_files_list, language, out_path, buffer_padding, incremental, check_duplicates, use_vad, progress)
                     
                     # Single file processing
                     srt_file_path = srt_files_list[0]

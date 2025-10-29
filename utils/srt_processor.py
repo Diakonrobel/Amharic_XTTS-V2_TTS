@@ -220,7 +220,7 @@ def extract_segments_from_audio(
     language: str = "en",
     min_duration: float = 1.0,
     max_duration: float = 20.0,
-    buffer: float = 0.4,  # Increased from 0.2s to 0.4s to prevent cutoffs
+    buffer: float = 0.6,  # PRODUCTION-READY: 0.6s prevents cutoffs (SRT timestamps mark text appearance, not speech start/end)
     gradio_progress=None
 ) -> Tuple[str, str]:
     """
@@ -385,7 +385,7 @@ def process_srt_with_media(
     language: str = "en",
     min_duration: float = 1.0,
     max_duration: float = 20.0,
-    buffer: float = 0.4,
+    buffer: float = 0.6,  # PRODUCTION-READY: 0.6s ensures no cutoffs at beginning/ending
     # Background music removal
     remove_background_music_flag: bool = False,
     background_removal_model: str = "htdemucs",

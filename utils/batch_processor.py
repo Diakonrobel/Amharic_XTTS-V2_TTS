@@ -461,7 +461,7 @@ def process_srt_media_batch(
     progress_callback=None,
     incremental: bool = False,
     check_duplicates: bool = True,
-    buffer: float = 0.4,
+    buffer: float = 0.6,  # Production default: prevents speech cutoffs
     speaker_name: str = "speaker",
     min_duration: float = 1.0,
     max_duration: float = 20.0,

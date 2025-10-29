@@ -937,14 +937,14 @@ if __name__ == "__main__":
                     with gr.Accordion("⚙️ Segmentation Settings", open=True):
                         srt_buffer_padding = gr.Slider(
                             label="Audio Padding (seconds)",
-                            minimum=0.1, maximum=1.0, step=0.05, value=0.4,
-                            info="Extra audio before/after each segment to prevent cutoffs. Higher = safer (0.4s recommended)"
+                            minimum=0.1, maximum=1.0, step=0.05, value=0.6,
+                            info="Extra audio before/after each segment to prevent cutoffs. 0.6s = production-ready default"
                         )
                         gr.Markdown("""
                         💡 **Audio Padding**: Adds extra audio around each segment to prevent speech cutoffs.  
-                        - **0.2-0.3s**: Minimal padding (risk of cutoffs)  
-                        - **0.4-0.5s**: Recommended (safe, prevents cutoffs)  
-                        - **0.6-1.0s**: Maximum safety (may include extra silence)
+                        - **0.2-0.4s**: Minimal padding (risk of cutoffs at beginning/ending)  
+                        - **0.6s**: ⭐ Production-ready default (sharp and safe)  
+                        - **0.8-1.0s**: Maximum safety (may include extra silence)
                         """)
                     
                     with gr.Accordion("⚙️ VAD Settings (Advanced)", open=False):
@@ -1047,14 +1047,14 @@ if __name__ == "__main__":
                     with gr.Accordion("⚙️ Segmentation Settings", open=True):
                         youtube_buffer_padding = gr.Slider(
                             label="Audio Padding (seconds)",
-                            minimum=0.1, maximum=1.0, step=0.05, value=0.4,
-                            info="Extra audio before/after each segment to prevent cutoffs. Higher = safer (0.4s recommended)"
+                            minimum=0.1, maximum=1.0, step=0.05, value=0.6,
+                            info="Extra audio before/after each segment to prevent cutoffs. 0.6s = production-ready default"
                         )
                         gr.Markdown("""
                         💡 **Audio Padding**: Adds extra audio around each segment to prevent speech cutoffs.  
-                        - **0.2-0.3s**: Minimal padding (risk of cutoffs)  
-                        - **0.4-0.5s**: Recommended (safe, prevents cutoffs)  
-                        - **0.6-1.0s**: Maximum safety (may include extra silence)
+                        - **0.2-0.4s**: Minimal padding (risk of cutoffs at beginning/ending)  
+                        - **0.6s**: ⭐ Production-ready default (sharp and safe)  
+                        - **0.8-1.0s**: Maximum safety (may include extra silence)
                         """)
                     
                     with gr.Accordion("⚙️ VAD Settings (Advanced - For Raw Audio Only)", open=False):

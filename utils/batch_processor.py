@@ -14,7 +14,6 @@ import pandas as pd
 import shutil
 from utils.lang_norm import canonical_lang
 from utils.incremental_dataset_merger import merge_datasets_incremental
-from utils import srt_processor_vad
 
 
 def parse_youtube_urls(input_text: str) -> List[str]:
@@ -512,32 +511,23 @@ def process_srt_media_batch(
             temp_dataset_dir = os.path.join(out_path, f"temp_srt_dataset_{idx}")
             os.makedirs(temp_dataset_dir, exist_ok=True)
             
-            # Use VAD-enhanced processing if requested
+            # CRITICAL: Always use basic SRT processor (same as YouTube batch processing)
+            # VAD causes text-audio cutoff issues - keep it disabled for consistency
             if use_vad_refinement:
-                train_csv, eval_csv, duration, _quality_stats = srt_processor_vad.process_srt_with_media_vad(
-                    srt_path=srt_path,
-                    media_path=media_path,
-                    output_dir=temp_dataset_dir,
-                    speaker_name=speaker_name,
-                    language=canonical_lang(language),
-                    min_duration=min_duration,
-                    max_duration=max_duration,
-                    use_vad_refinement=True,
-                    vad_threshold=0.5,
-                    gradio_progress=None
-                )
-            else:
-                train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
-                    srt_path=srt_path,
-                    media_path=media_path,
-                    output_dir=temp_dataset_dir,
-                    speaker_name=speaker_name,
-                    language=canonical_lang(language),
-                    min_duration=min_duration,
-                    max_duration=max_duration,
-                    buffer=buffer,
-                    gradio_progress=None
-                )
+                print(f"  ⚠ VAD requested but disabled (known text-audio mismatch/cutoff issue)")
+                print(f"  ℹ Using standard SRT processing for reliability (same as YouTube)")
+            
+            train_csv, eval_csv, duration = srt_processor.process_srt_with_media(
+                srt_path=srt_path,
+                media_path=media_path,
+                output_dir=temp_dataset_dir,
+                speaker_name=speaker_name,
+                language=canonical_lang(language),
+                min_duration=min_duration,
+                max_duration=max_duration,
+                buffer=buffer,
+                gradio_progress=None
+            )
             
             temp_datasets.append(temp_dataset_dir)
             

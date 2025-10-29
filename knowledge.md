@@ -81,7 +81,12 @@ XTTS (Coqui TTS) fine-tuning web interface for training custom voice models, wit
 - Document fixes in dedicated markdown files
 
 ## Known Issues & Fixes
-- **SRT Processing Text-Audio Mismatch** (CRITICAL - FIXED): batch_processor.py was not passing speaker_name, min/max_duration to srt_processor, causing wrong defaults and text-audio misalignment. Fixed by properly forwarding parameters and using srt_processor_vad when VAD is enabled.
+- **SRT Processing Text-Audio Mismatch/Cutoffs** (CRITICAL - FIXED): 
+  - Root cause: VAD processing causes text-audio cutoffs and misalignment
+  - Solution: SRT batch processing now uses the SAME code path as YouTube batch processing
+  - Both always call basic `srt_processor.process_srt_with_media()` without VAD
+  - VAD is intentionally disabled for reliable, consistent results
+  - Parameters (speaker_name, min/max_duration, buffer) are properly forwarded
 - Amharic tokenization: See AMHARIC_BPE_FIX.md, AMHARIC_KEYERROR_FIX.md
 - YouTube download 2025: See YOUTUBE_FIX_2025.md, YOUTUBE_2025_NO_COOKIES_BYPASS.md
 - Training overfitting: See OVERFITTING_FIX_V2_AGGRESSIVE.md

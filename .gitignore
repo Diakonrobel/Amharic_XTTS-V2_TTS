@@ -187,3 +187,5 @@ tensorboard/
 *.onnx
 profile-*.json
 *.prof
+
+docs_archive/

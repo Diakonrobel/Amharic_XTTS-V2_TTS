@@ -869,7 +869,7 @@ if __name__ == "__main__":
                 with gr.Row():
                     lang = gr.Dropdown(
                         label="Dataset Language",
-                        value="en",
+                        value="amh",
                         choices=["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh", "hu", "ko", "ja", "am", "amh"],
                         scale=1,
                         info="Use 'am' or 'amh' for Amharic"
@@ -937,14 +937,15 @@ if __name__ == "__main__":
                     with gr.Accordion("⚙️ Segmentation Settings", open=True):
                         srt_buffer_padding = gr.Slider(
                             label="Audio Padding (seconds)",
-                            minimum=0.1, maximum=1.0, step=0.05, value=0.6,
-                            info="Extra audio before/after each segment to prevent cutoffs. 0.6s = production-ready default"
+                            minimum=0.1, maximum=1.0, step=0.05, value=0.8,
+                            info="Extra audio before/after each segment to prevent cutoffs. 0.8s = Amharic-optimized default"
                         )
                         gr.Markdown("""
                         💡 **Audio Padding**: Adds extra audio around each segment to prevent speech cutoffs.  
                         - **0.2-0.4s**: Minimal padding (risk of cutoffs at beginning/ending)  
-                        - **0.6s**: ⭐ Production-ready default (sharp and safe)  
-                        - **0.8-1.0s**: Maximum safety (may include extra silence)
+                        - **0.6s**: Standard default (safe for most languages)  
+                        - **0.8s**: ⭐ Amharic-optimized (recommended for ejectives: ጥ, ጭ, ቅ, ፅ, ጵ)  
+                        - **1.0s**: Maximum safety (may include extra silence)
                         """)
                     
                     with gr.Accordion("⚙️ VAD Settings (Advanced)", open=False):
@@ -957,8 +958,8 @@ if __name__ == "__main__":
                             )
                             amharic_mode_option = gr.Checkbox(
                                 label="🇪🇹 Amharic Mode",
-                                value=False,
-                                info="Optimize for Amharic ejective consonants (auto for 'am' language)",
+                                value=True,
+                                info="Optimize for Amharic ejective consonants (ጥ, ጭ, ቅ) - Auto-enabled",
                                 scale=1
                             )
                         with gr.Row():
@@ -1004,7 +1005,7 @@ if __name__ == "__main__":
                     with gr.Row():
                         youtube_transcript_lang = gr.Dropdown(
                             label="🌐 Transcript Language",
-                            value="en",
+                            value="am",
                             choices=[
                                 ("English", "en"), ("Spanish", "es"), ("French", "fr"), ("German", "de"),
                                 ("Italian", "it"), ("Portuguese", "pt"), ("Russian", "ru"), ("Chinese", "zh"),
@@ -1047,14 +1048,15 @@ if __name__ == "__main__":
                     with gr.Accordion("⚙️ Segmentation Settings", open=True):
                         youtube_buffer_padding = gr.Slider(
                             label="Audio Padding (seconds)",
-                            minimum=0.1, maximum=1.0, step=0.05, value=0.6,
-                            info="Extra audio before/after each segment to prevent cutoffs. 0.6s = production-ready default"
+                            minimum=0.1, maximum=1.0, step=0.05, value=0.8,
+                            info="Extra audio before/after each segment to prevent cutoffs. 0.8s = Amharic-optimized default"
                         )
                         gr.Markdown("""
                         💡 **Audio Padding**: Adds extra audio around each segment to prevent speech cutoffs.  
                         - **0.2-0.4s**: Minimal padding (risk of cutoffs at beginning/ending)  
-                        - **0.6s**: ⭐ Production-ready default (sharp and safe)  
-                        - **0.8-1.0s**: Maximum safety (may include extra silence)
+                        - **0.6s**: Standard default (safe for most languages)  
+                        - **0.8s**: ⭐ Amharic-optimized (recommended for ejectives: ጥ, ጭ, ቅ, ፅ, ጵ)  
+                        - **1.0s**: Maximum safety (may include extra silence)
                         """)
                     
                     with gr.Accordion("⚙️ VAD Settings (Advanced - For Raw Audio Only)", open=False):
@@ -1067,8 +1069,8 @@ if __name__ == "__main__":
                             )
                             youtube_amharic_mode = gr.Checkbox(
                                 label="🇪🇹 Amharic Mode",
-                                value=False,
-                                info="Optimize for Amharic ejectives (auto for 'am' language)",
+                                value=True,
+                                info="Optimize for Amharic ejectives (ጥ, ጭ, ቅ) - Auto-enabled",
                                 scale=1
                             )
                         with gr.Row():

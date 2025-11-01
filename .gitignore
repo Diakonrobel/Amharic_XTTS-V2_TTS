@@ -189,3 +189,4 @@ profile-*.json
 *.prof
 
 docs_archive/
+tests_archive/

